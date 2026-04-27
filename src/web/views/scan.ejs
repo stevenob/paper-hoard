@@ -24,9 +24,12 @@
   </p>
 </div>
 
-<h2>Or enter ISBN manually</h2>
+<h2>Or look up manually</h2>
 <form id="manual-form" class="stacked">
   <label>ISBN <input id="manual-isbn" name="isbn" placeholder="9780593135204" autocomplete="off" inputmode="numeric" /></label>
+  <p class="hint">— or —</p>
+  <label>Title <input id="manual-title" name="title" placeholder="Project Hail Mary" autocomplete="off" /></label>
+  <label>Author <input id="manual-author" name="author" placeholder="Andy Weir (optional, narrows the search)" autocomplete="off" /></label>
   <button type="submit">Look up</button>
 </form>
 
@@ -57,7 +60,6 @@
     const httpsWarning = document.getElementById('https-warning');
     const results = document.getElementById('results');
     const manualForm = document.getElementById('manual-form');
-    const manualInput = document.getElementById('manual-isbn');
 
     const hasZxing = typeof ZXingBrowser !== 'undefined';
     if (!hasZxing) {
@@ -149,15 +151,16 @@
       });
     }
 
-    async function submitIsbn(isbn) {
+    async function submitLookup(payload) {
       if (busy) return;
       busy = true;
-      setStatus('Looking up ' + isbn + '…');
+      const desc = payload.isbn || payload.title || '';
+      setStatus('Looking up ' + desc + '…');
       try {
         const res = await fetch('/scan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isbn: isbn }),
+          body: JSON.stringify(payload),
         });
         const json = await res.json().catch(function() { return { ok: false, error: 'Bad response' }; });
         renderResult(json, res.ok && json.ok);
@@ -168,6 +171,10 @@
       } finally {
         busy = false;
       }
+    }
+
+    async function submitIsbn(isbn) {
+      return submitLookup({ isbn: isbn });
     }
 
     function onDecoded(text) {
@@ -215,10 +222,19 @@
 
     manualForm.addEventListener('submit', function(e) {
       e.preventDefault();
-      const v = manualInput.value.trim();
-      if (v) submitIsbn(v);
-      manualInput.value = '';
-      manualInput.focus();
+      const isbn = document.getElementById('manual-isbn').value.trim();
+      const title = document.getElementById('manual-title').value.trim();
+      const author = document.getElementById('manual-author').value.trim();
+      if (!isbn && !title) {
+        setStatus('Enter an ISBN or a title.');
+        return;
+      }
+      const payload = isbn ? { isbn: isbn } : { title: title, author: author || undefined };
+      submitLookup(payload);
+      document.getElementById('manual-isbn').value = '';
+      document.getElementById('manual-title').value = '';
+      document.getElementById('manual-author').value = '';
+      document.getElementById('manual-isbn').focus();
     });
   })();
 </script>
