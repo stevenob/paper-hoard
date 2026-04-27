@@ -28,6 +28,18 @@
   </div>
   <video id="video" playsinline muted autoplay></video>
   <div class="camera-toast" id="overlay-toast" hidden></div>
+  <!-- Confirm card shown after a successful barcode decode + lookup. -->
+  <div id="confirm-card" class="confirm-card" hidden>
+    <img id="confirm-cover" alt="" hidden />
+    <h3 id="confirm-title">…</h3>
+    <p class="hint" id="confirm-authors"></p>
+    <p class="hint" id="confirm-isbn"></p>
+    <p id="confirm-trophy" class="trophy" hidden></p>
+    <div class="confirm-actions">
+      <button type="button" id="btn-confirm-add" class="primary">Add to library</button>
+      <button type="button" id="btn-confirm-skip" class="danger">Skip</button>
+    </div>
+  </div>
 </div>
 
 <h2>Or look up manually</h2>
@@ -66,6 +78,14 @@
     const overlay = document.getElementById('camera-overlay');
     const overlayStatus = document.getElementById('overlay-status');
     const overlayToast = document.getElementById('overlay-toast');
+    const confirmCard = document.getElementById('confirm-card');
+    const confirmCover = document.getElementById('confirm-cover');
+    const confirmTitle = document.getElementById('confirm-title');
+    const confirmAuthors = document.getElementById('confirm-authors');
+    const confirmIsbn = document.getElementById('confirm-isbn');
+    const confirmTrophy = document.getElementById('confirm-trophy');
+    const btnConfirmAdd = document.getElementById('btn-confirm-add');
+    const btnConfirmSkip = document.getElementById('btn-confirm-skip');
     const httpsWarning = document.getElementById('https-warning');
     const results = document.getElementById('results');
     const manualForm = document.getElementById('manual-form');
@@ -82,6 +102,7 @@
     let lastSubmittedAt = 0;
     let busy = false;
     let toastTimer = null;
+    let pendingConfirm = null;
 
     function setStatus(msg) {
       status.textContent = msg || '';
@@ -94,6 +115,76 @@
       overlayToast.hidden = false;
       if (toastTimer) clearTimeout(toastTimer);
       toastTimer = setTimeout(function() { overlayToast.hidden = true; }, 2500);
+    }
+
+    function showConfirm(payload, originalRequest) {
+      pendingConfirm = { payload: payload, request: originalRequest };
+      const b = payload.book;
+      if (b.thumbnailUrl) {
+        confirmCover.src = b.thumbnailUrl;
+        confirmCover.hidden = false;
+      } else {
+        confirmCover.hidden = true;
+      }
+      confirmTitle.textContent = b.title || 'Unknown';
+      confirmAuthors.textContent = (b.authors || []).join(', ') || 'Unknown author';
+      confirmIsbn.textContent = b.isbn13 ? 'ISBN ' + b.isbn13 : '';
+      if (payload.trophy) {
+        confirmTrophy.textContent =
+          '🏆 Trophy match — requested by ' + payload.trophy.requestedBy +
+          (payload.trophy.reason ? ' (' + payload.trophy.reason + ')' : '');
+        confirmTrophy.hidden = false;
+      } else {
+        confirmTrophy.hidden = true;
+      }
+      confirmCard.hidden = false;
+      overlayStatus.textContent = 'Confirm to add, or skip.';
+    }
+
+    function hideConfirm() {
+      confirmCard.hidden = true;
+      pendingConfirm = null;
+      overlayStatus.textContent = 'Scanning…';
+    }
+
+    btnConfirmAdd.addEventListener('click', async function() {
+      if (!pendingConfirm) return;
+      const req = pendingConfirm.request;
+      hideConfirm();
+      // submitLookup hits POST /scan which mutates and returns full payload.
+      await submitLookup(req);
+    });
+    btnConfirmSkip.addEventListener('click', function() {
+      // Reset debouncer so the same barcode can be re-scanned intentionally.
+      lastSubmitted = null;
+      hideConfirm();
+    });
+
+    async function previewLookup(payload) {
+      if (busy) return;
+      busy = true;
+      overlayStatus.textContent = 'Looking up…';
+      try {
+        const res = await fetch('/scan/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json().catch(function() { return { ok: false, error: 'Bad response' }; });
+        if (res.ok && json.ok) {
+          showConfirm(json, payload);
+        } else {
+          showToast(json.error || 'Not found', false);
+          overlayStatus.textContent = 'Scanning…';
+          // Allow re-scan immediately on failure.
+          lastSubmitted = null;
+        }
+      } catch (err) {
+        showToast('Network error', false);
+        lastSubmitted = null;
+      } finally {
+        busy = false;
+      }
     }
 
     function renderResult(payload, ok) {
@@ -208,6 +299,8 @@
     }
 
     function onDecoded(text) {
+      // Skip new decodes while a confirm card is up.
+      if (pendingConfirm) return;
       const now = Date.now();
       if (text === lastSubmitted && now - lastSubmittedAt < 4000) return;
       lastSubmitted = text;
@@ -217,7 +310,7 @@
         setStatus('Ignored non-ISBN barcode: ' + text);
         return;
       }
-      submitIsbn(cleaned);
+      previewLookup({ isbn: cleaned });
     }
 
     async function startCamera() {
@@ -251,6 +344,7 @@
       overlay.hidden = true;
       document.body.classList.remove('camera-open');
       overlayToast.hidden = true;
+      hideConfirm();
       setStatus('');
     }
 
