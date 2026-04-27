@@ -10,18 +10,24 @@
   <p class="notice">No family library exists yet. In Discord, run <code>/library</code> once so Smaug creates the household library, then come back here.</p>
 <% } %>
 
-<div id="scanner" class="scanner">
-  <video id="video" playsinline muted autoplay></video>
-  <div class="scanner-controls">
-    <button type="button" id="btn-start">Start camera</button>
-    <button type="button" id="btn-stop" hidden>Stop</button>
-    <span id="status" class="hint"></span>
-  </div>
+<div class="scanner-launch">
+  <button type="button" id="btn-start" class="big">📷 Start camera</button>
+  <span id="status" class="hint"></span>
   <p class="hint" id="https-warning" hidden>
     Your browser blocked camera access. Most browsers (especially iOS Safari) require an
     <strong>https://</strong> URL or <code>localhost</code> for camera permission.
-    Use the manual ISBN entry below as a fallback.
+    Use the manual lookup below as a fallback.
   </p>
+</div>
+
+<!-- Fullscreen camera overlay; hidden until Start camera is tapped. -->
+<div id="camera-overlay" class="camera-overlay" hidden>
+  <div class="camera-topbar">
+    <span id="overlay-status">Scanning… point at the barcode on the back cover.</span>
+    <button type="button" id="btn-done" class="primary">Done</button>
+  </div>
+  <video id="video" playsinline muted autoplay></video>
+  <div class="camera-toast" id="overlay-toast" hidden></div>
 </div>
 
 <h2>Or look up manually</h2>
@@ -55,8 +61,11 @@
   (function() {
     const video = document.getElementById('video');
     const btnStart = document.getElementById('btn-start');
-    const btnStop = document.getElementById('btn-stop');
+    const btnDone = document.getElementById('btn-done');
     const status = document.getElementById('status');
+    const overlay = document.getElementById('camera-overlay');
+    const overlayStatus = document.getElementById('overlay-status');
+    const overlayToast = document.getElementById('overlay-toast');
     const httpsWarning = document.getElementById('https-warning');
     const results = document.getElementById('results');
     const manualForm = document.getElementById('manual-form');
@@ -72,8 +81,20 @@
     let lastSubmitted = null;
     let lastSubmittedAt = 0;
     let busy = false;
+    let toastTimer = null;
 
-    function setStatus(msg) { status.textContent = msg || ''; }
+    function setStatus(msg) {
+      status.textContent = msg || '';
+      if (msg) overlayStatus.textContent = msg;
+    }
+
+    function showToast(text, ok) {
+      overlayToast.textContent = text;
+      overlayToast.className = 'camera-toast ' + (ok ? 'ok' : 'err');
+      overlayToast.hidden = false;
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(function() { overlayToast.hidden = true; }, 2500);
+    }
 
     function renderResult(payload, ok) {
       const div = document.createElement('div');
@@ -94,7 +115,6 @@
         div.textContent = payload.error || 'Scan failed';
       }
       results.prepend(div);
-      // Keep only the last 8 result cards.
       while (results.children.length > 8) results.removeChild(results.lastChild);
     }
 
@@ -164,10 +184,20 @@
         });
         const json = await res.json().catch(function() { return { ok: false, error: 'Bad response' }; });
         renderResult(json, res.ok && json.ok);
-        setStatus(res.ok && json.ok ? 'Added.' : (json.error || 'Failed'));
+        if (res.ok && json.ok) {
+          setStatus('Added: ' + json.book.title);
+          showToast(
+            (json.trophyAcquired ? '🏆 ' : '✓ Added: ') + json.book.title,
+            true
+          );
+        } else {
+          setStatus(json.error || 'Failed');
+          showToast(json.error || 'Failed', false);
+        }
       } catch (err) {
         renderResult({ error: String(err) }, false);
         setStatus('Network error');
+        showToast('Network error', false);
       } finally {
         busy = false;
       }
@@ -179,11 +209,9 @@
 
     function onDecoded(text) {
       const now = Date.now();
-      // Debounce duplicate reads of the same code within 4s.
       if (text === lastSubmitted && now - lastSubmittedAt < 4000) return;
       lastSubmitted = text;
       lastSubmittedAt = now;
-      // Most book barcodes are EAN-13 / ISBN-13 (978/979 prefix). Accept anything 10/13 digits.
       const cleaned = text.replace(/[^0-9Xx]/g, '');
       if (cleaned.length !== 10 && cleaned.length !== 13) {
         setStatus('Ignored non-ISBN barcode: ' + text);
@@ -192,8 +220,12 @@
       submitIsbn(cleaned);
     }
 
-    btnStart.addEventListener('click', async function() {
+    async function startCamera() {
       if (!hasZxing) return;
+      // Show overlay first so the video element is laid out before play().
+      overlay.hidden = false;
+      document.body.classList.add('camera-open');
+      overlayStatus.textContent = 'Requesting camera…';
       try {
         reader = new ZXingBrowser.BrowserMultiFormatReader();
         const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
@@ -202,23 +234,28 @@
         controls = await reader.decodeFromVideoDevice(deviceId, video, function(result) {
           if (result) onDecoded(result.getText());
         });
-        btnStart.hidden = true;
-        btnStop.hidden = false;
-        setStatus('Scanning… point at the barcode on the back cover.');
+        overlayStatus.textContent = 'Scanning…';
+        setStatus('Camera open. Tap Done to close.');
       } catch (err) {
         console.error(err);
+        overlay.hidden = true;
+        document.body.classList.remove('camera-open');
         httpsWarning.hidden = false;
         setStatus('Camera blocked: ' + (err && err.message ? err.message : err));
       }
-    });
+    }
 
-    btnStop.addEventListener('click', function() {
+    function stopCamera() {
       if (controls) controls.stop();
       controls = null;
-      btnStart.hidden = false;
-      btnStop.hidden = true;
-      setStatus('Stopped.');
-    });
+      overlay.hidden = true;
+      document.body.classList.remove('camera-open');
+      overlayToast.hidden = true;
+      setStatus('');
+    }
+
+    btnStart.addEventListener('click', startCamera);
+    btnDone.addEventListener('click', stopCamera);
 
     manualForm.addEventListener('submit', function(e) {
       e.preventDefault();

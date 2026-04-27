@@ -52,9 +52,18 @@ button { padding: .4rem .9rem; border: 0; border-radius: 4px; background: var(--
 button.danger { background: var(--danger); }
 .button { display: inline-block; padding: .4rem .9rem; border-radius: 4px; background: var(--accent); color: white; }
 
-.scanner { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-width: 520px; }
-.scanner video { width: 100%; max-height: 360px; background: #000; border-radius: 6px; display: block; }
-.scanner-controls { display: flex; align-items: center; gap: .75rem; margin-top: .75rem; flex-wrap: wrap; }
+.scanner-launch { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-width: 520px; }
+.scanner-launch button.big { font-size: 1.05rem; padding: .65rem 1.1rem; }
+
+.camera-overlay { position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column; }
+body.camera-open { overflow: hidden; }
+.camera-topbar { display: flex; justify-content: space-between; align-items: center; padding: .75rem 1rem; background: rgba(0, 0, 0, 0.85); color: #f6f0e2; gap: 1rem; }
+.camera-topbar #overlay-status { flex: 1; min-width: 0; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.camera-topbar button { padding: .5rem 1.1rem; font-size: 1rem; }
+.camera-overlay video { flex: 1; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.camera-toast { position: absolute; left: 50%; bottom: 5rem; transform: translateX(-50%); padding: .5rem 1rem; border-radius: 999px; color: white; font-weight: 600; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); pointer-events: none; }
+.camera-toast.ok { background: #2a8f3f; }
+.camera-toast.err { background: var(--danger); }
 
 .scan-result { display: flex; gap: .75rem; align-items: flex-start; background: var(--card); border: 1px solid var(--border); border-left: 4px solid #2a8f3f; border-radius: 6px; padding: .75rem; margin: .5rem 0; }
 .scan-result.error { border-left-color: var(--danger); color: var(--danger); }
