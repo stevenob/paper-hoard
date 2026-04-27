@@ -1,0 +1,30 @@
+<% const pageTitle = 'Library' %>
+<%- include('_header') %>
+
+<h1>Physical Library</h1>
+<form method="get" action="/library" class="search">
+  <input type="search" name="q" value="<%= q %>" placeholder="Search title or author" />
+  <button type="submit">Search</button>
+</form>
+
+<% if (copies.length === 0) { %>
+  <p>No physical copies yet. Use <code>/scan</code> in Discord to add one.</p>
+<% } else { %>
+  <table class="data">
+    <thead>
+      <tr><th>Title</th><th>Authors</th><th>Added by</th><th>Added</th></tr>
+    </thead>
+    <tbody>
+      <% copies.forEach(function(c) { %>
+        <tr>
+          <td><%= c.book.title %></td>
+          <td><%= c.book.authors.join(', ') %></td>
+          <td><%= c.addedBy.displayName %></td>
+          <td><%= c.addedAt.toISOString().slice(0,10) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<%- include('_footer') %>

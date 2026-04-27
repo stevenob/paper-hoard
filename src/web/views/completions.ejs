@@ -1,0 +1,29 @@
+<% const pageTitle = 'Completions' %>
+<%- include('_header') %>
+
+<h1>Digital Completions</h1>
+<p><a class="button" href="/completions/new">+ Add completion</a></p>
+
+<% if (completions.length === 0) { %>
+  <p>No completions yet.</p>
+<% } else { %>
+  <table class="data">
+    <thead>
+      <tr><th>Title</th><th>By</th><th>Type</th><th>Source</th><th>Completed</th><th>Rating</th></tr>
+    </thead>
+    <tbody>
+      <% completions.forEach(function(c) { %>
+        <tr>
+          <td><%= c.book.title %></td>
+          <td><%= c.user.displayName %></td>
+          <td><%= c.mediaType %></td>
+          <td><%= c.source || '—' %></td>
+          <td><%= c.completedOn ? c.completedOn.toISOString().slice(0,10) : '—' %></td>
+          <td><%= c.rating ?? '—' %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<%- include('_footer') %>

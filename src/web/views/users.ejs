@@ -1,0 +1,35 @@
+<% const pageTitle = 'Users' %>
+<%- include('_header') %>
+
+<h1>Household Users</h1>
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+
+<table class="data">
+  <thead><tr><th>Name</th><th>Discord ID</th><th>Active</th><th></th></tr></thead>
+  <tbody>
+    <% users.forEach(function(u) { %>
+      <tr>
+        <td><%= u.displayName %></td>
+        <td><code><%= u.discordUserId %></code></td>
+        <td><%= activeUser && activeUser.id === u.id ? 'yes' : '' %></td>
+        <td>
+          <form method="post" action="/users/switch">
+            <input type="hidden" name="userId" value="<%= u.id %>" />
+            <button type="submit">Make active</button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<h2>Add user</h2>
+<form method="post" action="/users" class="stacked">
+  <label>Display name <input name="displayName" required /></label>
+  <label>Discord User ID <input name="discordUserId" required placeholder="123456789012345678" /></label>
+  <button type="submit">Add</button>
+</form>
+
+<p class="hint">In Discord: enable Developer Mode (User Settings → Advanced), right-click your name, "Copy User ID".</p>
+
+<%- include('_footer') %>

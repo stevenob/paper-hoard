@@ -87,3 +87,107 @@ Initial planned stack:
 ## Repository Status
 
 This repository currently contains the product/spec template for Paper Hoard. Implementation details may change as the project evolves.
+
+## Getting Started
+
+Paper Hoard is a Node.js + TypeScript app with a Discord bot (Smaug) and a Fastify web UI, backed by Postgres via Prisma.
+
+### Prerequisites
+
+- Node.js 22+
+- Docker (for Postgres). Compose v2 is also nice to have, but not required for local dev.
+- A Discord application + bot token if you want to run Smaug — see https://discord.com/developers/applications
+
+### One-time setup
+
+```bash
+cp .env.example .env       # then fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_IDS
+npm install
+npm run build
+```
+
+### Run the database
+
+If you have Docker Compose:
+```bash
+docker compose up -d postgres
+```
+
+Or with plain Docker:
+```bash
+docker run -d --name paperhoard-pg \
+  -e POSTGRES_USER=paperhoard -e POSTGRES_PASSWORD=paperhoard -e POSTGRES_DB=paperhoard \
+  -p 5432:5432 postgres:16-alpine
+```
+
+### Apply migrations
+
+```bash
+npx prisma migrate deploy   # production / first run
+# or, while iterating on schema.prisma:
+npm run prisma:migrate -- --name <change-name>
+```
+
+### Run the web UI
+
+```bash
+npm run dev:web    # tsx watch, http://localhost:3000
+# or
+npm run start:web  # uses dist/
+```
+
+Visit http://localhost:3000 — pick or create an active user from the top bar.
+
+### Run Smaug (the Discord bot)
+
+1. Register slash commands once (and every time you change them):
+   ```bash
+   npm run register-commands
+   ```
+2. Start the bot:
+   ```bash
+   npm run dev:bot
+   # or
+   npm run start:bot
+   ```
+
+In your Discord server, try `/library`, `/scan isbn:9780593135204`, `/trophies`.
+
+### Full stack via Docker Compose
+
+```bash
+docker compose up --build
+```
+
+This brings up Postgres, the web UI on `http://localhost:3000`, and the bot (which will only stay up if `DISCORD_TOKEN` is set).
+
+### TrueNAS SCALE deployment notes
+
+See [`truenas/README.md`](truenas/README.md) for the full guide. Two ready-to-use compose files are provided:
+
+- `truenas/compose.build.yml` — clone the repo onto TrueNAS and build the image there.
+- `truenas/compose.published.yml` — pull a pre-built image from a registry (also what to paste into the TrueNAS Apps UI's "Install via YAML" flow).
+
+Both use a bind-mounted dataset for Postgres so it can be snapshotted by TrueNAS.
+
+### Project layout
+
+```
+prisma/schema.prisma     Data model (Library, User, Membership, Book, PhysicalCopy, Completion, Trophy)
+src/shared/              DB client, env, logger, metadata providers (Google Books + Open Library)
+src/bot/                 Smaug entrypoint + slash command handlers
+src/web/                 Fastify app, EJS views, public assets
+```
+
+### Useful commands
+
+| Command                       | What it does                                        |
+| ----------------------------- | --------------------------------------------------- |
+| `npm run build`               | Type-check, compile, copy views/static into `dist/` |
+| `npm run dev:web`             | Run the web UI with watch                           |
+| `npm run dev:bot`             | Run the bot with watch                              |
+| `npm run register-commands`   | Push slash command definitions to Discord          |
+| `npm run prisma:migrate`      | Create + apply a new migration                      |
+| `npm run prisma:deploy`       | Apply existing migrations (use in containers)       |
+| `npm run lint`                | TypeScript type-check only                          |
+| `npm run test`                | Run Vitest                                          |

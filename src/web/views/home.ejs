@@ -1,0 +1,26 @@
+<% const pageTitle = 'Home' %>
+<%- include('_header') %>
+
+<h1>Welcome to Paper Hoard</h1>
+<% if (!library) { %>
+  <p class="notice">No family library is connected yet. Invite Smaug to your Discord server and run <code>/library</code> to create one.</p>
+<% } else { %>
+  <p>Connected to family library: <strong><%= library.name %></strong></p>
+<% } %>
+
+<section class="cards">
+  <a class="card" href="/library">
+    <h2><%= physicalCount %></h2>
+    <p>Physical books</p>
+  </a>
+  <a class="card" href="/trophies">
+    <h2><%= trophyCount %></h2>
+    <p>Trophy items</p>
+  </a>
+  <a class="card" href="/completions">
+    <h2><%= completionCount %></h2>
+    <p>Digital completions</p>
+  </a>
+</section>
+
+<%- include('_footer') %>

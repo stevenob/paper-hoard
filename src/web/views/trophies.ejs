@@ -1,0 +1,32 @@
+<% const pageTitle = 'Trophies' %>
+<%- include('_header') %>
+
+<h1>🏆 Trophy List</h1>
+
+<% if (trophies.length === 0) { %>
+  <p>No Trophy items yet. Add one from <a href="/completions/new">a new completion</a>.</p>
+<% } else { %>
+  <table class="data">
+    <thead>
+      <tr><th>Title</th><th>Authors</th><th>Requested by</th><th>Priority</th><th>Format</th><th></th></tr>
+    </thead>
+    <tbody>
+      <% trophies.forEach(function(t) { %>
+        <tr>
+          <td><%= t.book.title %></td>
+          <td><%= t.book.authors.join(', ') %></td>
+          <td><%= t.requestedBy.displayName %></td>
+          <td><%= t.priority %></td>
+          <td><%= t.desiredFormat || '—' %></td>
+          <td>
+            <form method="post" action="/trophies/<%= t.id %>/delete" onsubmit="return confirm('Remove this trophy?')">
+              <button type="submit" class="danger">Remove</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<%- include('_footer') %>

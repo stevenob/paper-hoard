@@ -1,0 +1,108 @@
+// Paper Hoard data model — see docs/v1-scope.md
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Library {
+  id              String         @id @default(cuid())
+  discordGuildId  String         @unique
+  name            String
+  createdAt       DateTime       @default(now())
+
+  memberships     Membership[]
+  physicalCopies  PhysicalCopy[]
+  trophies        Trophy[]
+  completions     Completion[]
+}
+
+model User {
+  id              String         @id @default(cuid())
+  discordUserId   String         @unique
+  displayName     String
+  createdAt       DateTime       @default(now())
+
+  memberships       Membership[]
+  addedCopies       PhysicalCopy[] @relation("AddedBy")
+  completions       Completion[]
+  requestedTrophies Trophy[]       @relation("RequestedBy")
+}
+
+model Membership {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  library     Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  libraryId   String
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, libraryId])
+}
+
+model Book {
+  id           String         @id @default(cuid())
+  isbn13       String?        @unique
+  isbn10       String?
+  title        String
+  authors      String[]
+  publisher    String?
+  publishedAt  String?
+  thumbnailUrl String?
+  source       String?        // "google_books" | "open_library" | "manual"
+  createdAt    DateTime       @default(now())
+
+  physicalCopies PhysicalCopy[]
+  completions    Completion[]
+  trophies       Trophy[]
+}
+
+model PhysicalCopy {
+  id            String   @id @default(cuid())
+  book          Book     @relation(fields: [bookId], references: [id])
+  bookId        String
+  library       Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  libraryId     String
+  addedBy       User     @relation("AddedBy", fields: [addedByUserId], references: [id])
+  addedByUserId String
+  condition     String?
+  edition       String?
+  location      String?
+  notes         String?
+  addedAt       DateTime @default(now())
+}
+
+model Completion {
+  id            String   @id @default(cuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  library       Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  libraryId     String
+  book          Book     @relation(fields: [bookId], references: [id])
+  bookId        String
+  mediaType     String   // "ebook" | "audiobook"
+  source        String?
+  completedOn   DateTime?
+  rating        Int?
+  notes         String?
+  createdAt     DateTime @default(now())
+}
+
+model Trophy {
+  id                String   @id @default(cuid())
+  library           Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  libraryId         String
+  book              Book     @relation(fields: [bookId], references: [id])
+  bookId            String
+  requestedBy       User     @relation("RequestedBy", fields: [requestedByUserId], references: [id])
+  requestedByUserId String
+  desiredFormat     String?
+  priority          Int      @default(3)
+  reason            String?
+  createdAt         DateTime @default(now())
+
+  @@unique([libraryId, bookId])
+}

@@ -1,0 +1,66 @@
+# Variant A — build the image on the TrueNAS host from the cloned repo.
+# Use this if you `git clone` paper-hoard onto TrueNAS itself.
+#
+# Prereqs:
+#   1. Datasets exist:
+#        /mnt/POOL/apps/paperhoard/code     (this repo, cloned here)
+#        /mnt/POOL/apps/paperhoard/pgdata   (Postgres data — empty dataset)
+#   2. .env file lives next to this YAML (copy from ../.env.example).
+#   3. From TrueNAS shell: cd into the directory containing this file, then:
+#        docker compose -f compose.build.yml --env-file ../.env up -d --build
+#
+# Replace POOL below with your pool name (e.g. tank).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-paperhoard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paperhoard}
+      POSTGRES_DB: ${POSTGRES_DB:-paperhoard}
+    volumes:
+      - /mnt/POOL/apps/paperhoard/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paperhoard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: paperhoard:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      WEB_PORT: 3000
+      COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET in .env}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    command: sh -c "npx prisma migrate deploy && node dist/web/index.js"
+
+  bot:
+    image: paperhoard:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      web:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?set DISCORD_TOKEN in .env}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?set DISCORD_CLIENT_ID in .env}
+      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    command: sh -c "npx prisma migrate deploy && node dist/bot/index.js"

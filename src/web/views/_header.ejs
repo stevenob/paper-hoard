@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title><%= typeof pageTitle !== 'undefined' ? pageTitle + ' · ' + appName : appName %></title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">📚 Paper Hoard</a>
+      <nav>
+        <a href="/library">Library</a>
+        <a href="/trophies">Trophies</a>
+        <a href="/completions">Completions</a>
+        <a href="/users">Users</a>
+      </nav>
+      <div class="active-user">
+        <% if (activeUser) { %>
+          <span>Active: <strong><%= activeUser.displayName %></strong></span>
+          <form method="post" action="/users/clear" style="display:inline">
+            <button type="submit" class="link">switch</button>
+          </form>
+        <% } else if (users.length > 0) { %>
+          <form method="post" action="/users/switch">
+            <select name="userId" onchange="this.form.submit()">
+              <option value="">— pick active user —</option>
+              <% users.forEach(function(u) { %>
+                <option value="<%= u.id %>"><%= u.displayName %></option>
+              <% }) %>
+            </select>
+          </form>
+        <% } else { %>
+          <a href="/users">Add a user</a>
+        <% } %>
+      </div>
+    </header>
+    <main>

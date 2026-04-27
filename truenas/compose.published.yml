@@ -1,0 +1,68 @@
+# Variant B — pull a pre-built image from a registry (GHCR, Docker Hub, etc.).
+# Use this if you build paperhoard somewhere else (CI or your laptop) and push
+# the image, so TrueNAS only pulls and runs it. This is what you want for the
+# TrueNAS UI's "Install via YAML" flow, since that path doesn't run docker build.
+#
+# Prereqs:
+#   1. Image is published: e.g. ghcr.io/<your-user>/paperhoard:latest
+#   2. Dataset exists:    /mnt/POOL/apps/paperhoard/pgdata
+#   3. Env vars provided either via:
+#        - a .env file next to this YAML (CLI: docker compose --env-file ../.env)
+#        - or the TrueNAS Custom App "Environment Variables" form (UI install)
+#
+# Replace POOL with your pool name and PAPERHOARD_IMAGE with your published image.
+
+x-image: &paperhoard-image
+  image: ${PAPERHOARD_IMAGE:-ghcr.io/CHANGE-ME/paperhoard:latest}
+  pull_policy: always
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-paperhoard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paperhoard}
+      POSTGRES_DB: ${POSTGRES_DB:-paperhoard}
+    volumes:
+      - /mnt/POOL/apps/paperhoard/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paperhoard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    <<: *paperhoard-image
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      WEB_PORT: 3000
+      COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    command: sh -c "npx prisma migrate deploy && node dist/web/index.js"
+
+  bot:
+    <<: *paperhoard-image
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      web:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?set DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?set DISCORD_CLIENT_ID}
+      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    command: sh -c "npx prisma migrate deploy && node dist/bot/index.js"

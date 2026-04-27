@@ -1,0 +1,64 @@
+<% const pageTitle = 'New completion' %>
+<%- include('_header') %>
+
+<h1>Log a digital completion</h1>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (!activeUser) { %><p class="notice">Pick an active user from the top bar first.</p><% } %>
+
+<form method="post" action="/completions/new" class="stacked">
+  <fieldset>
+    <legend>Book</legend>
+    <label>ISBN <input name="isbn" placeholder="9780593135204" /></label>
+    <p class="hint">…or search by title:</p>
+    <label>Title <input name="title" /></label>
+    <label>Author <input name="author" /></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Completion</legend>
+    <label>Media type
+      <select name="mediaType" required>
+        <option value="ebook">Ebook</option>
+        <option value="audiobook">Audiobook</option>
+      </select>
+    </label>
+    <label>Source
+      <select name="source">
+        <option value="">—</option>
+        <option>kindle</option>
+        <option>audible</option>
+        <option>libby</option>
+        <option>kobo</option>
+        <option>apple</option>
+        <option>spotify</option>
+        <option>librofm</option>
+        <option>other</option>
+      </select>
+    </label>
+    <label>Completed on <input type="date" name="completedOn" /></label>
+    <label>Rating (1–5) <input type="number" name="rating" min="1" max="5" /></label>
+    <label>Notes <textarea name="notes" rows="3"></textarea></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Trophy List (optional)</legend>
+    <label class="inline"><input type="checkbox" name="addToTrophy" /> Add to family Trophy List</label>
+    <label>Desired format
+      <select name="desiredFormat">
+        <option value="">—</option>
+        <option>hardcover</option>
+        <option>paperback</option>
+        <option>special</option>
+        <option>signed</option>
+        <option>any</option>
+      </select>
+    </label>
+    <label>Priority (1=high, 5=low) <input type="number" name="priority" min="1" max="5" value="3" /></label>
+    <label>Reason <input name="reason" /></label>
+  </fieldset>
+
+  <button type="submit">Save</button>
+</form>
+
+<%- include('_footer') %>

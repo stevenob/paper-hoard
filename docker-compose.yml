@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-paperhoard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paperhoard}
+      POSTGRES_DB: ${POSTGRES_DB:-paperhoard}
+    ports:
+      - "5432:5432"
+    volumes:
+      - paperhoard-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paperhoard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      WEB_PORT: 3000
+      COOKIE_SECRET: ${COOKIE_SECRET:-change-me}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    command: sh -c "npx prisma migrate deploy && node dist/web/index.js"
+
+  bot:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    command: sh -c "npx prisma migrate deploy && node dist/bot/index.js"
+
+volumes:
+  paperhoard-pgdata:
