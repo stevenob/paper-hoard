@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../shared/db.js";
 import { audit } from "../../shared/audit.js";
 import { findOrCreateTag } from "../../shared/tags.js";
+import { isStale, refreshOpenLibraryRatings } from "../../shared/openlibrary-ratings.js";
 import { requireUser, withChrome } from "./_helpers.js";
 
 const editSchema = z.object({
@@ -47,6 +48,11 @@ export async function bookRoutes(app: FastifyInstance) {
         include: { requestedBy: true, library: true },
       }),
     ]);
+    // Lazy refresh of Open Library rating cache. Fire and forget so the
+    // page render isn't blocked on the upstream API.
+    if (book.isbn13 && isStale(book.olFetchedAt)) {
+      void refreshOpenLibraryRatings(book.id);
+    }
     return reply.view(
       "book.ejs",
       await withChrome(req, { book, copies, completions, trophies })

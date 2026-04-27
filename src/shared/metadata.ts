@@ -12,6 +12,7 @@ export interface BookMetadata {
   thumbnailUrl?: string;
   seriesName?: string;
   seriesPosition?: number;
+  edition?: string; // mapped to our picklist when sources expose physical_format
   source: "google_books" | "open_library" | "manual";
 }
 
@@ -101,23 +102,54 @@ function detectSeriesFromTitle(
   return undefined;
 }
 
+async function fetchOpenLibraryEdition(isbn: string): Promise<OpenLibraryEdition | null> {
+  // /isbn/<isbn>.json 302-redirects to /books/<editionKey>.json. undici doesn't
+  // follow redirects by default at the request() level, so do it manually.
+  try {
+    const initial = await request(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`);
+    if (initial.statusCode >= 300 && initial.statusCode < 400) {
+      const loc = initial.headers["location"];
+      const next = Array.isArray(loc) ? loc[0] : loc;
+      if (next) {
+        const followed = await request(new URL(next, "https://openlibrary.org").toString());
+        if (followed.statusCode < 400) return (await followed.body.json()) as OpenLibraryEdition;
+      }
+      return null;
+    }
+    if (initial.statusCode < 400) return (await initial.body.json()) as OpenLibraryEdition;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 async function lookupOpenLibraryByIsbn(isbn: string): Promise<BookMetadata | null> {
+  // Use the richer /isbn/<isbn>.json endpoint so we can read physical_format
+  // (binding) and the work key for series + ratings later. Falls back to the
+  // older /api/books endpoint for the cover thumbnail.
+  const detail = await fetchOpenLibraryEdition(isbn);
+
   const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${encodeURIComponent(
     isbn
   )}&format=json&jscmd=data`;
   const { statusCode, body } = await request(url);
-  if (statusCode >= 400) return null;
-  const json = (await body.json()) as Record<string, OpenLibraryBook>;
-  const entry = json[`ISBN:${isbn}`];
-  if (!entry) return null;
+  if (statusCode >= 400 && !detail) return null;
+  let entry: OpenLibraryBook | undefined;
+  if (statusCode < 400) {
+    const json = (await body.json()) as Record<string, OpenLibraryBook>;
+    entry = json[`ISBN:${isbn}`];
+  }
+  if (!entry && !detail) return null;
+
   return {
     isbn13: isbn.length === 13 ? isbn : undefined,
     isbn10: isbn.length === 10 ? isbn : undefined,
-    title: entry.title ?? "Unknown Title",
-    authors: (entry.authors ?? []).map((a) => a.name),
-    publisher: entry.publishers?.[0]?.name,
-    publishedAt: entry.publish_date,
-    thumbnailUrl: entry.cover?.medium ?? entry.cover?.small,
+    title: entry?.title ?? detail?.title ?? "Unknown Title",
+    authors: (entry?.authors ?? []).map((a) => a.name),
+    publisher: entry?.publishers?.[0]?.name ?? detail?.publishers?.[0],
+    publishedAt: entry?.publish_date ?? detail?.publish_date,
+    thumbnailUrl: entry?.cover?.medium ?? entry?.cover?.small,
+    edition: mapPhysicalFormat(detail?.physical_format),
     source: "open_library",
   };
 }
@@ -128,6 +160,24 @@ interface OpenLibraryBook {
   publishers?: { name: string }[];
   publish_date?: string;
   cover?: { small?: string; medium?: string; large?: string };
+}
+
+interface OpenLibraryEdition {
+  title?: string;
+  publishers?: string[];
+  publish_date?: string;
+  physical_format?: string;
+}
+
+function mapPhysicalFormat(raw?: string | null): string | undefined {
+  if (!raw) return undefined;
+  const s = raw.toLowerCase().trim();
+  if (s.includes("mass market") || s.includes("mass-market")) return "mass-market";
+  if (s.includes("hardcover") || s.includes("hard cover") || s === "hard back" || s.includes("hardback")) return "hardcover";
+  if (s.includes("paperback") || s.includes("trade paper") || s === "soft back" || s.includes("softback")) return "paperback";
+  if (s.includes("box set") || s.includes("boxed set") || s.includes("boxset") || s.includes("box-set")) return "boxset";
+  if (s.includes("signed") || s.includes("special")) return "special";
+  return undefined;
 }
 
 export async function lookupByIsbn(rawIsbn: string): Promise<BookMetadata | null> {

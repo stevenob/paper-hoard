@@ -48,6 +48,7 @@ export async function scanRoutes(app: FastifyInstance) {
       ok: true,
       trophyAcquired: result.trophyAcquired,
       copyId: result.copy.id,
+      suggestedEdition: result.meta.edition ?? null,
       book: {
         title: result.meta.title,
         authors: result.meta.authors,
@@ -105,6 +106,7 @@ export async function scanRoutes(app: FastifyInstance) {
         isbn13: meta.isbn13,
         thumbnailUrl: meta.thumbnailUrl,
         source: meta.source,
+        edition: meta.edition ?? null,
       },
       trophy: trophyMatch
         ? { requestedBy: trophyMatch.requestedBy.displayName, reason: trophyMatch.reason }

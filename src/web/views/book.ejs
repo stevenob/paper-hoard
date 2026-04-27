@@ -17,6 +17,21 @@
     <% if (book.seriesName) { %>
       <p class="hint">📚 <a href="/series/<%= encodeURIComponent(book.seriesName) %>"><%= book.seriesName %></a><% if (book.seriesPosition !== null) { %> #<%= book.seriesPosition %><% } %></p>
     <% } %>
+    <% if (book.olRatingAvg !== null && book.olRatingCount > 0) { %>
+      <p class="hint">⭐ <strong><%= book.olRatingAvg.toFixed(2) %></strong> <span class="hint">(Open Library, <%= book.olRatingCount %> rating<%= book.olRatingCount === 1 ? '' : 's' %>)</span></p>
+    <% } %>
+    <p class="external-links">
+      <% const q = book.isbn13 || book.title %>
+      <% if (q) { %>
+        <a class="pill pill-tag" href="https://www.goodreads.com/search?q=<%= encodeURIComponent(q) %>" target="_blank" rel="noopener">Goodreads ↗</a>
+        <a class="pill pill-tag" href="https://app.thestorygraph.com/browse?search_term=<%= encodeURIComponent(q) %>" target="_blank" rel="noopener">StoryGraph ↗</a>
+        <% if (book.isbn13) { %>
+          <a class="pill pill-tag" href="https://www.librarything.com/isbn/<%= book.isbn13 %>" target="_blank" rel="noopener">LibraryThing ↗</a>
+          <a class="pill pill-tag" href="https://openlibrary.org/isbn/<%= book.isbn13 %>" target="_blank" rel="noopener">Open Library ↗</a>
+          <a class="pill pill-tag" href="https://bookshop.org/search?keywords=<%= book.isbn13 %>" target="_blank" rel="noopener">Bookshop ↗</a>
+        <% } %>
+      <% } %>
+    </p>
     <p class="tag-chips">
       <% (book.tags || []).forEach(function(bt) { %>
         <span class="pill pill-tag">

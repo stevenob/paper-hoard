@@ -56,6 +56,10 @@ model Book {
   source         String?        // "google_books" | "open_library" | "manual"
   seriesName     String?
   seriesPosition Float?
+  olWorkId       String?
+  olRatingAvg    Float?
+  olRatingCount  Int?
+  olFetchedAt    DateTime?
   createdAt      DateTime       @default(now())
 
   physicalCopies PhysicalCopy[]

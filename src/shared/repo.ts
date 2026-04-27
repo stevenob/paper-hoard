@@ -95,6 +95,7 @@ export async function recordScan(args: {
       bookId: book.id,
       libraryId: args.libraryId,
       addedByUserId: args.userId,
+      edition: meta.edition ?? null,
     },
   });
 
@@ -156,12 +157,14 @@ export async function createPhysicalCopy(args: {
   libraryId: string;
   userId: string;
   bookId: string;
+  edition?: string | null;
 }) {
   const copy = await prisma.physicalCopy.create({
     data: {
       bookId: args.bookId,
       libraryId: args.libraryId,
       addedByUserId: args.userId,
+      edition: args.edition ?? null,
     },
   });
   void audit({
@@ -169,7 +172,7 @@ export async function createPhysicalCopy(args: {
     action: "create",
     entity: "physicalCopy",
     entityId: copy.id,
-    details: { bookId: args.bookId, libraryId: args.libraryId },
+    details: { bookId: args.bookId, libraryId: args.libraryId, edition: args.edition ?? null },
   });
   return copy;
 }

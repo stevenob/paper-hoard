@@ -203,7 +203,7 @@
           '<div class="hint">' + escapeHtml((b.authors || []).join(', ') || 'Unknown author') + '</div>' +
           (b.isbn13 ? '<div class="hint">ISBN ' + escapeHtml(b.isbn13) + '</div>' : '') +
           trophy +
-          (payload.copyId ? renderCopyEditor(payload.copyId) : '') +
+          (payload.copyId ? renderCopyEditor(payload.copyId, payload.suggestedEdition || null) : '') +
           '</div>';
         if (payload.copyId) wireCopyEditor(div, payload.copyId);
       } else {
@@ -213,12 +213,15 @@
       while (results.children.length > 8) results.removeChild(results.lastChild);
     }
 
-    function renderCopyEditor(copyId) {
+    function renderCopyEditor(copyId, suggestedEdition) {
       const conditionOpts = ['', 'new', 'like-new', 'good', 'fair', 'poor']
         .map(function(v) { return '<option value="' + v + '">' + (v || '— condition') + '</option>'; })
         .join('');
       const editionOpts = ['', 'hardcover', 'paperback', 'mass-market', 'special', 'signed', 'boxset', 'other']
-        .map(function(v) { return '<option value="' + v + '">' + (v || '— edition') + '</option>'; })
+        .map(function(v) {
+          const sel = (v === suggestedEdition) ? ' selected' : '';
+          return '<option value="' + v + '"' + sel + '>' + (v || '— edition') + '</option>';
+        })
         .join('');
       return (
         '<form class="copy-editor" data-copy="' + copyId + '">' +
