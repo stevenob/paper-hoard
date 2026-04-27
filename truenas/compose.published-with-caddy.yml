@@ -7,6 +7,17 @@
 #   * compose.published.yml (postgres + web + bot pulling from ghcr.io)
 #   * compose.local-image.yml's caddy service
 #
+# IMPORTANT — TrueNAS Apps UI quirks this file is written to survive:
+#   * NO YAML anchors / aliases. The TrueNAS UI alphabetizes keys and demotes
+#     top-level x- keys into `services:`, which silently breaks YAML aliases.
+#     We repeat `image:` and `pull_policy:` on every service instead.
+#   * All Discord snowflake IDs (DISCORD_CLIENT_ID, DISCORD_GUILD_IDS) MUST
+#     be quoted as strings. They're 64-bit, larger than YAML/JSON's safe
+#     number range, and get rounded to the nearest 100 if left unquoted.
+#   * When editing in the TrueNAS UI, watch for duplicate keys — TrueNAS
+#     sometimes appends a re-serialized copy of an env var instead of
+#     replacing the original. The LAST occurrence wins.
+#
 # Prereqs:
 #   1. GitHub Actions workflow has succeeded at least once (image exists on GHCR).
 #   2. Image is public, OR you've docker-loginned on TrueNAS to a private GHCR.
@@ -16,54 +27,53 @@
 #        /mnt/POOL/apps/paperhoard/caddy-config
 #        /mnt/POOL/apps/paperhoard/code         (must contain truenas/Caddyfile)
 #   4. Replace POOL with your real pool path before installing.
+#   5. Replace EVERY `CHANGE_ME_*` placeholder below before installing.
 #
 # Updates after first install:
 #   * Push to main → GitHub Actions builds + pushes ghcr.io/.../paper-hoard:latest
 #   * In TrueNAS UI: paperhoard app → Restart (pull_policy: always re-pulls)
-
-x-image: &paperhoard-image
-  image: ${PAPERHOARD_IMAGE:-ghcr.io/stevenob/paper-hoard:latest}
-  pull_policy: always
 
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-paperhoard}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paperhoard}
-      POSTGRES_DB: ${POSTGRES_DB:-paperhoard}
+      POSTGRES_USER: paperhoard
+      POSTGRES_PASSWORD: paperhoard
+      POSTGRES_DB: paperhoard
     volumes:
       - /mnt/POOL/apps/paperhoard/pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paperhoard}"]
+      test: ["CMD-SHELL", "pg_isready -U paperhoard"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   web:
-    <<: *paperhoard-image
+    image: ghcr.io/stevenob/paper-hoard:latest
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
-      WEB_PORT: 3000
-      WEB_BASE_URL: ${WEB_BASE_URL:-}
-      COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
-      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
-      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
-      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      NODE_ENV: production
+      DATABASE_URL: "postgresql://paperhoard:paperhoard@postgres:5432/paperhoard?schema=public"
+      WEB_PORT: "3000"
+      WEB_BASE_URL: "CHANGE_ME_e.g._https://obrienserver.local:8443"
+      COOKIE_SECRET: "CHANGE_ME_run_openssl_rand_-hex_32"
+      DISCORD_CLIENT_ID: "CHANGE_ME_quote_the_full_18-19_digit_id"
+      DISCORD_CLIENT_SECRET: "CHANGE_ME_from_OAuth2_General_in_Discord_Developer_Portal"
+      DISCORD_GUILD_IDS: "CHANGE_ME_quote_the_full_18-19_digit_guild_id"
+      GOOGLE_BOOKS_API_KEY: ""
+      LOG_LEVEL: "info"
+      NODE_ENV: "production"
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "3000:3000"
     command: sh -c "npx prisma migrate deploy && node dist/web/index.js"
 
   bot:
-    <<: *paperhoard-image
+    image: ghcr.io/stevenob/paper-hoard:latest
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       postgres:
@@ -71,13 +81,13 @@ services:
       web:
         condition: service_started
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
-      DISCORD_TOKEN: ${DISCORD_TOKEN:?set DISCORD_TOKEN}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?set DISCORD_CLIENT_ID}
-      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
-      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      NODE_ENV: production
+      DATABASE_URL: "postgresql://paperhoard:paperhoard@postgres:5432/paperhoard?schema=public"
+      DISCORD_TOKEN: "CHANGE_ME_bot_token_from_Discord_Developer_Portal"
+      DISCORD_CLIENT_ID: "CHANGE_ME_same_value_as_web_service"
+      DISCORD_GUILD_IDS: "CHANGE_ME_same_value_as_web_service"
+      GOOGLE_BOOKS_API_KEY: ""
+      LOG_LEVEL: "info"
+      NODE_ENV: "production"
     command: sh -c "npx prisma migrate deploy && node dist/bot/index.js"
 
   caddy:
@@ -93,7 +103,7 @@ services:
       # Space-separated list of hostnames/IPs that should answer HTTPS.
       # Must include every name you'll use in the URL bar.
       # Caddy uses SPACES, not commas, to separate site addresses.
-      PAPERHOARD_HOSTS: ${PAPERHOARD_HOSTS:?set PAPERHOARD_HOSTS}
+      PAPERHOARD_HOSTS: "CHANGE_ME_e.g._obrienserver.local 192.168.1.50"
     volumes:
       # Bind-mount the Caddyfile from the cloned repo on the host.
       - /mnt/POOL/apps/paperhoard/code/truenas/Caddyfile:/etc/caddy/Caddyfile:ro

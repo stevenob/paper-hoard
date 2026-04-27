@@ -6,12 +6,41 @@ with these files — upgrade first.
 
 Two variants:
 
-| File                    | Use when                                                                      |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| `compose.build.yml`     | The repo is cloned onto TrueNAS and you want to build the image on the host. |
-| `compose.published.yml` | You build/publish the image elsewhere (CI, laptop) and just pull it here.    |
+| File                                | Use when                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------------- |
+| `compose.build.yml`                 | The repo is cloned onto TrueNAS and you want to build the image on the host. |
+| `compose.published.yml`             | You build/publish the image elsewhere (CI, laptop) and just pull it here.    |
+| `compose.local-image.yml`           | Locally-built image + bundled Caddy HTTPS proxy. Quick start without GHCR.   |
+| `compose.published-with-caddy.yml`  | **Recommended.** Pulls from GHCR + bundled Caddy. Pairs with the GitHub Actions workflow for push-button updates. |
 
 Both expect Postgres data to live on a real dataset so it can be snapshotted.
+
+## ⚠️ TrueNAS Apps UI YAML pitfalls
+
+The TrueNAS Apps UI re-serializes YAML on save, which causes three subtle issues
+the bundled compose files are written to avoid. If you hand-edit YAML in the
+form, watch for these:
+
+1. **No YAML anchors / aliases.** The UI alphabetizes keys and demotes
+   top-level `x-` keys into `services:`, silently breaking aliases like
+   `<<: *paperhoard-image`. Repeat `image:` and `pull_policy:` on every
+   service instead.
+
+2. **Quote every Discord ID.** Snowflake IDs are 64-bit, larger than YAML/JSON
+   can represent precisely. Unquoted, `1489048099606364212` becomes
+   `1489048099606364200` — the trailing digits get rounded to the nearest 100
+   and Discord then returns "Unknown Application" / can't find the guild.
+   Always write `DISCORD_CLIENT_ID: "1489..."` with the quotes.
+
+3. **Watch for duplicate keys after editing.** TrueNAS sometimes *appends* a
+   re-serialized copy of an env var instead of replacing the original. YAML
+   duplicate-key semantics mean the **last** one wins, so your correction
+   gets overwritten by the stale value. After saving, verify with:
+   ```
+   sudo docker exec $(sudo docker ps -qf name=paperhoard-web) \
+     printenv DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET DISCORD_GUILD_IDS WEB_BASE_URL
+   ```
+   All four should print the values you just set, not stale ones.
 
 ---
 
