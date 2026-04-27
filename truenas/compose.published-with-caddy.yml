@@ -1,0 +1,102 @@
+# Variant D — published image (GHCR) + Caddy HTTPS proxy.
+#
+# This is the recommended "production" file for TrueNAS once you've set up the
+# GitHub Actions workflow that publishes the image to GHCR on every push.
+#
+# Combines:
+#   * compose.published.yml (postgres + web + bot pulling from ghcr.io)
+#   * compose.local-image.yml's caddy service
+#
+# Prereqs:
+#   1. GitHub Actions workflow has succeeded at least once (image exists on GHCR).
+#   2. Image is public, OR you've docker-loginned on TrueNAS to a private GHCR.
+#   3. Datasets exist:
+#        /mnt/POOL/apps/paperhoard/pgdata
+#        /mnt/POOL/apps/paperhoard/caddy-data
+#        /mnt/POOL/apps/paperhoard/caddy-config
+#        /mnt/POOL/apps/paperhoard/code         (must contain truenas/Caddyfile)
+#   4. Replace POOL with your real pool path before installing.
+#
+# Updates after first install:
+#   * Push to main → GitHub Actions builds + pushes ghcr.io/.../paper-hoard:latest
+#   * In TrueNAS UI: paperhoard app → Restart (pull_policy: always re-pulls)
+
+x-image: &paperhoard-image
+  image: ${PAPERHOARD_IMAGE:-ghcr.io/stevenob/paper-hoard:latest}
+  pull_policy: always
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-paperhoard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paperhoard}
+      POSTGRES_DB: ${POSTGRES_DB:-paperhoard}
+    volumes:
+      - /mnt/POOL/apps/paperhoard/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paperhoard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    <<: *paperhoard-image
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      WEB_PORT: 3000
+      WEB_BASE_URL: ${WEB_BASE_URL:-}
+      COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    command: sh -c "npx prisma migrate deploy && node dist/web/index.js"
+
+  bot:
+    <<: *paperhoard-image
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      web:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?set DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?set DISCORD_CLIENT_ID}
+      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    command: sh -c "npx prisma migrate deploy && node dist/bot/index.js"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      # Use 8080/8443 to avoid conflicting with TrueNAS UI on 80/443.
+      - "8080:80"
+      - "8443:443"
+    environment:
+      # Space-separated list of hostnames/IPs that should answer HTTPS.
+      # Must include every name you'll use in the URL bar.
+      # Caddy uses SPACES, not commas, to separate site addresses.
+      PAPERHOARD_HOSTS: ${PAPERHOARD_HOSTS:?set PAPERHOARD_HOSTS}
+    volumes:
+      # Bind-mount the Caddyfile from the cloned repo on the host.
+      - /mnt/POOL/apps/paperhoard/code/truenas/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persist Caddy data (incl. the local CA cert that devices need to trust).
+      - /mnt/POOL/apps/paperhoard/caddy-data:/data
+      - /mnt/POOL/apps/paperhoard/caddy-config:/config
