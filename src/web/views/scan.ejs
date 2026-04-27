@@ -11,7 +11,11 @@
 <% } %>
 
 <div class="scanner-launch">
-  <button type="button" id="btn-start" class="big">📷 Start camera</button>
+  <div class="scanner-launch-buttons">
+    <button type="button" id="btn-start" class="big">📷 Start camera</button>
+    <label class="button big" for="photo-input">🖼 Choose photo</label>
+    <input type="file" id="photo-input" accept="image/*" capture="environment" hidden />
+  </div>
   <span id="status" class="hint"></span>
   <p class="hint" id="https-warning" hidden>
     Your browser blocked camera access. Most browsers (especially iOS Safari) require an
@@ -350,6 +354,38 @@
 
     btnStart.addEventListener('click', startCamera);
     btnDone.addEventListener('click', stopCamera);
+
+    document.getElementById('photo-input').addEventListener('change', async function(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      e.target.value = '';
+      if (!hasZxing) {
+        setStatus('Barcode library failed to load.');
+        return;
+      }
+      setStatus('Scanning photo…');
+      try {
+        const url = URL.createObjectURL(file);
+        const tmp = new ZXingBrowser.BrowserMultiFormatReader();
+        const result = await tmp.decodeFromImageUrl(url).catch(function() { return null; });
+        URL.revokeObjectURL(url);
+        if (!result) {
+          setStatus('No barcode found in that photo.');
+          return;
+        }
+        const cleaned = result.getText().replace(/[^0-9Xx]/g, '');
+        if (cleaned.length !== 10 && cleaned.length !== 13) {
+          setStatus('Found a barcode but it was not an ISBN: ' + result.getText());
+          return;
+        }
+        setStatus('ISBN ' + cleaned + ' — looking up…');
+        // Browse photos goes straight through (no fullscreen overlay needed)
+        // and uses the same submitLookup -> /scan flow as the manual form.
+        await submitLookup({ isbn: cleaned });
+      } catch (err) {
+        setStatus('Failed to read photo: ' + (err && err.message ? err.message : err));
+      }
+    });
 
     manualForm.addEventListener('submit', function(e) {
       e.preventDefault();

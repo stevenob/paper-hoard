@@ -53,9 +53,11 @@ button.danger { background: var(--danger); }
 .button { display: inline-block; padding: .4rem .9rem; border-radius: 4px; background: var(--accent); color: white; }
 
 .scanner-launch { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-width: 520px; }
-.scanner-launch button.big { font-size: 1.05rem; padding: .65rem 1.1rem; }
+.scanner-launch-buttons { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.scanner-launch button.big, .scanner-launch label.big { font-size: 1.05rem; padding: .65rem 1.1rem; cursor: pointer; }
 
 .camera-overlay { position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column; }
+.camera-overlay[hidden] { display: none; }
 body.camera-open { overflow: hidden; }
 .camera-topbar { display: flex; justify-content: space-between; align-items: center; padding: .75rem 1rem; background: rgba(0, 0, 0, 0.85); color: #f6f0e2; gap: 1rem; }
 .camera-topbar #overlay-status { flex: 1; min-width: 0; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
