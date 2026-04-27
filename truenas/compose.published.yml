@@ -13,7 +13,7 @@
 # Replace POOL with your pool name and PAPERHOARD_IMAGE with your published image.
 
 x-image: &paperhoard-image
-  image: ${PAPERHOARD_IMAGE:-ghcr.io/CHANGE-ME/paperhoard:latest}
+  image: ${PAPERHOARD_IMAGE:-ghcr.io/stevenob/paper-hoard:latest}
   pull_policy: always
 
 services:
@@ -41,7 +41,11 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
       WEB_PORT: 3000
+      WEB_BASE_URL: ${WEB_BASE_URL:-}
       COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       NODE_ENV: production

@@ -141,6 +141,58 @@ gunzip -c paperhoard-2026-04-27.sql.gz | \
 
 ---
 
+## Continuous deployment via GHCR (recommended)
+
+A GitHub Actions workflow (`.github/workflows/publish.yml`) automatically
+builds and publishes a new image to GitHub Container Registry on every push
+to `main`. After the one-time setup below, updates become "click Restart in
+the TrueNAS UI" — no SSH, no `git pull`, no `docker build`.
+
+### One-time setup
+
+1. **Push to GitHub** — first push to `main` triggers the workflow. Watch it
+   under **Actions** in the repo. First run takes ~3 min, subsequent runs ~1 min
+   thanks to layer caching.
+
+2. **Make the package public** so TrueNAS can pull without authentication:
+   - GitHub → your profile → **Packages** → click `paper-hoard` → **Package
+     settings** → **Change visibility** → Public.
+   - (Alternative if you want to keep it private: `docker login ghcr.io` on
+     TrueNAS once with a personal access token that has `read:packages`.)
+
+3. **Switch the TrueNAS Custom App from `compose.local-image.yml` to
+   `compose.published.yml`:**
+   - Edit the app, replace the YAML with the contents of
+     `truenas/compose.published.yml` (with `POOL` patched to your pool path).
+   - Either set `PAPERHOARD_IMAGE` env var to `ghcr.io/stevenob/paper-hoard:latest`,
+     or leave it unset to use the default in the YAML.
+   - Save.
+
+### Updates from then on
+
+- Push to `main` → image rebuilds and gets pushed to GHCR within ~1 min.
+- In the TrueNAS UI, click the `paperhoard` app → **Pull image** (or simply
+  **Restart** — `pull_policy: always` makes the restart pull the latest tag).
+- Web + bot pick up the new image. Postgres data is untouched.
+
+### Pinning to a specific version
+
+For reproducible deploys, use the SHA-tagged image instead of `latest`:
+
+```
+PAPERHOARD_IMAGE=ghcr.io/stevenob/paper-hoard:sha-ce17c52
+```
+
+Each commit produces both a `sha-<short>` tag and (for `main`) the `latest` tag.
+
+### Rolling back
+
+GHCR keeps every published image. To roll back to the previous version:
+```
+PAPERHOARD_IMAGE=ghcr.io/stevenob/paper-hoard:sha-<previous>
+```
+Save → Restart.
+
 ## Add HTTPS with Caddy (optional but required for phone camera scanning)
 
 The web UI's barcode scanner needs HTTPS on iOS Safari and most modern Android
