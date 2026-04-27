@@ -172,16 +172,14 @@ gunzip -c paperhoard-2026-04-27.sql.gz | \
 
 ## Continuous deployment via GHCR (recommended)
 
-A GitHub Actions workflow (`.github/workflows/publish.yml`) automatically
-builds and publishes a new image to GitHub Container Registry on every push
-to `main`. After the one-time setup below, updates become "click Restart in
-the TrueNAS UI" — no SSH, no `git pull`, no `docker build`.
+A GitHub Actions workflow (`.github/workflows/publish.yml`) builds and publishes
+a new image to GitHub Container Registry **only when you push a `vX.Y.Z` git
+tag** (or click "Run workflow" manually in the Actions tab). Pushes to `main`
+do not trigger builds — bump a tag when you're ready to ship.
 
 ### One-time setup
 
-1. **Push to GitHub** — first push to `main` triggers the workflow. Watch it
-   under **Actions** in the repo. First run takes ~3 min, subsequent runs ~1 min
-   thanks to layer caching.
+1. **Push to GitHub** — initial setup of the repo and workflow file.
 
 2. **Make the package public** so TrueNAS can pull without authentication:
    - GitHub → your profile → **Packages** → click `paper-hoard` → **Package
@@ -190,37 +188,49 @@ the TrueNAS UI" — no SSH, no `git pull`, no `docker build`.
      TrueNAS once with a personal access token that has `read:packages`.)
 
 3. **Switch the TrueNAS Custom App from `compose.local-image.yml` to
-   `compose.published.yml`:**
+   `compose.published-with-caddy.yml`:**
    - Edit the app, replace the YAML with the contents of
-     `truenas/compose.published.yml` (with `POOL` patched to your pool path).
-   - Either set `PAPERHOARD_IMAGE` env var to `ghcr.io/stevenob/paper-hoard:latest`,
-     or leave it unset to use the default in the YAML.
+     `truenas/compose.published-with-caddy.yml` (with `POOL` patched to your
+     pool path, and the `CHANGE_ME_*` placeholders filled in).
    - Save.
 
-### Updates from then on
+### Cutting a release
 
-- Push to `main` → image rebuilds and gets pushed to GHCR within ~1 min.
-- In the TrueNAS UI, click the `paperhoard` app → **Pull image** (or simply
-  **Restart** — `pull_policy: always` makes the restart pull the latest tag).
-- Web + bot pick up the new image. Postgres data is untouched.
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+This triggers the workflow, which publishes:
+- `ghcr.io/stevenob/paper-hoard:0.1.0`
+- `ghcr.io/stevenob/paper-hoard:0.1`
+- `ghcr.io/stevenob/paper-hoard:latest`
+- `ghcr.io/stevenob/paper-hoard:sha-<short>`
+
+Wait ~1 min for the green check, then in the TrueNAS UI click **paperhoard →
+Restart**. `pull_policy: always` makes the restart pull the new `latest`.
 
 ### Pinning to a specific version
 
-For reproducible deploys, use the SHA-tagged image instead of `latest`:
+For reproducible deploys, use the version-tagged image instead of `latest`:
 
 ```
-PAPERHOARD_IMAGE=ghcr.io/stevenob/paper-hoard:sha-ce17c52
+PAPERHOARD_IMAGE=ghcr.io/stevenob/paper-hoard:0.1.0
 ```
-
-Each commit produces both a `sha-<short>` tag and (for `main`) the `latest` tag.
 
 ### Rolling back
 
-GHCR keeps every published image. To roll back to the previous version:
+GHCR keeps every published image. To roll back:
 ```
-PAPERHOARD_IMAGE=ghcr.io/stevenob/paper-hoard:sha-<previous>
+PAPERHOARD_IMAGE=ghcr.io/stevenob/paper-hoard:0.0.9
 ```
 Save → Restart.
+
+### One-off / experimental builds
+
+The workflow also has a manual trigger. **Actions → Publish image → Run
+workflow** publishes a `sha-<short>`-tagged image without bumping a real
+version. Useful for testing on TrueNAS before cutting an actual `vX.Y.Z` tag.
 
 ## Add HTTPS with Caddy (optional but required for phone camera scanning)
 
