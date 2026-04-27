@@ -26,4 +26,46 @@
   </a>
 </section>
 
+<% if (recent && recent.length > 0) { %>
+  <h2>Recently added</h2>
+  <ul class="poster-grid poster-grid-compact">
+    <% recent.forEach(function(c) {
+      const cover = c.coverPath ? '/uploads/' + c.coverPath : c.book.thumbnailUrl;
+    %>
+      <li class="poster">
+        <a href="/library/copy/<%= c.id %>" class="poster-link" aria-label="<%= c.book.title %>">
+          <% if (cover) { %>
+            <img src="<%= cover %>" alt="" loading="lazy" />
+          <% } else { %>
+            <div class="poster-fallback"><span><%= c.book.title %></span></div>
+          <% } %>
+          <div class="poster-meta">
+            <strong class="poster-title"><%= c.book.title %></strong>
+            <span class="poster-author"><%= c.book.authors.join(', ') %></span>
+          </div>
+        </a>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<% if (activity && activity.length > 0) { %>
+  <h2>Recent activity</h2>
+  <ul class="activity-feed">
+    <% activity.forEach(function(a) { %>
+      <li>
+        <span class="hint"><%= a.when.toISOString().replace('T',' ').slice(0,16) %></span>
+        <% if (a.who) { %><strong><%= a.who %></strong> <% } %><%= a.verb %>
+        <% if (a.bookTitle && a.href) { %>
+          <a href="<%= a.href %>"><%= a.bookTitle %></a>
+        <% } else if (a.bookTitle) { %>
+          <em><%= a.bookTitle %></em>
+        <% } else { %>
+          <em>(deleted)</em>
+        <% } %>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
 <%- include('_footer') %>

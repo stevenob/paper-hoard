@@ -15,7 +15,7 @@
       <p class="hint"><%= [copy.book.publisher, copy.book.publishedAt].filter(Boolean).join(' • ') %></p>
     <% } %>
     <% if (copy.book.isbn13) { %><p class="hint">ISBN <%= copy.book.isbn13 %></p><% } %>
-    <p class="hint">Added by <strong><%= copy.addedBy.displayName %></strong> on <%= copy.addedAt.toISOString().slice(0,10) %></p>
+    <p class="hint">Added <%= copy.addedAt.toISOString().slice(0,10) %></p>
   </div>
 </article>
 

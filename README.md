@@ -1,193 +1,109 @@
 # Paper Hoard
 
-Paper Hoard is a self-hosted physical book library for tracking the books you own and the completed digital reads worth adding to your shelf.
+A self-hosted physical book library + Discord bot for households.
 
-It includes **Smaug**, a Discord bot for quickly adding physical books by ISBN or title, searching your library, and viewing your Trophy List.
+> Track your physical library and the digital reads worth adding to your hoard.
 
-## Tagline
+## What it does
 
-Track your physical library and the digital reads worth adding to your hoard.
+- **Physical Library** — every book you own physically, scanned by ISBN, organized into series and tags
+- **Trophy List** — digital books you finished and now want to buy physically
+- **Digital Completions** — ebooks/audiobooks you read elsewhere (Kindle, Audible, Libby…)
+- **Smaug** — a Discord bot for the household: `/scan`, `/library`, `/trophies`
+- **Web UI** — Plex-style cover grid, per-book detail with reviews from Goodreads/StoryGraph/LibraryThing/Open Library, mobile camera scanning, dark mode, optional public read-only share link
 
-## V1 Focus
+Discord identity is the source of truth: log in with Discord OAuth, the bot sees the same users, scope is one library per Discord guild (one household).
 
-Paper Hoard v1 is intentionally focused:
+## Features
 
-- Physical book library tracking
-- Discord-based book intake through Smaug
-- Add books by ISBN or title search
-- Search/list your physical library from Discord
-- Track completed ebooks and audiobooks through a server-side UI
-- Add completed digital books to a Trophy List when you want to buy the physical copy
-- List Trophy items from Discord
-- Remove Trophy items with Discord buttons
+| Area | What you get |
+| --- | --- |
+| **Scanning** | Phone camera (ZXing) with barcode confirmation card, photo upload from camera roll, manual ISBN/title/author entry, Smaug `/scan isbn:` or `/scan title: author:` |
+| **Metadata** | Google Books primary, Open Library fallback, manual override per book, auto-detected binding (HC/PB/mass-market) and series |
+| **Browse** | Cover grid, list view, search, sort/filter, per-book detail page, per-tag, per-series, paginated 60/page |
+| **Trophy** | Detected on scan with confirm-buttons in Discord, Smaug DMs the requester when their trophy is acquired |
+| **Imports** | Goodreads CSV, StoryGraph CSV, generic CSV (physical or completions) |
+| **Operations** | Audit log, /about page with version + DB counts, automated `pg_dump` backup script, public share link with regenerable slug |
+| **Quality of life** | PWA install (Add to Home Screen), dark mode (auto + manual toggle), service worker for snappy reloads, accessibility (focus rings, ARIA, Esc closes camera) |
 
-## What V1 Does Not Do
+## Quick start (local dev)
 
-To keep the first version achievable, v1 does not include:
-
-- Native iOS app
-- Kindle login or sync
-- Audible login or sync
-- Audiobook playback
-- Ebook reading
-- Public social features
-- Automatic marketplace value tracking
-- App Store distribution
-
-## Core Concept
-
-Paper Hoard has three main concepts:
-
-1. **Physical Library** — books you own physically.
-2. **Digital Completions** — ebooks or audiobooks you completed elsewhere.
-3. **Trophy List** — completed digital books you want to own physically.
-
-A typical flow:
-
-```
-Complete a Kindle ebook or Audible audiobook
-  -> log it in Paper Hoard
-  -> decide if it is worthy of the Trophy List
-  -> later scan/add the physical book with Smaug
-  -> add it to the Physical Library
-  -> remove it from the Trophy List
-```
-
-## Smaug Discord Bot
-
-Smaug handles fast Discord interactions:
-
-```
-/scan      Add a physical book by ISBN or title
-/library   Search or list your physical library
-/trophies  List Trophy items with Remove buttons
-```
-
-## Server-side UI
-
-The server-side UI handles slower management tasks:
-
-- Add completed ebooks
-- Add completed audiobooks
-- Decide whether a completion should be added to the Trophy List
-- Manage/edit library data
-- Manage/edit Trophy items
-
-## Planned Stack
-
-Initial planned stack:
-
-- PostgreSQL
-- Discord bot named Smaug
-- Server-side web UI
-- Google Books API lookup
-- Open Library API fallback
-- Docker deployment for TrueNAS SCALE
-
-## Repository Status
-
-This repository currently contains the product/spec template for Paper Hoard. Implementation details may change as the project evolves.
-
-## Getting Started
-
-Paper Hoard is a Node.js + TypeScript app with a Discord bot (Smaug) and a Fastify web UI, backed by Postgres via Prisma.
-
-### Prerequisites
-
-- Node.js 22+
-- Docker (for Postgres). Compose v2 is also nice to have, but not required for local dev.
-- A Discord application + bot token if you want to run Smaug — see https://discord.com/developers/applications
-
-### One-time setup
+Requires Node 22+ and Docker.
 
 ```bash
-cp .env.example .env       # then fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_IDS
+cp .env.example .env                # then fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_IDS, COOKIE_SECRET
 npm install
 npm run build
-```
 
-### Run the database
-
-If you have Docker Compose:
-```bash
-docker compose up -d postgres
-```
-
-Or with plain Docker:
-```bash
+# Postgres
 docker run -d --name paperhoard-pg \
   -e POSTGRES_USER=paperhoard -e POSTGRES_PASSWORD=paperhoard -e POSTGRES_DB=paperhoard \
   -p 5432:5432 postgres:16-alpine
+npx prisma migrate deploy
+
+# Web (separate terminal)
+npm run dev:web                     # http://localhost:3000
+
+# Bot (only if you have a Discord token)
+npm run register-commands           # one-time per command change
+npm run dev:bot
 ```
 
-### Apply migrations
+## Self-hosting on TrueNAS SCALE
 
-```bash
-npx prisma migrate deploy   # production / first run
-# or, while iterating on schema.prisma:
-npm run prisma:migrate -- --name <change-name>
-```
+See [`truenas/README.md`](truenas/README.md). Recommended path:
 
-### Run the web UI
+1. Run the GitHub Actions workflow once (push a `vX.Y.Z` tag).
+2. Make the GHCR package public.
+3. Install the **`compose.published-with-caddy.yml`** as a Custom App on TrueNAS — pulls the image from GHCR, runs the web + bot + Postgres + a self-signed-HTTPS Caddy proxy in one shot.
+4. After that, every new tag → `Restart` in the TrueNAS Apps UI, no SSH.
 
-```bash
-npm run dev:web    # tsx watch, http://localhost:3000
-# or
-npm run start:web  # uses dist/
-```
+The TrueNAS guide also covers:
 
-Visit http://localhost:3000 — pick or create an active user from the top bar.
+- Mounting Postgres + uploads + Caddy data on snapshot-able datasets
+- Trusting Caddy's local CA on iPhone so the camera scanner works in Safari
+- Backup cron job + restore
+- Discord OAuth setup for web login
 
-### Run Smaug (the Discord bot)
+## Architecture
 
-1. Register slash commands once (and every time you change them):
-   ```bash
-   npm run register-commands
-   ```
-2. Start the bot:
-   ```bash
-   npm run dev:bot
-   # or
-   npm run start:bot
-   ```
+- **Node.js 22 + TypeScript**, single repo, two entrypoints (`bot`, `web`) sharing a `shared/` module
+- **Fastify + EJS** for the web UI (server-rendered HTML, minimal JS)
+- **discord.js v14** for Smaug (slash commands + buttons + modals)
+- **Prisma + Postgres 16** for persistence
+- **ZXing-js** vendored for in-browser barcode decoding
+- **Caddy** in front for HTTPS termination on LAN
+- **GitHub Actions → GHCR** for image publishing on tag
 
-In your Discord server, try `/library`, `/scan isbn:9780593135204`, `/trophies`.
+Single household = single library. Multi-library is in the parking lot but not implemented.
 
-### Full stack via Docker Compose
-
-```bash
-docker compose up --build
-```
-
-This brings up Postgres, the web UI on `http://localhost:3000`, and the bot (which will only stay up if `DISCORD_TOKEN` is set).
-
-### TrueNAS SCALE deployment notes
-
-See [`truenas/README.md`](truenas/README.md) for the full guide. Two ready-to-use compose files are provided:
-
-- `truenas/compose.build.yml` — clone the repo onto TrueNAS and build the image there.
-- `truenas/compose.published.yml` — pull a pre-built image from a registry (also what to paste into the TrueNAS Apps UI's "Install via YAML" flow).
-
-Both use a bind-mounted dataset for Postgres so it can be snapshotted by TrueNAS.
-
-### Project layout
+## Project layout
 
 ```
-prisma/schema.prisma     Data model (Library, User, Membership, Book, PhysicalCopy, Completion, Trophy)
-src/shared/              DB client, env, logger, metadata providers (Google Books + Open Library)
-src/bot/                 Smaug entrypoint + slash command handlers
-src/web/                 Fastify app, EJS views, public assets
+prisma/schema.prisma     Data model
+src/shared/              DB, env, logger, metadata providers, audit, notifications, picklists, tags
+src/bot/                 Smaug entrypoint + slash command handlers + notification poller
+src/web/                 Fastify routes + EJS views + public assets (incl. service worker)
+src/scripts/             One-off maintenance scripts (e.g. backfill-editions)
+truenas/                 Compose files + Caddyfile + deployment guide
+scripts/                 Host-side helpers (e.g. backup.sh)
+.github/workflows/       CI — image publish on tag
 ```
 
-### Useful commands
+## Useful commands
 
-| Command                       | What it does                                        |
-| ----------------------------- | --------------------------------------------------- |
-| `npm run build`               | Type-check, compile, copy views/static into `dist/` |
-| `npm run dev:web`             | Run the web UI with watch                           |
-| `npm run dev:bot`             | Run the bot with watch                              |
-| `npm run register-commands`   | Push slash command definitions to Discord          |
-| `npm run prisma:migrate`      | Create + apply a new migration                      |
-| `npm run prisma:deploy`       | Apply existing migrations (use in containers)       |
-| `npm run lint`                | TypeScript type-check only                          |
-| `npm run test`                | Run Vitest                                          |
+| Command | What it does |
+| --- | --- |
+| `npm run build` | Type-check, compile, copy views/static into `dist/` |
+| `npm run dev:web` | Web with watch (tsx) |
+| `npm run dev:bot` | Bot with watch |
+| `npm run register-commands` | Push slash command definitions to Discord |
+| `npm run prisma:migrate` | Create + apply a new migration |
+| `npm run prisma:deploy` | Apply existing migrations (used in containers) |
+| `npm run lint` | Type-check only |
+| `npm run test` | Vitest |
+| `git tag vX.Y.Z && git push origin vX.Y.Z` | Cut a release; GitHub Actions publishes to GHCR |
+
+## License
+
+This is a personal project — no license declared yet. Don't redistribute without asking.

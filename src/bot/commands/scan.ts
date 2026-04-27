@@ -151,6 +151,25 @@ export const scanCommand: BotCommand = {
       return;
     }
 
+    // Dedupe check: if the library already has a copy of this book, surface
+    // it in the embed so the user knows before adding another.
+    const existing = await prisma.physicalCopy.findMany({
+      where: { libraryId: library.id, bookId: book.id },
+      include: { addedBy: true },
+      orderBy: { addedAt: "asc" },
+      take: 5,
+    });
+    if (existing.length > 0) {
+      const lines = existing.map(
+        (c) =>
+          `• ${c.edition || "edition?"} · added by ${c.addedBy.displayName} on ${c.addedAt.toISOString().slice(0, 10)}`
+      );
+      embed.addFields({
+        name: `⚠️ Already in your library (${existing.length})`,
+        value: lines.join("\n"),
+      });
+    }
+
     // No trophy — commit immediately and offer the detail editor.
     const copy = await createPhysicalCopy({
       libraryId: library.id,

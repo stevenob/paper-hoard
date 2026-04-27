@@ -149,6 +149,7 @@ body.camera-open { overflow: hidden; }
 .confirm-card h3 { margin: 0 0 .25rem; font-size: 1.05rem; }
 .confirm-card .hint { margin: .15rem 0; }
 .confirm-card .trophy { color: #b48a00; font-weight: 600; margin: .35rem 0 .25rem; clear: both; }
+.confirm-card .dup-warning { color: #b48a00; font-weight: 600; margin: .25rem 0; clear: both; font-size: .9em; }
 .confirm-actions { display: flex; gap: .5rem; clear: both; padding-top: .5rem; }
 .confirm-actions button { flex: 1; padding: .55rem; }
 
@@ -281,6 +282,15 @@ body.camera-open { overflow: hidden; }
   .poster-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .75rem; }
   .poster-title { font-size: .85rem; }
 }
+
+.poster-grid-compact { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+@media (max-width: 480px) {
+  .poster-grid-compact { grid-template-columns: repeat(auto-fill, minmax(95px, 1fr)); }
+}
+
+.activity-feed { list-style: none; padding: 0; margin: .5rem 0; }
+.activity-feed li { padding: .35rem .5rem; border-left: 3px solid var(--border); margin: .25rem 0; }
+.activity-feed li .hint { display: inline-block; min-width: 8.5em; margin-right: .35rem; }
 
 /* ----- Mobile ----- */
 @media (max-width: 640px) {

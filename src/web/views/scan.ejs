@@ -39,6 +39,7 @@
     <p class="hint" id="confirm-authors"></p>
     <p class="hint" id="confirm-isbn"></p>
     <p id="confirm-trophy" class="trophy" hidden></p>
+    <p id="confirm-dup" class="dup-warning" hidden></p>
     <div class="confirm-actions">
       <button type="button" id="btn-confirm-add" class="primary">Add to library</button>
       <button type="button" id="btn-confirm-skip" class="danger">Skip</button>
@@ -88,6 +89,7 @@
     const confirmAuthors = document.getElementById('confirm-authors');
     const confirmIsbn = document.getElementById('confirm-isbn');
     const confirmTrophy = document.getElementById('confirm-trophy');
+    const confirmDup = document.getElementById('confirm-dup');
     const btnConfirmAdd = document.getElementById('btn-confirm-add');
     const btnConfirmSkip = document.getElementById('btn-confirm-skip');
     const httpsWarning = document.getElementById('https-warning');
@@ -140,6 +142,19 @@
         confirmTrophy.hidden = false;
       } else {
         confirmTrophy.hidden = true;
+      }
+      // Render duplicate warning if any existing copies in the library.
+      const existing = payload.existingCopies || [];
+      if (existing.length > 0) {
+        const summary = existing.map(function(c) {
+          return (c.edition || 'edition?') + ' · added by ' + c.addedBy + ' on ' + c.addedAt;
+        }).join('; ');
+        confirmDup.textContent = '⚠️ Already in your library: ' + summary;
+        confirmDup.hidden = false;
+        btnConfirmAdd.textContent = 'Add another copy anyway';
+      } else {
+        confirmDup.hidden = true;
+        btnConfirmAdd.textContent = 'Add to library';
       }
       confirmCard.hidden = false;
       overlayStatus.textContent = 'Confirm to add, or skip.';

@@ -64,7 +64,7 @@
         <a href="/library/copy/<%= c.id %>">
           <strong><%= c.edition || 'edition?' %></strong> · <%= c.condition || 'condition?' %><% if (c.location) { %> · <%= c.location %><% } %>
         </a>
-        <span class="hint">added by <%= c.addedBy.displayName %> on <%= c.addedAt.toISOString().slice(0,10) %></span>
+        <span class="hint">added <%= c.addedAt.toISOString().slice(0,10) %></span>
       </li>
     <% }) %>
   </ul>

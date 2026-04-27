@@ -85,18 +85,22 @@ export async function scanRoutes(app: FastifyInstance) {
     if (!meta) return reply.status(404).send({ ok: false, error: "No matching book found." });
 
     // Trophy preview without committing.
-    const trophyMatch = meta.isbn13
-      ? await prisma.book
-          .findUnique({ where: { isbn13: meta.isbn13 } })
-          .then((b) =>
-            b
-              ? prisma.trophy.findUnique({
-                  where: { libraryId_bookId: { libraryId: library.id, bookId: b.id } },
-                  include: { requestedBy: true },
-                })
-              : null
-          )
+    const matchingBook = meta.isbn13
+      ? await prisma.book.findUnique({ where: { isbn13: meta.isbn13 } })
       : null;
+    const [trophyMatch, existingCopies] = matchingBook
+      ? await Promise.all([
+          prisma.trophy.findUnique({
+            where: { libraryId_bookId: { libraryId: library.id, bookId: matchingBook.id } },
+            include: { requestedBy: true },
+          }),
+          prisma.physicalCopy.findMany({
+            where: { libraryId: library.id, bookId: matchingBook.id },
+            include: { addedBy: true },
+            orderBy: { addedAt: "asc" },
+          }),
+        ])
+      : [null, []];
 
     return reply.send({
       ok: true,
@@ -111,6 +115,14 @@ export async function scanRoutes(app: FastifyInstance) {
       trophy: trophyMatch
         ? { requestedBy: trophyMatch.requestedBy.displayName, reason: trophyMatch.reason }
         : null,
+      existingCopies: existingCopies.map((c) => ({
+        id: c.id,
+        edition: c.edition,
+        condition: c.condition,
+        location: c.location,
+        addedBy: c.addedBy.displayName,
+        addedAt: c.addedAt.toISOString().slice(0, 10),
+      })),
     });
   });
 }

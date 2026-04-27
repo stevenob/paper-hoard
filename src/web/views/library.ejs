@@ -24,14 +24,6 @@
   <label><span class="hint">Search</span>
     <input type="search" name="q" value="<%= params.q || '' %>" placeholder="Title or author" />
   </label>
-  <label><span class="hint">Added by</span>
-    <select name="addedBy">
-      <option value="">— anyone</option>
-      <% members.forEach(function(m) { %>
-        <option value="<%= m.id %>" <%= params.addedBy === m.id ? 'selected' : '' %>><%= m.displayName %></option>
-      <% }) %>
-    </select>
-  </label>
   <label><span class="hint">Sort</span>
     <select name="sort">
       <% sortFields.forEach(function(s) { %>
@@ -47,7 +39,7 @@
   </label>
   <input type="hidden" name="view" value="<%= params.view %>" />
   <button type="submit">Apply</button>
-  <% if (params.q || params.addedBy || params.sort !== 'added' || params.order !== 'desc') { %>
+  <% if (params.q || params.sort !== 'added' || params.order !== 'desc') { %>
     <a href="/library?view=<%= params.view %>" class="hint">reset</a>
   <% } %>
 </form>
@@ -87,7 +79,7 @@
 <% } else { %>
   <table class="data">
     <thead>
-      <tr><th>Title</th><th>Authors</th><th>Condition</th><th>Edition</th><th>Location</th><th>Added by</th><th>Added</th></tr>
+      <tr><th>Title</th><th>Authors</th><th>Condition</th><th>Edition</th><th>Location</th><th>Added</th></tr>
     </thead>
     <tbody>
       <% copies.forEach(function(c) { %>
@@ -97,7 +89,6 @@
           <td data-label="Condition"><%= c.condition || '—' %></td>
           <td data-label="Edition"><%= c.edition || '—' %></td>
           <td data-label="Location"><%= c.location || '—' %></td>
-          <td data-label="Added by"><%= c.addedBy.displayName %></td>
           <td data-label="Added"><%= c.addedAt.toISOString().slice(0,10) %></td>
         </tr>
       <% }) %>
