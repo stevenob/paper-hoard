@@ -161,9 +161,10 @@ self-signed HTTPS endpoint on your LAN with zero domain or port-forwarding setup
    from `code/truenas/Caddyfile`. (You already did this for the build step.)
 
 3. **Set `PAPERHOARD_HOSTS`** in the TrueNAS Apps UI environment variables
-   section. Comma-separated list of every name/IP you'll type in the URL bar:
+   section. SPACE-separated list of every name/IP you'll type in the URL bar
+   (Caddy uses spaces, not commas):
    ```
-   obrienserver.local, 192.168.1.50
+   obrienserver.local 192.168.1.50
    ```
    (Replace with your real hostname + LAN IP.)
 
