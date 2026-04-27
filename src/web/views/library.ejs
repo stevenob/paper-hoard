@@ -2,35 +2,82 @@
 <%- include('_header') %>
 
 <h1>Physical Library</h1>
-<form method="get" action="/library" class="search">
-  <input type="search" name="q" value="<%= q %>" placeholder="Search title or author" />
-  <button type="submit">Search</button>
+
+<form method="get" action="/library" class="library-filters">
+  <label><span class="hint">Search</span>
+    <input type="search" name="q" value="<%= params.q || '' %>" placeholder="Title or author" />
+  </label>
+  <label><span class="hint">Added by</span>
+    <select name="addedBy">
+      <option value="">— anyone</option>
+      <% members.forEach(function(m) { %>
+        <option value="<%= m.id %>" <%= params.addedBy === m.id ? 'selected' : '' %>><%= m.displayName %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label><span class="hint">Sort</span>
+    <select name="sort">
+      <% sortFields.forEach(function(s) { %>
+        <option value="<%= s %>" <%= params.sort === s ? 'selected' : '' %>><%= s %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label><span class="hint">Order</span>
+    <select name="order">
+      <option value="desc" <%= params.order === 'desc' ? 'selected' : '' %>>desc</option>
+      <option value="asc" <%= params.order === 'asc' ? 'selected' : '' %>>asc</option>
+    </select>
+  </label>
+  <button type="submit">Apply</button>
+  <% if (params.q || params.addedBy || params.sort !== 'added' || params.order !== 'desc') { %>
+    <a href="/library" class="hint">reset</a>
+  <% } %>
 </form>
 
+<p class="hint">Showing <%= copies.length %> of <%= total %> total<% if (totalPages > 1) { %> · page <%= params.page %> of <%= totalPages %><% } %></p>
+
 <% if (copies.length === 0) { %>
-  <% if (q) { %>
-    <p>No matches for "<%= q %>". <a href="/library">Show all</a>.</p>
+  <% if (params.q || params.addedBy) { %>
+    <p>No matches. <a href="/library">Show all</a>.</p>
   <% } else { %>
     <p>No physical copies yet. Use <a href="/scan">/scan</a> in the web UI or <code>/scan</code> in Discord to add one.</p>
   <% } %>
 <% } else { %>
   <table class="data">
     <thead>
-      <tr><th>Title</th><th>Authors</th><th>Condition</th><th>Location</th><th>Added by</th><th>Added</th></tr>
+      <tr><th>Title</th><th>Authors</th><th>Condition</th><th>Edition</th><th>Location</th><th>Added by</th><th>Added</th></tr>
     </thead>
     <tbody>
       <% copies.forEach(function(c) { %>
         <tr>
-          <td><a href="/library/copy/<%= c.id %>"><%= c.book.title %></a></td>
-          <td><%= c.book.authors.join(', ') %></td>
-          <td><%= c.condition || '—' %></td>
-          <td><%= c.location || '—' %></td>
-          <td><%= c.addedBy.displayName %></td>
-          <td><%= c.addedAt.toISOString().slice(0,10) %></td>
+          <td data-label="Title"><a href="/library/copy/<%= c.id %>"><%= c.book.title %></a></td>
+          <td data-label="Authors"><%= c.book.authors.join(', ') %></td>
+          <td data-label="Condition"><%= c.condition || '—' %></td>
+          <td data-label="Edition"><%= c.edition || '—' %></td>
+          <td data-label="Location"><%= c.location || '—' %></td>
+          <td data-label="Added by"><%= c.addedBy.displayName %></td>
+          <td data-label="Added"><%= c.addedAt.toISOString().slice(0,10) %></td>
         </tr>
       <% }) %>
     </tbody>
   </table>
+
+  <% if (totalPages > 1) { %>
+    <% function pageUrl(n) {
+      const u = new URLSearchParams();
+      if (params.q) u.set('q', params.q);
+      if (params.addedBy) u.set('addedBy', params.addedBy);
+      u.set('sort', params.sort);
+      u.set('order', params.order);
+      u.set('page', String(n));
+      return '/library?' + u.toString();
+    } %>
+    <nav class="pager">
+      <% if (params.page > 1) { %><a href="<%= pageUrl(params.page - 1) %>">← prev</a><% } %>
+      <span class="hint">page <%= params.page %> / <%= totalPages %></span>
+      <% if (params.page < totalPages) { %><a href="<%= pageUrl(params.page + 1) %>">next →</a><% } %>
+    </nav>
+  <% } %>
 <% } %>
 
 <%- include('_footer') %>

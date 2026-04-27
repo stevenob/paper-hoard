@@ -14,7 +14,7 @@
     <tbody>
       <% completions.forEach(function(c) { %>
         <tr>
-          <td><%= c.book.title %></td>
+          <td><a href="/books/<%= c.bookId %>"><%= c.book.title %></a></td>
           <td><%= c.user.displayName %></td>
           <td><%= c.mediaType %></td>
           <td><%= c.source || '—' %></td>

@@ -17,6 +17,7 @@ const schema = z.object({
   WEB_BASE_URL: optionalUrl(),
   COOKIE_SECRET: z.string().min(8).default("dev-cookie-secret-change-me"),
   GOOGLE_BOOKS_API_KEY: optionalString(),
+  UPLOADS_DIR: z.string().default("./data/uploads"),
   LOG_LEVEL: z.string().default("info"),
   NODE_ENV: z.string().default("development"),
 });

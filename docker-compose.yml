@@ -31,9 +31,12 @@ services:
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
       DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      UPLOADS_DIR: /data/uploads
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - paperhoard-uploads:/data/uploads
     command: sh -c "npx prisma migrate deploy && node dist/web/index.js"
 
   bot:
@@ -53,3 +56,4 @@ services:
 
 volumes:
   paperhoard-pgdata:
+  paperhoard-uploads:

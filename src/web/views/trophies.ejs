@@ -13,12 +13,12 @@
     <tbody>
       <% trophies.forEach(function(t) { %>
         <tr>
-          <td><%= t.book.title %></td>
-          <td><%= t.book.authors.join(', ') %></td>
-          <td><%= t.requestedBy.displayName %></td>
-          <td><%= t.priority %></td>
-          <td><%= t.desiredFormat || '—' %></td>
-          <td>
+          <td data-label="Title"><a href="/books/<%= t.bookId %>"><%= t.book.title %></a></td>
+          <td data-label="Authors"><%= t.book.authors.join(', ') %></td>
+          <td data-label="Requested by"><%= t.requestedBy.displayName %></td>
+          <td data-label="Priority"><%= t.priority %></td>
+          <td data-label="Format"><%= t.desiredFormat || '—' %></td>
+          <td data-label="">
             <form method="post" action="/trophies/<%= t.id %>/delete" onsubmit="return confirm('Remove this trophy?')">
               <button type="submit" class="danger">Remove</button>
             </form>

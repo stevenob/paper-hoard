@@ -1,11 +1,12 @@
 <% const pageTitle = copy.book.title %>
 <%- include('_header') %>
 
-<p><a href="/library">← back to library</a></p>
+<p><a href="/library">← back to library</a> · <a href="/books/<%= copy.bookId %>">all about this book →</a></p>
 
 <article class="book-detail">
-  <% if (copy.book.thumbnailUrl) { %>
-    <img class="cover" src="<%= copy.book.thumbnailUrl %>" alt="">
+  <% const cover = copy.coverPath ? '/uploads/' + copy.coverPath : copy.book.thumbnailUrl %>
+  <% if (cover) { %>
+    <img class="cover" src="<%= cover %>" alt="">
   <% } %>
   <div class="book-meta">
     <h1><%= copy.book.title %></h1>
@@ -18,7 +19,74 @@
   </div>
 </article>
 
+<h2>Cover photo</h2>
+<% if (!activeUser) { %>
+  <p class="hint"><a href="/auth/login">Log in</a> to upload a cover.</p>
+<% } else { %>
+  <form method="post" action="/library/copy/<%= copy.id %>/cover" enctype="multipart/form-data" class="upload-form">
+    <input type="file" name="cover" accept="image/jpeg,image/png,image/webp,image/gif" required />
+    <button type="submit"><%= copy.coverPath ? 'Replace' : 'Upload' %> cover</button>
+  </form>
+  <p class="hint">JPEG, PNG, WebP, or GIF. Max 5MB. Replaces the metadata thumbnail on this and the book pages.</p>
+  <% if (copy.coverPath) { %>
+    <form method="post" action="/library/copy/<%= copy.id %>/cover/delete" onsubmit="return confirm('Remove the uploaded cover?')">
+      <button type="submit" class="danger">Remove uploaded cover</button>
+    </form>
+  <% } %>
+<% } %>
+
 <h2>Edit this copy</h2>
+
+<% if (!activeUser) { %>
+  <p class="notice">You need to <a href="/auth/login">log in</a> to edit.</p>
+<% } %>
+
+<form method="post" action="/library/copy/<%= copy.id %>/edit" class="stacked">
+  <fieldset <%= activeUser ? '' : 'disabled' %>>
+    <label>Condition
+      <select name="condition">
+        <option value="">—</option>
+        <% conditions.forEach(function(c) { %>
+          <option value="<%= c %>" <%= copy.condition === c ? 'selected' : '' %>><%= c %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label>Edition
+      <select name="edition">
+        <option value="">—</option>
+        <% editions.forEach(function(e) { %>
+          <option value="<%= e %>" <%= copy.edition === e ? 'selected' : '' %>><%= e %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label>Location
+      <input name="location" value="<%= copy.location || '' %>" placeholder="e.g. Living room shelf" maxlength="200" />
+    </label>
+    <label>Notes
+      <textarea name="notes" rows="3" maxlength="2000"><%= copy.notes || '' %></textarea>
+    </label>
+    <button type="submit">Save</button>
+  </fieldset>
+</form>
+
+<% if (activeUser) { %>
+  <h2>Danger zone</h2>
+  <form method="post" action="/library/copy/<%= copy.id %>/delete" onsubmit="return confirm('Delete this physical copy? The Book/Completion records stay.')">
+    <button type="submit" class="danger">Delete this copy</button>
+  </form>
+<% } %>
+
+<% if (completions.length > 0) { %>
+  <h2>Completions of this title</h2>
+  <ul>
+    <% completions.forEach(function(c) { %>
+      <li><%= c.user.displayName %> finished the <%= c.mediaType %><%= c.completedOn ? ' on ' + c.completedOn.toISOString().slice(0,10) : '' %><%= c.rating ? ' • ' + c.rating + '★' : '' %></li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<%- include('_footer') %>
+
 
 <% if (!activeUser) { %>
   <p class="notice">You need to <a href="/auth/login">log in</a> to edit.</p>

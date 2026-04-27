@@ -1,0 +1,56 @@
+<% const pageTitle = book.title %>
+<%- include('_header') %>
+
+<p><a href="/library">← back to library</a></p>
+
+<article class="book-detail">
+  <% if (book.thumbnailUrl) { %>
+    <img class="cover" src="<%= book.thumbnailUrl %>" alt="">
+  <% } %>
+  <div class="book-meta">
+    <h1><%= book.title %></h1>
+    <p class="hint"><%= book.authors.join(', ') || 'Unknown author' %></p>
+    <% if (book.publisher || book.publishedAt) { %>
+      <p class="hint"><%= [book.publisher, book.publishedAt].filter(Boolean).join(' • ') %></p>
+    <% } %>
+    <% if (book.isbn13) { %><p class="hint">ISBN <%= book.isbn13 %></p><% } %>
+  </div>
+</article>
+
+<h2>Physical copies (<%= copies.length %>)</h2>
+<% if (copies.length === 0) { %>
+  <p class="hint">No physical copies in the library yet.</p>
+<% } else { %>
+  <ul class="copy-list">
+    <% copies.forEach(function(c) { %>
+      <li>
+        <a href="/library/copy/<%= c.id %>">
+          <strong><%= c.edition || 'edition?' %></strong> · <%= c.condition || 'condition?' %><% if (c.location) { %> · <%= c.location %><% } %>
+        </a>
+        <span class="hint">added by <%= c.addedBy.displayName %> on <%= c.addedAt.toISOString().slice(0,10) %></span>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<h2>Trophy</h2>
+<% if (trophies.length === 0) { %>
+  <p class="hint">Not on the Trophy List.</p>
+<% } else { %>
+  <% trophies.forEach(function(t) { %>
+    <p>🏆 Requested by <strong><%= t.requestedBy.displayName %></strong> · priority <%= t.priority %><% if (t.desiredFormat) { %> · wants <%= t.desiredFormat %><% } %><% if (t.reason) { %> — <%= t.reason %><% } %></p>
+  <% }) %>
+<% } %>
+
+<h2>Completions (<%= completions.length %>)</h2>
+<% if (completions.length === 0) { %>
+  <p class="hint">No one has logged completing this book.</p>
+<% } else { %>
+  <ul>
+    <% completions.forEach(function(c) { %>
+      <li><%= c.user.displayName %> finished the <%= c.mediaType %><%= c.completedOn ? ' on ' + c.completedOn.toISOString().slice(0,10) : '' %><%= c.rating ? ' • ' + c.rating + '★' : '' %><%= c.notes ? ' — ' + c.notes : '' %></li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<%- include('_footer') %>

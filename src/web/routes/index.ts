@@ -7,6 +7,8 @@ import { usersRoutes } from "./users.js";
 import { scanRoutes } from "./scan.js";
 import { authRoutes } from "./auth.js";
 import { copyRoutes } from "./copy.js";
+import { bookRoutes } from "./book.js";
+import { searchRoutes } from "./search.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   await authRoutes(app);
@@ -17,4 +19,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await usersRoutes(app);
   await scanRoutes(app);
   await copyRoutes(app);
+  await bookRoutes(app);
+  await searchRoutes(app);
 }

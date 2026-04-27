@@ -71,5 +71,51 @@ button.danger { background: var(--danger); }
 .book-detail .cover { width: 96px; height: auto; border-radius: 4px; }
 .book-detail h1 { margin: 0 0 .25rem; }
 
+.library-filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; margin-bottom: 1rem; padding: .75rem; background: var(--card); border: 1px solid var(--border); border-radius: 6px; }
+.library-filters label { display: flex; flex-direction: column; gap: .15rem; }
+.library-filters input, .library-filters select { padding: .35rem .5rem; font: inherit; }
+
+.pager { display: flex; justify-content: space-between; align-items: center; margin: 1rem 0; }
+
+.upload-form { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: .5rem; }
+
+.copy-list { list-style: none; padding: 0; }
+.copy-list li { padding: .5rem .75rem; background: var(--card); border: 1px solid var(--border); border-radius: 4px; margin: .25rem 0; display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
+
+.search-link { font-size: 1.1rem; }
+
+.search-hit { display: flex; gap: .75rem; padding: .75rem; border: 1px solid var(--border); background: var(--card); border-radius: 6px; margin: .5rem 0; align-items: flex-start; }
+.search-hit img { width: 56px; height: auto; border-radius: 3px; flex-shrink: 0; }
+.search-hit h3 { margin: 0 0 .25rem; }
+.search-tags { margin: .25rem 0 0; display: flex; gap: .35rem; flex-wrap: wrap; }
+.pill { display: inline-block; padding: .15rem .5rem; border-radius: 999px; font-size: .8em; }
+.pill-library { background: #e1efe4; color: #1d5a2c; }
+.pill-trophy { background: #faf0d5; color: #7a5500; }
+.pill-completion { background: #e1ebf6; color: #1c4d80; }
+
+/* ----- Mobile ----- */
+@media (max-width: 640px) {
+  .topbar { flex-wrap: wrap; padding: .6rem .75rem; gap: .75rem; }
+  .topbar nav { order: 3; flex-basis: 100%; gap: .75rem; flex-wrap: wrap; }
+  .topbar .active-user { font-size: .85rem; }
+  main { padding: 0 .75rem; margin: 1rem auto; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.15rem; }
+
+  /* Tables -> cards */
+  table.data { display: block; border: 0; background: transparent; }
+  table.data thead { display: none; }
+  table.data tbody { display: block; }
+  table.data tr { display: block; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: .5rem .75rem; margin-bottom: .5rem; }
+  table.data td { display: flex; justify-content: space-between; gap: .5rem; padding: .15rem 0; border: 0; text-align: right; font-size: .92rem; }
+  table.data td::before { content: attr(data-label); font-weight: 600; color: var(--muted); text-align: left; flex: 1; }
+
+  .library-filters { flex-direction: column; align-items: stretch; }
+  .library-filters label { width: 100%; }
+
+  button, .button { padding: .55rem 1rem; }
+  form.search input { font-size: 16px; }
+}
+
 .recent-list { padding-left: 1.2rem; }
 .recent-list li { margin: .25rem 0; }

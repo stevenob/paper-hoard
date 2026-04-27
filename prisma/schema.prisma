@@ -72,6 +72,7 @@ model PhysicalCopy {
   edition       String?
   location      String?
   notes         String?
+  coverPath     String?
   addedAt       DateTime @default(now())
 }
 

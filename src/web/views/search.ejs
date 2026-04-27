@@ -1,0 +1,30 @@
+<% const pageTitle = q ? 'Search: ' + q : 'Search' %>
+<%- include('_header') %>
+
+<h1>Search</h1>
+
+<form method="get" action="/search" class="search">
+  <input type="search" name="q" value="<%= q %>" placeholder="Title, author, or ISBN" autofocus />
+  <button type="submit">Search</button>
+</form>
+
+<% if (q && books.length === 0) { %>
+  <p class="hint">No matches for "<%= q %>".</p>
+<% } %>
+
+<% books.forEach(function(b) { %>
+  <article class="search-hit">
+    <% if (b.thumbnailUrl) { %><img src="<%= b.thumbnailUrl %>" alt=""><% } %>
+    <div>
+      <h3><a href="/books/<%= b.id %>"><%= b.title %></a></h3>
+      <p class="hint"><%= b.authors.join(', ') || 'Unknown author' %><%= b.isbn13 ? ' · ISBN ' + b.isbn13 : '' %></p>
+      <p class="search-tags">
+        <% if (b.physicalCopies.length > 0) { %><span class="pill pill-library">📚 in library (<%= b.physicalCopies.length %>)</span><% } %>
+        <% if (b.trophies.length > 0) { %><span class="pill pill-trophy">🏆 on trophy list</span><% } %>
+        <% if (b.completions.length > 0) { %><span class="pill pill-completion">✅ <%= b.completions.length %> completion<%= b.completions.length > 1 ? 's' : '' %></span><% } %>
+      </p>
+    </div>
+  </article>
+<% }) %>
+
+<%- include('_footer') %>
