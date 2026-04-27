@@ -47,6 +47,7 @@ export async function scanRoutes(app: FastifyInstance) {
     return reply.send({
       ok: true,
       trophyAcquired: result.trophyAcquired,
+      copyId: result.copy.id,
       book: {
         title: result.meta.title,
         authors: result.meta.authors,

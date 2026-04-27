@@ -51,6 +51,18 @@ async function main() {
           logger.error({ err }, "button handler failed");
         }
       }
+      return;
+    }
+
+    if (interaction.isModalSubmit()) {
+      const handler = commands.get(interaction.customId.split(":")[0]);
+      if (handler?.handleModal) {
+        try {
+          await handler.handleModal(interaction);
+        } catch (err) {
+          logger.error({ err }, "modal handler failed");
+        }
+      }
     }
   });
 

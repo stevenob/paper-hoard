@@ -1,0 +1,71 @@
+<% const pageTitle = copy.book.title %>
+<%- include('_header') %>
+
+<p><a href="/library">← back to library</a></p>
+
+<article class="book-detail">
+  <% if (copy.book.thumbnailUrl) { %>
+    <img class="cover" src="<%= copy.book.thumbnailUrl %>" alt="">
+  <% } %>
+  <div class="book-meta">
+    <h1><%= copy.book.title %></h1>
+    <p class="hint"><%= copy.book.authors.join(', ') || 'Unknown author' %></p>
+    <% if (copy.book.publisher || copy.book.publishedAt) { %>
+      <p class="hint"><%= [copy.book.publisher, copy.book.publishedAt].filter(Boolean).join(' • ') %></p>
+    <% } %>
+    <% if (copy.book.isbn13) { %><p class="hint">ISBN <%= copy.book.isbn13 %></p><% } %>
+    <p class="hint">Added by <strong><%= copy.addedBy.displayName %></strong> on <%= copy.addedAt.toISOString().slice(0,10) %></p>
+  </div>
+</article>
+
+<h2>Edit this copy</h2>
+
+<% if (!activeUser) { %>
+  <p class="notice">You need to <a href="/auth/login">log in</a> to edit.</p>
+<% } %>
+
+<form method="post" action="/library/copy/<%= copy.id %>/edit" class="stacked">
+  <fieldset <%= activeUser ? '' : 'disabled' %>>
+    <label>Condition
+      <select name="condition">
+        <option value="">—</option>
+        <% conditions.forEach(function(c) { %>
+          <option value="<%= c %>" <%= copy.condition === c ? 'selected' : '' %>><%= c %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label>Edition
+      <select name="edition">
+        <option value="">—</option>
+        <% editions.forEach(function(e) { %>
+          <option value="<%= e %>" <%= copy.edition === e ? 'selected' : '' %>><%= e %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label>Location
+      <input name="location" value="<%= copy.location || '' %>" placeholder="e.g. Living room shelf" maxlength="200" />
+    </label>
+    <label>Notes
+      <textarea name="notes" rows="3" maxlength="2000"><%= copy.notes || '' %></textarea>
+    </label>
+    <button type="submit">Save</button>
+  </fieldset>
+</form>
+
+<% if (activeUser) { %>
+  <h2>Danger zone</h2>
+  <form method="post" action="/library/copy/<%= copy.id %>/delete" onsubmit="return confirm('Delete this physical copy? The Book/Completion records stay.')">
+    <button type="submit" class="danger">Delete this copy</button>
+  </form>
+<% } %>
+
+<% if (completions.length > 0) { %>
+  <h2>Completions of this title</h2>
+  <ul>
+    <% completions.forEach(function(c) { %>
+      <li><%= c.user.displayName %> finished the <%= c.mediaType %><%= c.completedOn ? ' on ' + c.completedOn.toISOString().slice(0,10) : '' %><%= c.rating ? ' • ' + c.rating + '★' : '' %></li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<%- include('_footer') %>

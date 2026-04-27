@@ -74,8 +74,9 @@ export interface ScanResult {
  * Look up a book by ISBN (or title fallback), record a PhysicalCopy under the
  * given library/user, and remove a matching Trophy if one existed.
  *
- * Used by both the Discord /scan command and the web /scan page so behaviour
- * stays in sync.
+ * Used by the web /scan endpoint where a single round-trip should commit
+ * everything. Smaug uses the lower-level helpers below to support a
+ * confirm-trophy-match flow.
  */
 export async function recordScan(args: {
   libraryId: string;
@@ -84,11 +85,7 @@ export async function recordScan(args: {
   title?: string;
   author?: string;
 }): Promise<ScanResult | null> {
-  const meta = args.isbn
-    ? await lookupByIsbn(args.isbn)
-    : args.title
-      ? (await searchByTitle([args.title, args.author].filter(Boolean).join(" ")))[0]
-      : null;
+  const meta = await lookupBook(args);
   if (!meta) return null;
 
   const book = await upsertBookFromMetadata(meta);
@@ -108,4 +105,41 @@ export async function recordScan(args: {
   if (trophy) await prisma.trophy.delete({ where: { id: trophy.id } });
 
   return { book, copy, trophyAcquired: Boolean(trophy), meta };
+}
+
+/**
+ * Lookup-only — Smaug uses this to preview a match before committing,
+ * so a Trophy match can be confirmed by the user instead of auto-applied.
+ */
+export async function lookupBook(args: {
+  isbn?: string;
+  title?: string;
+  author?: string;
+}): Promise<BookMetadata | null> {
+  if (args.isbn) return lookupByIsbn(args.isbn);
+  if (args.title) {
+    const results = await searchByTitle([args.title, args.author].filter(Boolean).join(" "));
+    return results[0] ?? null;
+  }
+  return null;
+}
+
+export async function createPhysicalCopy(args: {
+  libraryId: string;
+  userId: string;
+  bookId: string;
+}) {
+  return prisma.physicalCopy.create({
+    data: {
+      bookId: args.bookId,
+      libraryId: args.libraryId,
+      addedByUserId: args.userId,
+    },
+  });
+}
+
+export async function deleteTrophyIfExists(libraryId: string, bookId: string) {
+  return prisma.trophy
+    .delete({ where: { libraryId_bookId: { libraryId, bookId } } })
+    .catch(() => null);
 }

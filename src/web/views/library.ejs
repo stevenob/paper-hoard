@@ -8,17 +8,23 @@
 </form>
 
 <% if (copies.length === 0) { %>
-  <p>No physical copies yet. Use <code>/scan</code> in Discord to add one.</p>
+  <% if (q) { %>
+    <p>No matches for "<%= q %>". <a href="/library">Show all</a>.</p>
+  <% } else { %>
+    <p>No physical copies yet. Use <a href="/scan">/scan</a> in the web UI or <code>/scan</code> in Discord to add one.</p>
+  <% } %>
 <% } else { %>
   <table class="data">
     <thead>
-      <tr><th>Title</th><th>Authors</th><th>Added by</th><th>Added</th></tr>
+      <tr><th>Title</th><th>Authors</th><th>Condition</th><th>Location</th><th>Added by</th><th>Added</th></tr>
     </thead>
     <tbody>
       <% copies.forEach(function(c) { %>
         <tr>
-          <td><%= c.book.title %></td>
+          <td><a href="/library/copy/<%= c.id %>"><%= c.book.title %></a></td>
           <td><%= c.book.authors.join(', ') %></td>
+          <td><%= c.condition || '—' %></td>
+          <td><%= c.location || '—' %></td>
           <td><%= c.addedBy.displayName %></td>
           <td><%= c.addedAt.toISOString().slice(0,10) %></td>
         </tr>

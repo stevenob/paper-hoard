@@ -81,17 +81,66 @@
         const trophy = payload.trophyAcquired ? '<span class="trophy">🏆 Trophy match!</span>' : '';
         div.innerHTML =
           (b.thumbnailUrl ? '<img src="' + b.thumbnailUrl + '" alt="">' : '') +
-          '<div><strong>' + escapeHtml(b.title) + '</strong>' +
+          '<div class="scan-result-body"><strong>' + escapeHtml(b.title) + '</strong>' +
           '<div class="hint">' + escapeHtml((b.authors || []).join(', ') || 'Unknown author') + '</div>' +
           (b.isbn13 ? '<div class="hint">ISBN ' + escapeHtml(b.isbn13) + '</div>' : '') +
           trophy +
+          (payload.copyId ? renderCopyEditor(payload.copyId) : '') +
           '</div>';
+        if (payload.copyId) wireCopyEditor(div, payload.copyId);
       } else {
         div.textContent = payload.error || 'Scan failed';
       }
       results.prepend(div);
       // Keep only the last 8 result cards.
       while (results.children.length > 8) results.removeChild(results.lastChild);
+    }
+
+    function renderCopyEditor(copyId) {
+      const conditionOpts = ['', 'new', 'like-new', 'good', 'fair', 'poor']
+        .map(function(v) { return '<option value="' + v + '">' + (v || '— condition') + '</option>'; })
+        .join('');
+      const editionOpts = ['', 'hardcover', 'paperback', 'mass-market', 'special', 'signed', 'boxset', 'other']
+        .map(function(v) { return '<option value="' + v + '">' + (v || '— edition') + '</option>'; })
+        .join('');
+      return (
+        '<form class="copy-editor" data-copy="' + copyId + '">' +
+          '<select name="condition">' + conditionOpts + '</select>' +
+          '<select name="edition">' + editionOpts + '</select>' +
+          '<input name="location" placeholder="Location (optional)" />' +
+          '<button type="submit">Save details</button>' +
+          '<a href="/library/copy/' + copyId + '" class="hint">edit more →</a>' +
+          '<span class="copy-editor-status hint"></span>' +
+        '</form>'
+      );
+    }
+
+    function wireCopyEditor(container, copyId) {
+      const form = container.querySelector('form.copy-editor');
+      if (!form) return;
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const status = form.querySelector('.copy-editor-status');
+        status.textContent = 'Saving…';
+        const fd = new FormData(form);
+        const body = new URLSearchParams();
+        fd.forEach(function(v, k) { body.append(k, v); });
+        try {
+          const res = await fetch('/library/copy/' + copyId + '/edit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: body.toString(),
+          });
+          if (res.ok) {
+            status.textContent = '✓ saved';
+            form.querySelector('button').disabled = true;
+          } else {
+            status.textContent = 'Save failed';
+          }
+        } catch (err) {
+          status.textContent = 'Network error';
+        }
+      });
     }
 
     function escapeHtml(s) {

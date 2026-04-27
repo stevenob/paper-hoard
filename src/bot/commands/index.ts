@@ -1,6 +1,7 @@
 import type {
   ChatInputCommandInteraction,
   ButtonInteraction,
+  ModalSubmitInteraction,
   SlashCommandBuilder,
   SlashCommandOptionsOnlyBuilder,
   SlashCommandSubcommandsOnlyBuilder,
@@ -13,6 +14,7 @@ export interface BotCommand {
     | SlashCommandSubcommandsOnlyBuilder;
   execute(interaction: ChatInputCommandInteraction): Promise<void>;
   handleButton?(interaction: ButtonInteraction): Promise<void>;
+  handleModal?(interaction: ModalSubmitInteraction): Promise<void>;
 }
 
 import { scanCommand } from "./scan.js";
