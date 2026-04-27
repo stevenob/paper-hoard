@@ -6,16 +6,19 @@ import { withChrome } from "./_helpers.js";
 const SORT_FIELDS = ["added", "title", "author"] as const;
 type SortField = (typeof SORT_FIELDS)[number];
 
+const VIEW_MODES = ["grid", "list"] as const;
+
 const querySchema = z.object({
   q: z.string().trim().optional(),
   addedBy: z.string().trim().optional(),
   tag: z.string().trim().optional(),
   sort: z.enum(SORT_FIELDS).default("added"),
   order: z.enum(["asc", "desc"]).default("desc"),
+  view: z.enum(VIEW_MODES).default("grid"),
   page: z.coerce.number().int().min(1).default(1),
 });
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 60;
 
 export async function libraryRoutes(app: FastifyInstance) {
   app.get<{ Querystring: Record<string, string> }>("/library", async (req, reply) => {
