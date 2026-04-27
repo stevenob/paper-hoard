@@ -71,3 +71,22 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       NODE_ENV: production
     command: sh -c "npx prisma migrate deploy && node dist/bot/index.js"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Comma-separated list of hostnames/IPs that should answer HTTPS.
+      # Must include every name you'll use in the URL bar.
+      PAPERHOARD_HOSTS: ${PAPERHOARD_HOSTS:?set PAPERHOARD_HOSTS}
+    volumes:
+      # Bind-mount the Caddyfile from the cloned repo on the host.
+      - /mnt/POOL/apps/paperhoard/code/truenas/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persist Caddy data (incl. the local CA cert that devices need to trust).
+      - /mnt/POOL/apps/paperhoard/caddy-data:/data
+      - /mnt/POOL/apps/paperhoard/caddy-config:/config

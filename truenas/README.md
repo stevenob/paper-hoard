@@ -141,7 +141,63 @@ gunzip -c paperhoard-2026-04-27.sql.gz | \
 
 ---
 
-## Snapshots
+## Add HTTPS with Caddy (optional but required for phone camera scanning)
+
+The web UI's barcode scanner needs HTTPS on iOS Safari and most modern Android
+browsers. The bundled Caddy service in `compose.local-image.yml` gives you a
+self-signed HTTPS endpoint on your LAN with zero domain or port-forwarding setup.
+
+### One-time setup
+
+1. **Create the Caddy data datasets** (so its CA cert + auto-renewals persist):
+   ```
+   POOL/apps/paperhoard/caddy-data
+   POOL/apps/paperhoard/caddy-config
+   ```
+   `chown -R 1000:1000` them (the user the Caddy container runs as).
+
+2. **Make sure the repo is cloned at**
+   `/mnt/POOL/apps/paperhoard/code` — the compose file bind-mounts the Caddyfile
+   from `code/truenas/Caddyfile`. (You already did this for the build step.)
+
+3. **Set `PAPERHOARD_HOSTS`** in the TrueNAS Apps UI environment variables
+   section. Comma-separated list of every name/IP you'll type in the URL bar:
+   ```
+   obrienserver.local, 192.168.1.50
+   ```
+   (Replace with your real hostname + LAN IP.)
+
+4. **Reinstall or edit** the `paperhoard` Custom App to pick up the new YAML.
+
+After the app starts, Caddy auto-generates a self-signed cert covering every
+name in `PAPERHOARD_HOSTS`, and you can browse to `https://obrienserver.local`
+(or whatever hostname you set).
+
+### Silence the browser cert warning (one-time per device)
+
+Caddy publishes its local-CA root cert at:
+```
+/mnt/POOL/apps/paperhoard/caddy-data/caddy/pki/authorities/local/root.crt
+```
+
+Copy that file to each device and trust it once:
+
+- **macOS:** double-click the `.crt` → Keychain Access → set "Always Trust" for SSL.
+- **Windows:** double-click → Install Certificate → Local Machine → Place all in "Trusted Root Certification Authorities".
+- **iOS:** AirDrop the file to the iPhone → Settings → General → VPN & Device Management → install the profile → then Settings → General → About → Certificate Trust Settings → enable it.
+- **Android:** Settings → Security → Encryption & credentials → Install a certificate → CA certificate.
+
+Without this step you'll just get a "Not secure" warning every time and have to
+click through; the camera will still work.
+
+### Why both `local_certs` and `tls internal` in the Caddyfile
+
+`local_certs` is a safety global that forces Caddy to never reach out to Let's
+Encrypt. `tls internal` on the site block does the same per-site. Belt and
+suspenders so a typo in `PAPERHOARD_HOSTS` (e.g. accidentally listing a real
+public domain) can't trigger a public ACME order.
+
+
 
 Because Postgres data is on `POOL/apps/paperhoard/pgdata`, set a TrueNAS
 **Periodic Snapshot Task** on that dataset (e.g. daily, retain 14). For

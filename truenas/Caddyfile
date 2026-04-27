@@ -1,0 +1,22 @@
+# Caddy reverse proxy for Paper Hoard, LAN-only with a self-signed cert from
+# Caddy's built-in local CA. No internet exposure, no Let's Encrypt, no
+# port-forwarding required.
+#
+# The PAPERHOARD_HOSTS env var holds a comma-separated list of hostnames and/or
+# IPs that this proxy should respond to. It must include every name/IP you'll
+# use in the URL bar. Examples:
+#   PAPERHOARD_HOSTS="obrienserver.local"
+#   PAPERHOARD_HOSTS="obrienserver.local, 192.168.1.50"
+#
+# After first boot, install Caddy's root CA on each device to silence browser
+# warnings — see truenas/README.md for the exact command.
+
+{
+	local_certs
+}
+
+{$PAPERHOARD_HOSTS} {
+	tls internal
+	encode gzip zstd
+	reverse_proxy web:3000
+}
