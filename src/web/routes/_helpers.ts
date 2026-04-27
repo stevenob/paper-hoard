@@ -1,46 +1,58 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { prisma } from "../../shared/db.js";
-
-const ACTIVE_USER_COOKIE = "ph_active_user";
-
-export function getActiveUserId(req: FastifyRequest): string | null {
-  return req.cookies[ACTIVE_USER_COOKIE] ?? null;
-}
+import { getCurrentUser, isOAuthConfigured } from "../auth.js";
 
 export async function getActiveUser(req: FastifyRequest) {
-  const id = getActiveUserId(req);
-  if (!id) return null;
-  return prisma.user.findUnique({ where: { id } });
-}
-
-export function setActiveUser(reply: FastifyReply, userId: string) {
-  reply.setCookie(ACTIVE_USER_COOKIE, userId, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-  });
-}
-
-export function clearActiveUser(reply: FastifyReply) {
-  reply.clearCookie(ACTIVE_USER_COOKIE, { path: "/" });
+  return getCurrentUser(req);
 }
 
 export async function getOnlyLibrary() {
-  // V1 web UI assumes a single household library. Pick the first one if any exist.
+  // V1 uses a single household library. Pick the first one if any exist.
   return prisma.library.findFirst({ orderBy: { createdAt: "asc" } });
+}
+
+/**
+ * Returns the library for the logged-in user (their first membership), falling
+ * back to the only library when not logged in (read-only views).
+ */
+export async function getCurrentLibrary(req: FastifyRequest) {
+  const user = await getCurrentUser(req);
+  if (user) {
+    const m = await prisma.membership.findFirst({
+      where: { userId: user.id },
+      include: { library: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (m) return m.library;
+  }
+  return getOnlyLibrary();
+}
+
+export async function requireUser(req: FastifyRequest, reply: FastifyReply) {
+  const user = await getCurrentUser(req);
+  if (!user) {
+    reply.status(401).send({ error: "Login required." });
+    return null;
+  }
+  return user;
 }
 
 export async function withChrome<T extends Record<string, unknown>>(
   req: FastifyRequest,
   ctx: T
-): Promise<T & { activeUser: Awaited<ReturnType<typeof getActiveUser>>; users: Awaited<ReturnType<typeof prisma.user.findMany>>; library: Awaited<ReturnType<typeof getOnlyLibrary>> }> {
+) {
   const [activeUser, users, library] = await Promise.all([
-    getActiveUser(req),
+    getCurrentUser(req),
     prisma.user.findMany({ orderBy: { displayName: "asc" } }),
-    getOnlyLibrary(),
+    getCurrentLibrary(req),
   ]);
-  return { ...ctx, activeUser, users, library };
+  return {
+    ...ctx,
+    activeUser,
+    users,
+    library,
+    oauthConfigured: isOAuthConfigured(),
+  };
 }
 
 export type RouteRegistrar = (app: FastifyInstance) => Promise<void> | void;

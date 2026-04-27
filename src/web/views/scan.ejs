@@ -4,7 +4,7 @@
 <h1>📷 Scan a book</h1>
 
 <% if (!activeUser) { %>
-  <p class="notice">Pick an active user from the top bar first — every scan is recorded as added by that user.</p>
+  <p class="notice">You need to <a href="/auth/login">log in with Discord</a> before scanning books — every scan is recorded as added by the logged-in user.</p>
 <% } %>
 <% if (!library) { %>
   <p class="notice">No family library exists yet. In Discord, run <code>/library</code> once so Smaug creates the household library, then come back here.</p>

@@ -1,14 +1,22 @@
 import "dotenv/config";
 import { z } from "zod";
 
+const optionalString = () =>
+  z.preprocess((v) => (v === "" ? undefined : v), z.string().optional());
+
+const optionalUrl = () =>
+  z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional());
+
 const schema = z.object({
   DATABASE_URL: z.string().url(),
-  DISCORD_TOKEN: z.string().optional(),
-  DISCORD_CLIENT_ID: z.string().optional(),
-  DISCORD_GUILD_IDS: z.string().optional(),
+  DISCORD_TOKEN: optionalString(),
+  DISCORD_CLIENT_ID: optionalString(),
+  DISCORD_CLIENT_SECRET: optionalString(),
+  DISCORD_GUILD_IDS: optionalString(),
   WEB_PORT: z.coerce.number().int().positive().default(3000),
+  WEB_BASE_URL: optionalUrl(),
   COOKIE_SECRET: z.string().min(8).default("dev-cookie-secret-change-me"),
-  GOOGLE_BOOKS_API_KEY: z.string().optional(),
+  GOOGLE_BOOKS_API_KEY: optionalString(),
   LOG_LEVEL: z.string().default("info"),
   NODE_ENV: z.string().default("development"),
 });
@@ -27,6 +35,28 @@ export function requireDiscordEnv(): { token: string; clientId: string; guildIds
     token: env.DISCORD_TOKEN,
     clientId: env.DISCORD_CLIENT_ID,
     guildIds: (env.DISCORD_GUILD_IDS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  };
+}
+
+export interface OAuthEnv {
+  clientId: string;
+  clientSecret: string;
+  baseUrl: string;
+  allowedGuildIds: string[];
+}
+
+export function getOAuthEnv(): OAuthEnv | null {
+  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || !env.WEB_BASE_URL) {
+    return null;
+  }
+  return {
+    clientId: env.DISCORD_CLIENT_ID,
+    clientSecret: env.DISCORD_CLIENT_SECRET,
+    baseUrl: env.WEB_BASE_URL.replace(/\/$/, ""),
+    allowedGuildIds: (env.DISCORD_GUILD_IDS ?? "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),

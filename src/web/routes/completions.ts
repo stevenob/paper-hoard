@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../shared/db.js";
 import { lookupByIsbn, searchByTitle } from "../../shared/metadata.js";
 import { upsertBookFromMetadata } from "../../shared/repo.js";
-import { getActiveUser, getOnlyLibrary, withChrome } from "./_helpers.js";
+import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
 
 const newCompletionSchema = z.object({
   isbn: z.string().optional(),
@@ -35,19 +35,15 @@ export async function completionsRoutes(app: FastifyInstance) {
   });
 
   app.post("/completions/new", async (req, reply) => {
-    const activeUser = await getActiveUser(req);
-    const library = await getOnlyLibrary();
-    if (!activeUser) {
-      return reply.view(
-        "completions_new.ejs",
-        await withChrome(req, { error: "Pick an active user first (top right)." })
-      );
-    }
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const library = await getCurrentLibrary(req);
     if (!library) {
       return reply.view(
         "completions_new.ejs",
         await withChrome(req, {
-          error: "No family library exists yet. Add Smaug to a Discord server and run /scan or /library first.",
+          error:
+            "No family library exists yet. In Discord, run /library once so Smaug creates it.",
         })
       );
     }
@@ -77,7 +73,7 @@ export async function completionsRoutes(app: FastifyInstance) {
     const book = await upsertBookFromMetadata(meta);
     await prisma.completion.create({
       data: {
-        userId: activeUser.id,
+        userId: user.id,
         libraryId: library.id,
         bookId: book.id,
         mediaType: data.mediaType,
@@ -94,7 +90,7 @@ export async function completionsRoutes(app: FastifyInstance) {
         create: {
           libraryId: library.id,
           bookId: book.id,
-          requestedByUserId: activeUser.id,
+          requestedByUserId: user.id,
           desiredFormat: data.desiredFormat || null,
           priority: data.priority ?? 3,
           reason: data.reason || null,

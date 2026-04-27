@@ -20,6 +20,8 @@ code { background: #efe9dc; padding: 2px 5px; border-radius: 3px; font-size: .9e
 .topbar .active-user { margin-left: auto; font-size: .9rem; display: flex; align-items: center; gap: .5rem; }
 .topbar select { padding: .25rem; }
 .topbar button.link { background: transparent; border: 0; color: #f6f0e2; text-decoration: underline; cursor: pointer; padding: 0; font: inherit; }
+.topbar .login-link { background: #5865f2; padding: .35rem .7rem; border-radius: 4px; }
+.topbar .login-link:hover { text-decoration: none; opacity: .9; }
 
 main { max-width: 960px; margin: 1.5rem auto; padding: 0 1.5rem; }
 

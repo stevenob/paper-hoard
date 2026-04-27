@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ensureMembership, recordScan } from "../../shared/repo.js";
 import { prisma } from "../../shared/db.js";
-import { getActiveUser, getOnlyLibrary, withChrome } from "./_helpers.js";
+import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
 
 const scanSchema = z.object({
   isbn: z.string().trim().optional(),
@@ -22,9 +22,9 @@ export async function scanRoutes(app: FastifyInstance) {
 
   // JSON endpoint hit by the in-page camera scanner.
   app.post("/scan", async (req, reply) => {
-    const activeUser = await getActiveUser(req);
-    const library = await getOnlyLibrary();
-    if (!activeUser) return reply.status(400).send({ ok: false, error: "Pick an active user first." });
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const library = await getCurrentLibrary(req);
     if (!library)
       return reply
         .status(400)
@@ -36,10 +36,10 @@ export async function scanRoutes(app: FastifyInstance) {
     if (!parsed.data.isbn && !parsed.data.title)
       return reply.status(400).send({ ok: false, error: "Provide an ISBN or title." });
 
-    await ensureMembership(activeUser.id, library.id);
+    await ensureMembership(user.id, library.id);
     const result = await recordScan({
       libraryId: library.id,
-      userId: activeUser.id,
+      userId: user.id,
       ...parsed.data,
     });
     if (!result) return reply.status(404).send({ ok: false, error: "No matching book found." });

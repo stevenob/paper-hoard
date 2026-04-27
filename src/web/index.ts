@@ -15,7 +15,7 @@ import { registerRoutes } from "./routes/index.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function main() {
-  const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+  const app = Fastify({ logger: { level: env.LOG_LEVEL }, trustProxy: true });
 
   await app.register(cookie, { secret: env.COOKIE_SECRET });
   await app.register(formbody);

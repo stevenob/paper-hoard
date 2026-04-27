@@ -4,7 +4,7 @@
 <h1>Log a digital completion</h1>
 
 <% if (error) { %><p class="error"><%= error %></p><% } %>
-<% if (!activeUser) { %><p class="notice">Pick an active user from the top bar first.</p><% } %>
+<% if (!activeUser) { %><p class="notice">You need to <a href="/auth/login">log in with Discord</a> to record completions.</p><% } %>
 
 <form method="post" action="/completions/new" class="stacked">
   <fieldset>

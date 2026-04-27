@@ -18,21 +18,14 @@
       </nav>
       <div class="active-user">
         <% if (activeUser) { %>
-          <span>Active: <strong><%= activeUser.displayName %></strong></span>
-          <form method="post" action="/users/clear" style="display:inline">
-            <button type="submit" class="link">switch</button>
+          <span>👤 <strong><%= activeUser.displayName %></strong></span>
+          <form method="post" action="/auth/logout" style="display:inline">
+            <button type="submit" class="link">logout</button>
           </form>
-        <% } else if (users.length > 0) { %>
-          <form method="post" action="/users/switch">
-            <select name="userId" onchange="this.form.submit()">
-              <option value="">— pick active user —</option>
-              <% users.forEach(function(u) { %>
-                <option value="<%= u.id %>"><%= u.displayName %></option>
-              <% }) %>
-            </select>
-          </form>
+        <% } else if (oauthConfigured) { %>
+          <a href="/auth/login" class="login-link">Login with Discord</a>
         <% } else { %>
-          <a href="/users">Add a user</a>
+          <span class="hint">login disabled</span>
         <% } %>
       </div>
     </header>
