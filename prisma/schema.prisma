@@ -44,20 +44,42 @@ model Membership {
 }
 
 model Book {
-  id           String         @id @default(cuid())
-  isbn13       String?        @unique
-  isbn10       String?
-  title        String
-  authors      String[]
-  publisher    String?
-  publishedAt  String?
-  thumbnailUrl String?
-  source       String?        // "google_books" | "open_library" | "manual"
-  createdAt    DateTime       @default(now())
+  id             String         @id @default(cuid())
+  isbn13         String?        @unique
+  isbn10         String?
+  title          String
+  authors        String[]
+  publisher      String?
+  publishedAt    String?
+  thumbnailUrl   String?
+  source         String?        // "google_books" | "open_library" | "manual"
+  seriesName     String?
+  seriesPosition Float?
+  createdAt      DateTime       @default(now())
 
   physicalCopies PhysicalCopy[]
   completions    Completion[]
   trophies       Trophy[]
+  tags           BookTag[]
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  books     BookTag[]
+}
+
+model BookTag {
+  book      Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  bookId    String
+  tag       Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId     String
+
+  @@id([bookId, tagId])
+  @@index([tagId])
 }
 
 model PhysicalCopy {

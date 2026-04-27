@@ -34,6 +34,10 @@
   <% } %>
 </form>
 
+<% if (activeTag) { %>
+  <p class="hint">Filtered by tag <a href="/library" class="pill pill-tag" title="Clear">#<%= activeTag.name %> ×</a></p>
+<% } %>
+
 <p class="hint">Showing <%= copies.length %> of <%= total %> total<% if (totalPages > 1) { %> · page <%= params.page %> of <%= totalPages %><% } %></p>
 
 <% if (copies.length === 0) { %>

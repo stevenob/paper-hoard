@@ -12,6 +12,8 @@ import { searchRoutes } from "./search.js";
 import { aboutRoutes } from "./about.js";
 import { auditRoutes } from "./audit.js";
 import { importRoutes } from "./import.js";
+import { tagRoutes } from "./tags.js";
+import { seriesRoutes } from "./series.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   await authRoutes(app);
@@ -27,4 +29,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await aboutRoutes(app);
   await auditRoutes(app);
   await importRoutes(app);
+  await tagRoutes(app);
+  await seriesRoutes(app);
 }

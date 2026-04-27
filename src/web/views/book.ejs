@@ -1,7 +1,7 @@
 <% const pageTitle = book.title %>
 <%- include('_header') %>
 
-<p><a href="/library">← back to library</a></p>
+<p><a href="/library">← back to library</a> <% if (activeUser) { %>· <a href="/books/<%= book.id %>/edit">edit metadata</a><% } %></p>
 
 <article class="book-detail">
   <% if (book.thumbnailUrl) { %>
@@ -14,6 +14,28 @@
       <p class="hint"><%= [book.publisher, book.publishedAt].filter(Boolean).join(' • ') %></p>
     <% } %>
     <% if (book.isbn13) { %><p class="hint">ISBN <%= book.isbn13 %></p><% } %>
+    <% if (book.seriesName) { %>
+      <p class="hint">📚 <a href="/series/<%= encodeURIComponent(book.seriesName) %>"><%= book.seriesName %></a><% if (book.seriesPosition !== null) { %> #<%= book.seriesPosition %><% } %></p>
+    <% } %>
+    <p class="tag-chips">
+      <% (book.tags || []).forEach(function(bt) { %>
+        <span class="pill pill-tag">
+          <a href="/tags/<%= bt.tag.slug %>"><%= bt.tag.name %></a>
+          <% if (activeUser) { %>
+            <form method="post" action="/books/<%= book.id %>/tags/<%= bt.tag.id %>/delete" style="display:inline">
+              <button type="submit" title="Remove tag" aria-label="Remove tag"
+                style="background:transparent;border:0;color:inherit;cursor:pointer;padding:0 0 0 .25rem;">×</button>
+            </form>
+          <% } %>
+        </span>
+      <% }) %>
+      <% if (activeUser) { %>
+        <form method="post" action="/books/<%= book.id %>/tags" class="add-tag">
+          <input name="name" placeholder="add tag" maxlength="64" />
+          <button type="submit">+</button>
+        </form>
+      <% } %>
+    </p>
   </div>
 </article>
 

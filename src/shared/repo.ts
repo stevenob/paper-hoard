@@ -28,38 +28,32 @@ export async function ensureMembership(userId: string, libraryId: string) {
 }
 
 export async function upsertBookFromMetadata(meta: BookMetadata) {
+  const sharedFields = {
+    title: meta.title,
+    authors: meta.authors,
+    publisher: meta.publisher,
+    publishedAt: meta.publishedAt,
+    thumbnailUrl: meta.thumbnailUrl,
+    seriesName: meta.seriesName,
+    seriesPosition: meta.seriesPosition,
+  };
   if (meta.isbn13) {
     return prisma.book.upsert({
       where: { isbn13: meta.isbn13 },
       create: {
         isbn13: meta.isbn13,
         isbn10: meta.isbn10,
-        title: meta.title,
-        authors: meta.authors,
-        publisher: meta.publisher,
-        publishedAt: meta.publishedAt,
-        thumbnailUrl: meta.thumbnailUrl,
         source: meta.source,
+        ...sharedFields,
       },
-      update: {
-        title: meta.title,
-        authors: meta.authors,
-        publisher: meta.publisher,
-        publishedAt: meta.publishedAt,
-        thumbnailUrl: meta.thumbnailUrl,
-      },
+      update: sharedFields,
     });
   }
-  // No ISBN — create a fresh record (manual de-dup left to UI later).
   return prisma.book.create({
     data: {
       isbn10: meta.isbn10,
-      title: meta.title,
-      authors: meta.authors,
-      publisher: meta.publisher,
-      publishedAt: meta.publishedAt,
-      thumbnailUrl: meta.thumbnailUrl,
       source: meta.source,
+      ...sharedFields,
     },
   });
 }

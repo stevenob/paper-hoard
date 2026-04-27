@@ -9,6 +9,7 @@ type SortField = (typeof SORT_FIELDS)[number];
 const querySchema = z.object({
   q: z.string().trim().optional(),
   addedBy: z.string().trim().optional(),
+  tag: z.string().trim().optional(),
   sort: z.enum(SORT_FIELDS).default("added"),
   order: z.enum(["asc", "desc"]).default("desc"),
   page: z.coerce.number().int().min(1).default(1),
@@ -22,18 +23,20 @@ export async function libraryRoutes(app: FastifyInstance) {
     const params = parsed.success ? parsed.data : querySchema.parse({});
     const skip = (params.page - 1) * PAGE_SIZE;
 
-    const where: Record<string, unknown> = {};
+    const bookFilter: Record<string, unknown> = {};
     if (params.q) {
-      where.book = {
-        OR: [
-          { title: { contains: params.q, mode: "insensitive" } },
-          { authors: { has: params.q } },
-        ],
-      };
+      bookFilter.OR = [
+        { title: { contains: params.q, mode: "insensitive" } },
+        { authors: { has: params.q } },
+      ];
     }
-    if (params.addedBy) {
-      where.addedByUserId = params.addedBy;
+    if (params.tag) {
+      bookFilter.tags = { some: { tag: { slug: params.tag } } };
     }
+
+    const where: Record<string, unknown> = {};
+    if (Object.keys(bookFilter).length > 0) where.book = bookFilter;
+    if (params.addedBy) where.addedByUserId = params.addedBy;
 
     const orderBy = (() => {
       const dir = params.order;
@@ -41,9 +44,6 @@ export async function libraryRoutes(app: FastifyInstance) {
         case "title":
           return { book: { title: dir } } as const;
         case "author":
-          // Postgres array ordering is awkward; sort by added then we fall
-          // back. For author sort we lean on title since that's the common
-          // browse pattern with author-known queries.
           return { book: { title: dir } } as const;
         case "added":
         default:
@@ -51,7 +51,7 @@ export async function libraryRoutes(app: FastifyInstance) {
       }
     })();
 
-    const [copies, total, members] = await Promise.all([
+    const [copies, total, members, activeTag] = await Promise.all([
       prisma.physicalCopy.findMany({
         where,
         include: { book: true, addedBy: true, library: true },
@@ -61,6 +61,9 @@ export async function libraryRoutes(app: FastifyInstance) {
       }),
       prisma.physicalCopy.count({ where }),
       prisma.user.findMany({ orderBy: { displayName: "asc" } }),
+      params.tag
+        ? prisma.tag.findUnique({ where: { slug: params.tag } })
+        : Promise.resolve(null),
     ]);
 
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -72,6 +75,7 @@ export async function libraryRoutes(app: FastifyInstance) {
       totalPages,
       pageSize: PAGE_SIZE,
       sortFields: SORT_FIELDS,
+      activeTag,
     });
     return reply.view("library.ejs", ctx);
   });

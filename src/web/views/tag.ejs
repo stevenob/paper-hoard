@@ -1,0 +1,25 @@
+<% const pageTitle = '#' + tag.name %>
+<%- include('_header') %>
+
+<p><a href="/tags">← all tags</a></p>
+
+<h1>#<%= tag.name %></h1>
+
+<% if (tag.books.length === 0) { %>
+  <p class="hint">No books with this tag.</p>
+<% } else { %>
+  <ul class="tag-books">
+    <% tag.books.forEach(function(bt) { %>
+      <li>
+        <a href="/books/<%= bt.book.id %>"><strong><%= bt.book.title %></strong></a>
+        <span class="hint">— <%= bt.book.authors.join(', ') %></span>
+        <% if (bt.book.physicalCopies.length > 0) { %><span class="pill pill-library">📚 owned</span><% } %>
+        <% if (bt.book.trophies.length > 0) { %><span class="pill pill-trophy">🏆 trophy</span><% } %>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<p class="hint"><a href="/library?tag=<%= tag.slug %>">View only owned copies tagged #<%= tag.name %> →</a></p>
+
+<%- include('_footer') %>

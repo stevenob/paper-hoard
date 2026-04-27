@@ -92,6 +92,14 @@ button.danger { background: var(--danger); }
 .pill-library { background: #e1efe4; color: #1d5a2c; }
 .pill-trophy { background: #faf0d5; color: #7a5500; }
 .pill-completion { background: #e1ebf6; color: #1c4d80; }
+.pill-tag { background: #efe9dc; color: #5a3a18; }
+.pill-tag a { color: inherit; }
+.tag-chips { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin: .5rem 0; }
+.add-tag { display: inline-flex; gap: .25rem; }
+.add-tag input { padding: .15rem .35rem; font-size: .85em; max-width: 100px; }
+.add-tag button { padding: .15rem .5rem; font-size: .85em; }
+.tag-list, .tag-books, .series-list { list-style: none; padding: 0; }
+.tag-list li, .tag-books li, .series-list li { padding: .35rem 0; }
 
 /* ----- Mobile ----- */
 @media (max-width: 640px) {

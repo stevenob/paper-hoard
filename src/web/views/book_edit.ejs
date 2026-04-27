@@ -1,0 +1,28 @@
+<% const pageTitle = 'Edit ' + book.title %>
+<%- include('_header') %>
+
+<p><a href="/books/<%= book.id %>">← back</a></p>
+
+<h1>Edit metadata</h1>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (!activeUser) { %><p class="notice">You need to <a href="/auth/login">log in</a> to edit metadata.</p><% } %>
+
+<p class="hint">Use this when Google Books / Open Library has wrong info.
+Marks the book as <code>source: manual</code> so future scans of the same ISBN don't overwrite your edits.</p>
+
+<form method="post" action="/books/<%= book.id %>/edit" class="stacked">
+  <fieldset <%= activeUser ? '' : 'disabled' %>>
+    <label>Title <input name="title" value="<%= book.title %>" required maxlength="500" /></label>
+    <label>Authors (comma-separated) <input name="authors" value="<%= (book.authors || []).join(', ') %>" maxlength="1000" /></label>
+    <label>Publisher <input name="publisher" value="<%= book.publisher || '' %>" maxlength="200" /></label>
+    <label>Published <input name="publishedAt" value="<%= book.publishedAt || '' %>" placeholder="2021-05-04" maxlength="50" /></label>
+    <label>ISBN-13 <input name="isbn13" value="<%= book.isbn13 || '' %>" maxlength="13" inputmode="numeric" /></label>
+    <label>Cover image URL <input name="thumbnailUrl" value="<%= book.thumbnailUrl || '' %>" maxlength="2000" placeholder="https://…" /></label>
+    <label>Series name <input name="seriesName" value="<%= book.seriesName || '' %>" maxlength="200" placeholder="e.g. Mistborn" /></label>
+    <label>Series position <input name="seriesPosition" value="<%= book.seriesPosition !== null ? book.seriesPosition : '' %>" inputmode="decimal" placeholder="1, 1.5, 2…" /></label>
+    <button type="submit">Save</button>
+  </fieldset>
+</form>
+
+<%- include('_footer') %>
