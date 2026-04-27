@@ -5,11 +5,9 @@ import {
   MessageFlags,
 } from "discord.js";
 import type { BotCommand } from "./index.js";
-import { prisma } from "../../shared/db.js";
-import { lookupByIsbn, searchByTitle } from "../../shared/metadata.js";
 import {
   ensureMembership,
-  upsertBookFromMetadata,
+  recordScan,
   upsertLibrary,
   upsertUser,
 } from "../../shared/repo.js";
@@ -37,9 +35,9 @@ export const scanCommand: BotCommand = {
       return;
     }
 
-    const isbn = interaction.options.getString("isbn");
-    const title = interaction.options.getString("title");
-    const author = interaction.options.getString("author");
+    const isbn = interaction.options.getString("isbn") ?? undefined;
+    const title = interaction.options.getString("title") ?? undefined;
+    const author = interaction.options.getString("author") ?? undefined;
 
     if (!isbn && !title) {
       await interaction.reply({
@@ -51,40 +49,27 @@ export const scanCommand: BotCommand = {
 
     await interaction.deferReply();
 
-    const meta = isbn
-      ? await lookupByIsbn(isbn)
-      : (await searchByTitle([title, author].filter(Boolean).join(" ")))[0];
-
-    if (!meta) {
-      await interaction.editReply("No matching book found.");
-      return;
-    }
-
     const library = await upsertLibrary(interaction.guild.id, interaction.guild.name);
     const user = await upsertUser(
       interaction.user.id,
       interaction.user.globalName ?? interaction.user.username
     );
     await ensureMembership(user.id, library.id);
-    const book = await upsertBookFromMetadata(meta);
 
-    // Trophy match check before creating the copy.
-    const trophy = await prisma.trophy.findUnique({
-      where: { libraryId_bookId: { libraryId: library.id, bookId: book.id } },
+    const result = await recordScan({
+      libraryId: library.id,
+      userId: user.id,
+      isbn,
+      title,
+      author,
     });
 
-    await prisma.physicalCopy.create({
-      data: {
-        bookId: book.id,
-        libraryId: library.id,
-        addedByUserId: user.id,
-      },
-    });
-
-    if (trophy) {
-      await prisma.trophy.delete({ where: { id: trophy.id } });
+    if (!result) {
+      await interaction.editReply("No matching book found.");
+      return;
     }
 
+    const { meta, trophyAcquired } = result;
     const embed = new EmbedBuilder()
       .setTitle(meta.title)
       .setDescription(meta.authors.join(", ") || "Unknown author")
@@ -92,7 +77,7 @@ export const scanCommand: BotCommand = {
     if (meta.thumbnailUrl) embed.setThumbnail(meta.thumbnailUrl);
     if (meta.isbn13) embed.addFields({ name: "ISBN", value: meta.isbn13, inline: true });
 
-    const note = trophy
+    const note = trophyAcquired
       ? "🏆 Trophy match! Removed from the family Trophy List."
       : "Added to the family library.";
 

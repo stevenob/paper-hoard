@@ -1,0 +1,177 @@
+<% const pageTitle = 'Scan' %>
+<%- include('_header') %>
+
+<h1>📷 Scan a book</h1>
+
+<% if (!activeUser) { %>
+  <p class="notice">Pick an active user from the top bar first — every scan is recorded as added by that user.</p>
+<% } %>
+<% if (!library) { %>
+  <p class="notice">No family library exists yet. In Discord, run <code>/library</code> once so Smaug creates the household library, then come back here.</p>
+<% } %>
+
+<div id="scanner" class="scanner">
+  <video id="video" playsinline muted autoplay></video>
+  <div class="scanner-controls">
+    <button type="button" id="btn-start">Start camera</button>
+    <button type="button" id="btn-stop" hidden>Stop</button>
+    <span id="status" class="hint"></span>
+  </div>
+  <p class="hint" id="https-warning" hidden>
+    Your browser blocked camera access. Most browsers (especially iOS Safari) require an
+    <strong>https://</strong> URL or <code>localhost</code> for camera permission.
+    Use the manual ISBN entry below as a fallback.
+  </p>
+</div>
+
+<h2>Or enter ISBN manually</h2>
+<form id="manual-form" class="stacked">
+  <label>ISBN <input id="manual-isbn" name="isbn" placeholder="9780593135204" autocomplete="off" inputmode="numeric" /></label>
+  <button type="submit">Look up</button>
+</form>
+
+<div id="results"></div>
+
+<h2>Recent additions</h2>
+<% if (recent.length === 0) { %>
+  <p class="hint">Nothing yet — scan your first book above.</p>
+<% } else { %>
+  <ul class="recent-list">
+    <% recent.forEach(function(c) { %>
+      <li>
+        <strong><%= c.book.title %></strong> — <%= c.book.authors.join(', ') %>
+        <span class="hint">added by <%= c.addedBy.displayName %></span>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<!-- ZXing barcode scanner: vendored UMD bundle, served from this app. -->
+<script src="/static/zxing-browser.min.js"></script>
+<script>
+  (function() {
+    const video = document.getElementById('video');
+    const btnStart = document.getElementById('btn-start');
+    const btnStop = document.getElementById('btn-stop');
+    const status = document.getElementById('status');
+    const httpsWarning = document.getElementById('https-warning');
+    const results = document.getElementById('results');
+    const manualForm = document.getElementById('manual-form');
+    const manualInput = document.getElementById('manual-isbn');
+
+    const hasZxing = typeof ZXingBrowser !== 'undefined';
+    if (!hasZxing) {
+      status.textContent = 'Barcode library failed to load — manual entry still works.';
+      btnStart.disabled = true;
+    }
+
+    let reader = null;
+    let controls = null;
+    let lastSubmitted = null;
+    let lastSubmittedAt = 0;
+    let busy = false;
+
+    function setStatus(msg) { status.textContent = msg || ''; }
+
+    function renderResult(payload, ok) {
+      const div = document.createElement('div');
+      div.className = ok ? 'scan-result' : 'scan-result error';
+      if (ok) {
+        const b = payload.book;
+        const trophy = payload.trophyAcquired ? '<span class="trophy">🏆 Trophy match!</span>' : '';
+        div.innerHTML =
+          (b.thumbnailUrl ? '<img src="' + b.thumbnailUrl + '" alt="">' : '') +
+          '<div><strong>' + escapeHtml(b.title) + '</strong>' +
+          '<div class="hint">' + escapeHtml((b.authors || []).join(', ') || 'Unknown author') + '</div>' +
+          (b.isbn13 ? '<div class="hint">ISBN ' + escapeHtml(b.isbn13) + '</div>' : '') +
+          trophy +
+          '</div>';
+      } else {
+        div.textContent = payload.error || 'Scan failed';
+      }
+      results.prepend(div);
+      // Keep only the last 8 result cards.
+      while (results.children.length > 8) results.removeChild(results.lastChild);
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function(c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    async function submitIsbn(isbn) {
+      if (busy) return;
+      busy = true;
+      setStatus('Looking up ' + isbn + '…');
+      try {
+        const res = await fetch('/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isbn: isbn }),
+        });
+        const json = await res.json().catch(function() { return { ok: false, error: 'Bad response' }; });
+        renderResult(json, res.ok && json.ok);
+        setStatus(res.ok && json.ok ? 'Added.' : (json.error || 'Failed'));
+      } catch (err) {
+        renderResult({ error: String(err) }, false);
+        setStatus('Network error');
+      } finally {
+        busy = false;
+      }
+    }
+
+    function onDecoded(text) {
+      const now = Date.now();
+      // Debounce duplicate reads of the same code within 4s.
+      if (text === lastSubmitted && now - lastSubmittedAt < 4000) return;
+      lastSubmitted = text;
+      lastSubmittedAt = now;
+      // Most book barcodes are EAN-13 / ISBN-13 (978/979 prefix). Accept anything 10/13 digits.
+      const cleaned = text.replace(/[^0-9Xx]/g, '');
+      if (cleaned.length !== 10 && cleaned.length !== 13) {
+        setStatus('Ignored non-ISBN barcode: ' + text);
+        return;
+      }
+      submitIsbn(cleaned);
+    }
+
+    btnStart.addEventListener('click', async function() {
+      if (!hasZxing) return;
+      try {
+        reader = new ZXingBrowser.BrowserMultiFormatReader();
+        const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+        const back = devices.find(function(d) { return /back|rear|environment/i.test(d.label); });
+        const deviceId = back ? back.deviceId : (devices[0] && devices[0].deviceId);
+        controls = await reader.decodeFromVideoDevice(deviceId, video, function(result) {
+          if (result) onDecoded(result.getText());
+        });
+        btnStart.hidden = true;
+        btnStop.hidden = false;
+        setStatus('Scanning… point at the barcode on the back cover.');
+      } catch (err) {
+        console.error(err);
+        httpsWarning.hidden = false;
+        setStatus('Camera blocked: ' + (err && err.message ? err.message : err));
+      }
+    });
+
+    btnStop.addEventListener('click', function() {
+      if (controls) controls.stop();
+      controls = null;
+      btnStart.hidden = false;
+      btnStop.hidden = true;
+      setStatus('Stopped.');
+    });
+
+    manualForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const v = manualInput.value.trim();
+      if (v) submitIsbn(v);
+      manualInput.value = '';
+      manualInput.focus();
+    });
+  })();
+</script>
+
+<%- include('_footer') %>

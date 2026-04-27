@@ -4,6 +4,7 @@ import { libraryRoutes } from "./library.js";
 import { trophiesRoutes } from "./trophies.js";
 import { completionsRoutes } from "./completions.js";
 import { usersRoutes } from "./users.js";
+import { scanRoutes } from "./scan.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   await homeRoutes(app);
@@ -11,4 +12,5 @@ export async function registerRoutes(app: FastifyInstance) {
   await trophiesRoutes(app);
   await completionsRoutes(app);
   await usersRoutes(app);
+  await scanRoutes(app);
 }

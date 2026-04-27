@@ -49,3 +49,15 @@ form.stacked .hint { color: var(--muted); margin: 0; font-size: .9em; }
 button { padding: .4rem .9rem; border: 0; border-radius: 4px; background: var(--accent); color: white; cursor: pointer; font: inherit; }
 button.danger { background: var(--danger); }
 .button { display: inline-block; padding: .4rem .9rem; border-radius: 4px; background: var(--accent); color: white; }
+
+.scanner { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-width: 520px; }
+.scanner video { width: 100%; max-height: 360px; background: #000; border-radius: 6px; display: block; }
+.scanner-controls { display: flex; align-items: center; gap: .75rem; margin-top: .75rem; flex-wrap: wrap; }
+
+.scan-result { display: flex; gap: .75rem; align-items: flex-start; background: var(--card); border: 1px solid var(--border); border-left: 4px solid #2a8f3f; border-radius: 6px; padding: .75rem; margin: .5rem 0; }
+.scan-result.error { border-left-color: var(--danger); color: var(--danger); }
+.scan-result img { width: 48px; height: auto; border-radius: 3px; }
+.scan-result .trophy { display: inline-block; margin-top: .25rem; color: #b48a00; font-weight: 600; }
+
+.recent-list { padding-left: 1.2rem; }
+.recent-list li { margin: .25rem 0; }

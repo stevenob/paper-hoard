@@ -17,8 +17,6 @@ ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/src/web/views ./dist/web/views
-COPY --from=build /app/src/web/public ./dist/web/public
 COPY package.json ./
 
 # Default to web; docker-compose overrides for bot.
