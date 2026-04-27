@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../shared/db.js";
+import { audit } from "../../shared/audit.js";
 import { lookupByIsbn, searchByTitle } from "../../shared/metadata.js";
 import { upsertBookFromMetadata } from "../../shared/repo.js";
 import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
@@ -71,7 +72,7 @@ export async function completionsRoutes(app: FastifyInstance) {
     }
 
     const book = await upsertBookFromMetadata(meta);
-    await prisma.completion.create({
+    const completion = await prisma.completion.create({
       data: {
         userId: user.id,
         libraryId: library.id,
@@ -83,9 +84,16 @@ export async function completionsRoutes(app: FastifyInstance) {
         notes: data.notes || null,
       },
     });
+    void audit({
+      userId: user.id,
+      action: "create",
+      entity: "completion",
+      entityId: completion.id,
+      details: { bookId: book.id, mediaType: data.mediaType, source: data.source ?? null },
+    });
 
     if (data.addToTrophy === "on") {
-      await prisma.trophy.upsert({
+      const trophy = await prisma.trophy.upsert({
         where: { libraryId_bookId: { libraryId: library.id, bookId: book.id } },
         create: {
           libraryId: library.id,
@@ -100,6 +108,13 @@ export async function completionsRoutes(app: FastifyInstance) {
           priority: data.priority ?? 3,
           reason: data.reason || null,
         },
+      });
+      void audit({
+        userId: user.id,
+        action: "create",
+        entity: "trophy",
+        entityId: trophy.id,
+        details: { bookId: book.id, fromCompletion: completion.id },
       });
     }
 

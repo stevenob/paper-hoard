@@ -107,3 +107,16 @@ model Trophy {
 
   @@unique([libraryId, bookId])
 }
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String   // "create" | "update" | "delete"
+  entity      String   // "physicalCopy" | "trophy" | "completion" | "book"
+  entityId    String
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+}

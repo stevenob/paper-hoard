@@ -1,0 +1,73 @@
+<% const pageTitle = 'Import' %>
+<%- include('_header') %>
+
+<h1>Bulk CSV import</h1>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+
+<% if (!activeUser) { %>
+  <p class="notice">You need to <a href="/auth/login">log in</a> to import.</p>
+<% } %>
+
+<form method="post" action="/import" enctype="multipart/form-data" class="stacked">
+  <fieldset <%= activeUser ? '' : 'disabled' %>>
+    <label>Format
+      <select name="format" required>
+        <option value="generic">Generic (columns: isbn, title, author, condition, edition, location, notes, mediaType, source, completedOn, rating)</option>
+        <option value="goodreads">Goodreads export (My Books → Tools → Import/Export)</option>
+        <option value="storygraph">StoryGraph export (Manage Account → Export Data)</option>
+      </select>
+    </label>
+    <label>What to import
+      <select name="type" required>
+        <option value="physical">Physical copies (adds to your library)</option>
+        <option value="completion">Completions (adds to your reading log)</option>
+      </select>
+    </label>
+    <label>CSV file
+      <input type="file" name="csv" accept=".csv,text/csv" required />
+    </label>
+    <button type="submit">Import</button>
+    <p class="hint">
+      Each row triggers an ISBN/title lookup against Google Books + Open Library
+      with a small delay so we stay polite. Expect ~1 second per row, so a 500-row
+      Goodreads export takes ~10 minutes. Don't navigate away — wait for the
+      summary.
+    </p>
+  </fieldset>
+</form>
+
+<% if (summary) { %>
+  <h2>Import summary</h2>
+  <p>
+    <strong><%= summary.imported %></strong> imported,
+    <strong><%= summary.skipped %></strong> skipped,
+    out of <strong><%= summary.total %></strong> rows.
+  </p>
+  <% if (summary.warnings.length > 0) { %>
+    <h3>Parser warnings</h3>
+    <ul class="hint">
+      <% summary.warnings.slice(0, 20).forEach(function(w) { %>
+        <li><%= w %></li>
+      <% }) %>
+    </ul>
+  <% } %>
+  <% if (summary.errors.length > 0) { %>
+    <h3>Skipped rows</h3>
+    <table class="data">
+      <thead><tr><th>Row</th><th>Title</th><th>Reason</th></tr></thead>
+      <tbody>
+        <% summary.errors.slice(0, 50).forEach(function(e) { %>
+          <tr>
+            <td data-label="Row"><%= e.row %></td>
+            <td data-label="Title"><%= e.title || '—' %></td>
+            <td data-label="Reason"><%= e.reason %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <% if (summary.errors.length > 50) { %><p class="hint">… and <%= summary.errors.length - 50 %> more.</p><% } %>
+  <% } %>
+<% } %>
+
+<%- include('_footer') %>

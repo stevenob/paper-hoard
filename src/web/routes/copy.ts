@@ -5,6 +5,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { prisma } from "../../shared/db.js";
 import { env } from "../../shared/env.js";
+import { audit } from "../../shared/audit.js";
 import { CONDITIONS, EDITIONS } from "../../shared/picklists.js";
 import { requireUser, withChrome } from "./_helpers.js";
 
@@ -67,6 +68,13 @@ export async function copyRoutes(app: FastifyInstance) {
         notes: data.notes?.trim() || null,
       },
     });
+    void audit({
+      userId: user.id,
+      action: "update",
+      entity: "physicalCopy",
+      entityId: updated.id,
+      details: data,
+    });
 
     if (req.headers.accept?.includes("application/json")) {
       return reply.send({ ok: true, copy: { id: updated.id } });
@@ -84,6 +92,13 @@ export async function copyRoutes(app: FastifyInstance) {
         .catch(() => undefined);
     }
     await prisma.physicalCopy.delete({ where: { id: req.params.id } }).catch(() => undefined);
+    void audit({
+      userId: user.id,
+      action: "delete",
+      entity: "physicalCopy",
+      entityId: req.params.id,
+      details: { coverPath: copy?.coverPath ?? null },
+    });
     return reply.redirect("/library");
   });
 

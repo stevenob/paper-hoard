@@ -1,0 +1,35 @@
+<% const pageTitle = 'About' %>
+<%- include('_header') %>
+
+<h1>About this Paper Hoard</h1>
+
+<table class="data">
+  <tbody>
+    <tr><td data-label="Image tag"><strong>Image tag</strong></td><td data-label=""><code><%= imageTag %></code></td></tr>
+    <tr><td data-label="Git SHA"><strong>Git SHA</strong></td><td data-label=""><code><%= gitSha %></code> <% if (gitSha && gitSha !== 'dev') { %>(<a href="<%= repoUrl %>/commit/<%= gitSha %>">view</a>)<% } %></td></tr>
+    <tr><td data-label="Node.js"><strong>Node.js</strong></td><td data-label=""><%= nodeVersion %></td></tr>
+    <tr><td data-label="Process uptime"><strong>Uptime</strong></td><td data-label=""><%= uptimeSec %> s</td></tr>
+    <tr><td data-label="DB"><strong>Database</strong></td><td data-label=""><%= dbOk ? '✅ ok' : '❌ unreachable' %></td></tr>
+  </tbody>
+</table>
+
+<h2>Counts</h2>
+<table class="data">
+  <tbody>
+    <tr><td data-label=""><strong>Libraries</strong></td><td data-label=""><%= counts.libraries %></td></tr>
+    <tr><td data-label=""><strong>Users</strong></td><td data-label=""><%= counts.users %></td></tr>
+    <tr><td data-label=""><strong>Books</strong></td><td data-label=""><%= counts.books %></td></tr>
+    <tr><td data-label=""><strong>Physical copies</strong></td><td data-label=""><%= counts.copies %></td></tr>
+    <tr><td data-label=""><strong>Trophies</strong></td><td data-label=""><%= counts.trophies %></td></tr>
+    <tr><td data-label=""><strong>Completions</strong></td><td data-label=""><%= counts.completions %></td></tr>
+    <tr><td data-label=""><strong>Audit log entries</strong></td><td data-label=""><a href="/audit"><%= counts.auditLog %></a></td></tr>
+  </tbody>
+</table>
+
+<h2>Links</h2>
+<ul>
+  <li><a href="<%= repoUrl %>">Source on GitHub</a></li>
+  <li><a href="<%= ghcrUrl %>">Container image on GHCR</a></li>
+</ul>
+
+<%- include('_footer') %>

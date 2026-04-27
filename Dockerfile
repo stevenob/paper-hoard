@@ -13,7 +13,9 @@ RUN npx prisma generate && npm run build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
+ARG GIT_SHA=dev
+ARG IMAGE_TAG=dev
+ENV NODE_ENV=production GIT_SHA=$GIT_SHA IMAGE_TAG=$IMAGE_TAG
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
