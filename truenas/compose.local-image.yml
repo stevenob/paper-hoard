@@ -1,0 +1,73 @@
+# Variant C — install via the TrueNAS Apps UI ("Custom App" / "Install via YAML")
+# using a local image already present on the TrueNAS host (e.g. one you built
+# previously with `docker build -t paperhoard:latest .`).
+#
+# How to install in the TrueNAS UI:
+#   1. Apps → Discover Apps → "Custom App" (or "Install via YAML").
+#   2. Paste the contents of this file. Replace POOL with your real pool path
+#      if you haven't already (e.g. HDDs-1/ServerShare).
+#   3. Fill in the environment variables in the UI form (or in the YAML
+#      directly): DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_IDS,
+#      COOKIE_SECRET, optionally GOOGLE_BOOKS_API_KEY, WEB_PORT.
+#   4. Save. The app will appear in the Apps tab with start/stop/logs.
+#
+# IMPORTANT:
+#   * pull_policy: never tells docker NOT to try to pull the image from a
+#     registry — it must already exist on the host.
+#   * To update the image later: SSH in, `cd` to the repo, `git pull`, then
+#     `docker build -t paperhoard:latest .`, then click "Restart" in the UI.
+
+x-image: &paperhoard-image
+  image: paperhoard:latest
+  pull_policy: never
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-paperhoard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paperhoard}
+      POSTGRES_DB: ${POSTGRES_DB:-paperhoard}
+    volumes:
+      - /mnt/POOL/apps/paperhoard/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paperhoard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    <<: *paperhoard-image
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      WEB_PORT: 3000
+      COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    command: sh -c "npx prisma migrate deploy && node dist/web/index.js"
+
+  bot:
+    <<: *paperhoard-image
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      web:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-paperhoard}:${POSTGRES_PASSWORD:-paperhoard}@postgres:5432/${POSTGRES_DB:-paperhoard}?schema=public
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?set DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?set DISCORD_CLIENT_ID}
+      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    command: sh -c "npx prisma migrate deploy && node dist/bot/index.js"
