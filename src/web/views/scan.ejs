@@ -25,15 +25,15 @@
 </div>
 
 <!-- Fullscreen camera overlay; hidden until Start camera is tapped. -->
-<div id="camera-overlay" class="camera-overlay" hidden>
+<div id="camera-overlay" class="camera-overlay" hidden role="dialog" aria-modal="true" aria-label="Barcode scanner">
   <div class="camera-topbar">
     <span id="overlay-status">Scanning… point at the barcode on the back cover.</span>
     <button type="button" id="btn-done" class="primary">Done</button>
   </div>
-  <video id="video" playsinline muted autoplay></video>
-  <div class="camera-toast" id="overlay-toast" hidden></div>
+  <video id="video" playsinline muted autoplay aria-label="Camera feed"></video>
+  <div class="camera-toast" id="overlay-toast" hidden role="status" aria-live="polite"></div>
   <!-- Confirm card shown after a successful barcode decode + lookup. -->
-  <div id="confirm-card" class="confirm-card" hidden>
+  <div id="confirm-card" class="confirm-card" hidden role="dialog" aria-label="Confirm scanned book">
     <img id="confirm-cover" alt="" hidden />
     <h3 id="confirm-title">…</h3>
     <p class="hint" id="confirm-authors"></p>
@@ -354,6 +354,11 @@
 
     btnStart.addEventListener('click', startCamera);
     btnDone.addEventListener('click', stopCamera);
+
+    // Esc closes the overlay for keyboard users.
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && !overlay.hidden) stopCamera();
+    });
 
     document.getElementById('photo-input').addEventListener('change', async function(e) {
       const file = e.target.files && e.target.files[0];

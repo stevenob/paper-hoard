@@ -46,12 +46,15 @@ export async function withChrome<T extends Record<string, unknown>>(
     prisma.user.findMany({ orderBy: { displayName: "asc" } }),
     getCurrentLibrary(req),
   ]);
+  const themeCookie = req.cookies["ph_theme"];
+  const theme = themeCookie === "dark" || themeCookie === "light" ? themeCookie : "auto";
   return {
     ...ctx,
     activeUser,
     users,
     library,
     oauthConfigured: isOAuthConfigured(),
+    theme,
   };
 }
 

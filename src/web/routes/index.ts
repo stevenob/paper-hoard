@@ -14,9 +14,13 @@ import { auditRoutes } from "./audit.js";
 import { importRoutes } from "./import.js";
 import { tagRoutes } from "./tags.js";
 import { seriesRoutes } from "./series.js";
+import { themeRoutes } from "./theme.js";
+import { shareRoutes } from "./share.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   await authRoutes(app);
+  await themeRoutes(app);
+  await shareRoutes(app);
   await homeRoutes(app);
   await libraryRoutes(app);
   await trophiesRoutes(app);

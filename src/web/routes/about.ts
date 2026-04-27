@@ -15,8 +15,9 @@ export async function aboutRoutes(app: FastifyInstance) {
       completions: 0,
       auditLog: 0,
     };
+    let library: Awaited<ReturnType<typeof prisma.library.findFirst>> = null;
     try {
-      const [libraries, users, books, copies, trophies, completions, auditLog] = await Promise.all([
+      const [libraries, users, books, copies, trophies, completions, auditLog, lib] = await Promise.all([
         prisma.library.count(),
         prisma.user.count(),
         prisma.book.count(),
@@ -24,8 +25,10 @@ export async function aboutRoutes(app: FastifyInstance) {
         prisma.trophy.count(),
         prisma.completion.count(),
         prisma.auditLog.count(),
+        prisma.library.findFirst({ orderBy: { createdAt: "asc" } }),
       ]);
       counts = { libraries, users, books, copies, trophies, completions, auditLog };
+      library = lib;
     } catch {
       dbOk = false;
     }
@@ -39,6 +42,8 @@ export async function aboutRoutes(app: FastifyInstance) {
         uptimeSec: Math.round(process.uptime()),
         dbOk,
         counts,
+        library,
+        webBaseUrl: env.WEB_BASE_URL ?? null,
         repoUrl: "https://github.com/stevenob/paper-hoard",
         ghcrUrl: "https://github.com/stevenob/paper-hoard/pkgs/container/paper-hoard",
       })

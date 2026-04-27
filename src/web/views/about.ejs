@@ -26,6 +26,28 @@
   </tbody>
 </table>
 
+<h2>Public share link</h2>
+<% if (!library) { %>
+  <p class="hint">No library exists yet.</p>
+<% } else if (!activeUser) { %>
+  <p class="hint">Log in to manage the share link.</p>
+<% } else if (!library.publicSlug) { %>
+  <p>The library is currently <strong>private</strong>. Enable a public read-only link to share with friends without giving them edit access.</p>
+  <form method="post" action="/libraries/<%= library.id %>/share/enable">
+    <button type="submit">Enable public share link</button>
+  </form>
+<% } else { %>
+  <% const shareUrl = (webBaseUrl ? webBaseUrl.replace(/\/$/, '') : '') + '/share/' + library.publicSlug %>
+  <p>The library is <strong>public</strong> at:</p>
+  <p><code><%= shareUrl %></code> · <a href="/share/<%= library.publicSlug %>" target="_blank" rel="noopener">open</a></p>
+  <form method="post" action="/libraries/<%= library.id %>/share/regenerate" style="display:inline" onsubmit="return confirm('Regenerate the link? The old URL will stop working.')">
+    <button type="submit">Regenerate</button>
+  </form>
+  <form method="post" action="/libraries/<%= library.id %>/share/disable" style="display:inline" onsubmit="return confirm('Disable public sharing?')">
+    <button type="submit" class="danger">Disable</button>
+  </form>
+<% } %>
+
 <h2>Links</h2>
 <ul>
   <li><a href="<%= repoUrl %>">Source on GitHub</a></li>

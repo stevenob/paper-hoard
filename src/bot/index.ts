@@ -9,6 +9,7 @@ import {
 import { env, requireDiscordEnv } from "../shared/env.js";
 import { logger } from "../shared/logger.js";
 import { commands } from "./commands/index.js";
+import { startNotificationPoller } from "./notification-poller.js";
 
 async function main() {
   const { token } = requireDiscordEnv();
@@ -19,6 +20,7 @@ async function main() {
 
   client.once(Events.ClientReady, (c) => {
     logger.info({ user: c.user.tag }, "Smaug is awake");
+    startNotificationPoller(client);
   });
 
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {

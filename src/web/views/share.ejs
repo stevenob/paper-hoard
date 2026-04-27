@@ -1,0 +1,44 @@
+<% const pageTitle = library.name %>
+<%- include('_header') %>
+
+<h1><%= library.name %></h1>
+<p class="hint">A read-only public view of this household's books and trophy list.</p>
+
+<h2>Library (<%= copies.length %>)</h2>
+<% if (copies.length === 0) { %>
+  <p class="hint">No books in the library yet.</p>
+<% } else { %>
+  <table class="data">
+    <thead><tr><th>Title</th><th>Authors</th><th>Edition</th></tr></thead>
+    <tbody>
+      <% copies.forEach(function(c) { %>
+        <tr>
+          <td data-label="Title"><%= c.book.title %></td>
+          <td data-label="Authors"><%= c.book.authors.join(', ') %></td>
+          <td data-label="Edition"><%= c.edition || '—' %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<h2>Trophy list (<%= trophies.length %>)</h2>
+<% if (trophies.length === 0) { %>
+  <p class="hint">No trophies pending.</p>
+<% } else { %>
+  <table class="data">
+    <thead><tr><th>Title</th><th>Authors</th><th>Format</th><th>Priority</th></tr></thead>
+    <tbody>
+      <% trophies.forEach(function(t) { %>
+        <tr>
+          <td data-label="Title"><%= t.book.title %></td>
+          <td data-label="Authors"><%= t.book.authors.join(', ') %></td>
+          <td data-label="Format"><%= t.desiredFormat || '—' %></td>
+          <td data-label="Priority"><%= t.priority %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<%- include('_footer') %>

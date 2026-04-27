@@ -12,6 +12,7 @@ model Library {
   id              String         @id @default(cuid())
   discordGuildId  String         @unique
   name            String
+  publicSlug      String?        @unique
   createdAt       DateTime       @default(now())
 
   memberships     Membership[]
@@ -141,4 +142,17 @@ model AuditLog {
 
   @@index([createdAt])
   @@index([entity, entityId])
+}
+
+model OutboundNotification {
+  id          String   @id @default(cuid())
+  kind        String   // "trophy-acquired" | future kinds
+  payload     Json
+  status      String   @default("pending") // pending | sent | failed
+  attempts    Int      @default(0)
+  lastError   String?
+  createdAt   DateTime @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
 }
