@@ -260,6 +260,7 @@ body.camera-open { overflow: hidden; }
   border-radius: 6px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
+.confirm-cover[hidden] { display: none; }
 .confirm-cover-fallback {
   display: flex;
   align-items: center;
@@ -277,6 +278,7 @@ body.camera-open { overflow: hidden; }
   line-height: 1.2;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
+.confirm-cover-fallback[hidden] { display: none; }
 .confirm-title {
   margin: 0 0 .15rem;
   font-size: 1.1rem;
