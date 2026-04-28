@@ -263,26 +263,128 @@
       if (busy) return;
       busy = true;
       overlayStatus.textContent = 'Looking up…';
-      try {
-        const res = await fetch('/scan/lookup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const json = await res.json().catch(function() { return { ok: false, error: 'Bad response' }; });
-        if (res.ok && json.ok) {
-          showConfirm(json, payload);
+
+      // Race: server lookup (authoritative — has trophy + dedupe + cached
+      // rating + binding) vs Open Library straight from the browser (often
+      // faster on the first scan of a new ISBN). Whichever returns first
+      // paints the card; the server response always wins on the fields it
+      // owns (trophy / existingCopies / shareEnabled).
+      let painted = false;
+      let serverData = null;
+      let clientData = null;
+
+      function paint() {
+        if (!serverData && !clientData) return;
+        // Merge: server fields win for trophy/dedupe/edition/rating; client
+        // fills in title/authors/cover/rating when server hasn't responded yet.
+        const merged = {
+          ok: true,
+          shareEnabled: serverData ? serverData.shareEnabled : false,
+          book: Object.assign({}, clientData ? clientData.book : null, serverData ? serverData.book : null),
+          rating: (serverData && serverData.rating) || (clientData && clientData.rating) || null,
+          trophy: serverData ? serverData.trophy : null,
+          existingCopies: serverData ? serverData.existingCopies : [],
+        };
+        if (!merged.book || !merged.book.title) return;
+        if (!painted) {
+          showConfirm(merged, payload);
+          painted = true;
         } else {
-          showToast(json.error || 'Not found', false);
-          overlayStatus.textContent = 'Scanning…';
-          // Allow re-scan immediately on failure.
-          lastSubmitted = null;
+          // Refresh in place (covers the case where server arrives after
+          // client and adds trophy/dedupe info we didn't have).
+          showConfirm(merged, payload);
         }
-      } catch (err) {
-        showToast('Network error', false);
-        lastSubmitted = null;
+      }
+
+      const serverP = fetch('/scan/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+        .then(function(r) {
+          if (r.ok && r.json && r.json.ok) {
+            serverData = r.json;
+            paint();
+          } else if (!painted) {
+            // Server failure with no client data either → surface error.
+            showToast((r.json && r.json.error) || 'Not found', false);
+            overlayStatus.textContent = 'Scanning…';
+            lastSubmitted = null;
+          }
+        })
+        .catch(function() {
+          if (!painted) {
+            showToast('Network error', false);
+            lastSubmitted = null;
+          }
+        });
+
+      const clientP = payload.isbn
+        ? clientLookupOpenLibrary(payload.isbn)
+            .then(function(r) {
+              if (r) {
+                clientData = r;
+                paint();
+              }
+            })
+            .catch(function() { /* swallow */ })
+        : Promise.resolve();
+
+      try {
+        await Promise.allSettled([serverP, clientP]);
       } finally {
         busy = false;
+      }
+    }
+
+    /**
+     * Browser-side Open Library lookup. Two CORS-friendly fetches:
+     *   1. /search.json?isbn=  — title, authors, cover (1 call)
+     *   2. /works/<id>/ratings.json — average + count
+     * Returns the same shape the server's /scan/lookup returns so paint() can
+     * merge them with no special-casing.
+     */
+    async function clientLookupOpenLibrary(isbn) {
+      try {
+        const res = await fetch(
+          'https://openlibrary.org/search.json?isbn=' + encodeURIComponent(isbn) + '&limit=1'
+        );
+        if (!res.ok) return null;
+        const json = await res.json();
+        const doc = json.docs && json.docs[0];
+        if (!doc) return null;
+
+        const out = {
+          ok: true,
+          book: {
+            title: doc.title || 'Unknown',
+            authors: doc.author_name || [],
+            isbn13: isbn,
+            thumbnailUrl: doc.cover_i
+              ? 'https://covers.openlibrary.org/b/id/' + doc.cover_i + '-M.jpg'
+              : null,
+            source: 'open_library',
+            edition: null,
+          },
+          rating: null,
+        };
+
+        const workKey = (doc.key || '').replace(/^\/works\//, '');
+        if (workKey) {
+          try {
+            const r = await fetch('https://openlibrary.org/works/' + workKey + '/ratings.json');
+            if (r.ok) {
+              const j = await r.json();
+              if (j.summary && j.summary.average && j.summary.count > 0) {
+                out.rating = { avg: j.summary.average, count: j.summary.count };
+              }
+            }
+          } catch (e) { /* rating optional */ }
+        }
+        return out;
+      } catch (err) {
+        return null;
       }
     }
 
