@@ -52,17 +52,19 @@
   <div class="camera-toast" id="overlay-toast" hidden role="status" aria-live="polite"></div>
   <!-- Confirm card shown after a successful barcode decode + lookup. -->
   <div id="confirm-card" class="confirm-card" hidden role="dialog" aria-label="Confirm scanned book">
-    <img id="confirm-cover" alt="" hidden />
-    <h3 id="confirm-title">…</h3>
-    <p class="hint" id="confirm-authors"></p>
-    <p class="hint" id="confirm-isbn"></p>
-    <p class="hint" id="confirm-rating" hidden></p>
-    <p id="confirm-trophy" class="trophy" hidden></p>
-    <p id="confirm-dup" class="dup-warning" hidden></p>
+    <img id="confirm-cover" alt="" class="confirm-cover" hidden />
+    <div class="confirm-cover-fallback" id="confirm-cover-fallback" hidden></div>
+    <h2 class="confirm-title" id="confirm-title">…</h2>
+    <p class="confirm-author" id="confirm-author"></p>
+    <p class="confirm-meta" id="confirm-meta"></p>
+    <p id="confirm-trophy" class="confirm-flag trophy" hidden></p>
+    <p id="confirm-dup" class="confirm-flag dup" hidden></p>
     <div class="confirm-actions">
-      <button type="button" id="btn-confirm-add" class="primary">Add to library</button>
-      <button type="button" id="btn-confirm-share" class="secondary" hidden>Share only</button>
-      <button type="button" id="btn-confirm-skip" class="danger">Skip</button>
+      <button type="button" id="btn-confirm-add" class="primary big">📚 Add to library</button>
+      <div class="confirm-secondary">
+        <button type="button" id="btn-confirm-share" class="link-discord" hidden>💬 Discord</button>
+        <button type="button" id="btn-confirm-skip" class="link-skip">Skip</button>
+      </div>
     </div>
   </div>
 </div>
@@ -105,10 +107,10 @@
     const overlayToast = document.getElementById('overlay-toast');
     const confirmCard = document.getElementById('confirm-card');
     const confirmCover = document.getElementById('confirm-cover');
+    const confirmCoverFallback = document.getElementById('confirm-cover-fallback');
     const confirmTitle = document.getElementById('confirm-title');
-    const confirmAuthors = document.getElementById('confirm-authors');
-    const confirmIsbn = document.getElementById('confirm-isbn');
-    const confirmRating = document.getElementById('confirm-rating');
+    const confirmAuthor = document.getElementById('confirm-author');
+    const confirmMeta = document.getElementById('confirm-meta');
     const confirmTrophy = document.getElementById('confirm-trophy');
     const confirmDup = document.getElementById('confirm-dup');
     const btnConfirmAdd = document.getElementById('btn-confirm-add');
@@ -169,18 +171,24 @@
       if (b.thumbnailUrl) {
         confirmCover.src = b.thumbnailUrl;
         confirmCover.hidden = false;
+        confirmCoverFallback.hidden = true;
       } else {
         confirmCover.hidden = true;
+        confirmCoverFallback.hidden = false;
+        confirmCoverFallback.textContent = (b.title || '?').slice(0, 40);
       }
       confirmTitle.textContent = b.title || 'Unknown';
-      confirmAuthors.textContent = (b.authors || []).join(', ') || 'Unknown author';
-      confirmIsbn.textContent = b.isbn13 ? 'ISBN ' + b.isbn13 : '';
+      confirmAuthor.textContent = 'by ' + ((b.authors || []).join(', ') || 'Unknown author');
+      // Meta line: rating · binding · ISBN, separated by middots, omitting blanks
+      const metaParts = [];
       if (payload.rating && payload.rating.avg) {
-        confirmRating.textContent = '⭐ ' + payload.rating.avg.toFixed(2) + ' (' + payload.rating.count + ' on Open Library)';
-        confirmRating.hidden = false;
-      } else {
-        confirmRating.hidden = true;
+        metaParts.push('⭐ ' + payload.rating.avg.toFixed(2));
       }
+      if (b.edition) metaParts.push('📕 ' + b.edition);
+      if (b.isbn13) metaParts.push('ISBN ' + b.isbn13);
+      confirmMeta.textContent = metaParts.join('  ·  ');
+      confirmMeta.hidden = metaParts.length === 0;
+
       if (payload.trophy) {
         confirmTrophy.textContent =
           '🏆 Trophy match — requested by ' + payload.trophy.requestedBy +
@@ -192,17 +200,15 @@
       const existing = payload.existingCopies || [];
       if (existing.length > 0) {
         const summary = existing.map(function(c) {
-          return (c.edition || 'edition?') + ' · added by ' + c.addedBy + ' on ' + c.addedAt;
-        }).join('; ');
-        confirmDup.textContent = '⚠️ Already in your library: ' + summary;
+          return c.edition || 'edition?';
+        }).join(', ');
+        confirmDup.textContent = '⚠️ Already owned (' + summary + ')';
         confirmDup.hidden = false;
-        btnConfirmAdd.textContent = 'Add another copy anyway';
+        btnConfirmAdd.textContent = '📚 Add another copy anyway';
       } else {
         confirmDup.hidden = true;
-        btnConfirmAdd.textContent = 'Add to library';
+        btnConfirmAdd.textContent = '📚 Add to library';
       }
-      // Show the Share only button when a Discord channel is configured.
-      // Add-to-library will also auto-post to Discord in that case.
       btnConfirmShare.hidden = !payload.shareEnabled;
       confirmCard.hidden = false;
       overlayStatus.textContent = 'Confirm to add, or skip.';
