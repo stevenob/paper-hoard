@@ -133,6 +133,12 @@
     let pendingConfirm = null;
     let mediaStream = null;
     let wakeLock = null;
+    // Two-frame confirmation: require the same decode in two consecutive
+    // hits within this window before submitting. Catches single-frame
+    // misreads (smudge / partial occlusion / motion blur).
+    let pendingDecode = null;
+    let pendingDecodeAt = 0;
+    const CONFIRM_WINDOW_MS = 600;
     const btnTorch = document.getElementById('btn-torch');
 
     function setStatus(msg) {
@@ -384,16 +390,23 @@
       if (pendingConfirm) return;
       const now = Date.now();
       if (text === lastSubmitted && now - lastSubmittedAt < 4000) return;
-      lastSubmitted = text;
-      lastSubmittedAt = now;
       const cleaned = text.replace(/[^0-9Xx]/g, '');
       if (cleaned.length !== 10 && cleaned.length !== 13) {
-        setStatus('Ignored non-ISBN barcode: ' + text);
+        // We restrict ZXing to EAN-13/EAN-8/UPC-A so this branch is rare.
         return;
       }
-      // Haptic feedback if the device supports it (Android, no-op on iOS).
-      if (navigator.vibrate) navigator.vibrate(40);
-      previewLookup({ isbn: cleaned });
+      // Two-frame confirmation: require the same decode twice within the
+      // window before committing. Filters single-frame misreads.
+      if (pendingDecode === cleaned && now - pendingDecodeAt < CONFIRM_WINDOW_MS) {
+        lastSubmitted = cleaned;
+        lastSubmittedAt = now;
+        pendingDecode = null;
+        if (navigator.vibrate) navigator.vibrate(40);
+        previewLookup({ isbn: cleaned });
+      } else {
+        pendingDecode = cleaned;
+        pendingDecodeAt = now;
+      }
     }
 
     async function tryAcquireWakeLock() {
@@ -443,11 +456,36 @@
       document.body.classList.add('camera-open');
       overlayStatus.textContent = 'Requesting camera…';
       try {
-        reader = new ZXingBrowser.BrowserMultiFormatReader();
+        // Restrict ZXing to ISBN-bearing formats. Faster + dramatically
+        // fewer misreads vs the all-formats default. ISBNs are EAN-13;
+        // a few older ones are EAN-8 / UPC-A.
+        const hints = new Map();
+        try {
+          // BarcodeFormat enum values (from @zxing/library) hard-coded so
+          // we don't need to import it:
+          //   EAN_13 = 5, EAN_8 = 6, UPC_A = 11
+          hints.set(2 /* DecodeHintType.POSSIBLE_FORMATS */, [5, 6, 11]);
+          hints.set(3 /* DecodeHintType.TRY_HARDER */, true);
+        } catch {}
+        reader = new ZXingBrowser.BrowserMultiFormatReader(hints);
+
+        // Pick the back camera + request 1080p so small barcodes off the
+        // back cover decode reliably. iOS Safari tries to honor 'ideal'
+        // and falls back gracefully on devices that can't.
         const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
         const back = devices.find(function(d) { return /back|rear|environment/i.test(d.label); });
         const deviceId = back ? back.deviceId : (devices[0] && devices[0].deviceId);
-        controls = await reader.decodeFromVideoDevice(deviceId, video, function(result) {
+        const constraints = {
+          video: Object.assign(
+            {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
+            deviceId ? { deviceId: { exact: deviceId } } : {}
+          ),
+        };
+        controls = await reader.decodeFromConstraints(constraints, video, function(result) {
           if (result) onDecoded(result.getText());
         });
         mediaStream = video.srcObject;
