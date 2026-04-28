@@ -24,6 +24,7 @@ import {
   upsertLibrary,
   upsertUser,
 } from "../../shared/repo.js";
+import { isStale, refreshOpenLibraryRatings } from "../../shared/openlibrary-ratings.js";
 
 const NAME = "scan";
 
@@ -32,9 +33,11 @@ function bookEmbed(opts: {
   authors: string[];
   thumbnailUrl?: string | null;
   isbn13?: string | null;
+  edition?: string | null;
+  ratingAvg?: number | null;
+  ratingCount?: number | null;
   source: string;
   libraryName: string;
-  trophy?: boolean;
 }): EmbedBuilder {
   const e = new EmbedBuilder()
     .setTitle(opts.title)
@@ -42,6 +45,14 @@ function bookEmbed(opts: {
     .setFooter({ text: `${opts.libraryName} • source: ${opts.source}` });
   if (opts.thumbnailUrl) e.setThumbnail(opts.thumbnailUrl);
   if (opts.isbn13) e.addFields({ name: "ISBN", value: opts.isbn13, inline: true });
+  if (opts.edition) e.addFields({ name: "Binding", value: opts.edition, inline: true });
+  if (opts.ratingAvg != null && (opts.ratingCount ?? 0) > 0) {
+    e.addFields({
+      name: "Rating",
+      value: `⭐ ${opts.ratingAvg.toFixed(2)} (${opts.ratingCount} on Open Library)`,
+      inline: true,
+    });
+  }
   return e;
 }
 
@@ -72,10 +83,29 @@ function trophyConfirmButtons(bookId: string): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
+function chooseButtons(bookId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${NAME}:add-library:${bookId}`)
+      .setLabel("Add to library")
+      .setStyle(ButtonStyle.Success)
+      .setEmoji("📚"),
+    new ButtonBuilder()
+      .setCustomId(`${NAME}:add-trophy:${bookId}`)
+      .setLabel("Add to trophy list")
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji("🏆"),
+    new ButtonBuilder()
+      .setCustomId(`${NAME}:cancel:${bookId}`)
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
 export const scanCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName(NAME)
-    .setDescription("Add a physical book to the shared family library")
+    .setDescription("Look up a book and add it to the family library or trophy list")
     .addStringOption((o) =>
       o.setName("isbn").setDescription("ISBN-10 or ISBN-13").setRequired(false)
     )
@@ -123,20 +153,45 @@ export const scanCommand: BotCommand = {
     await ensureMembership(user.id, library.id);
     const book = await upsertBookFromMetadata(meta);
 
-    const trophy = await prisma.trophy.findUnique({
-      where: { libraryId_bookId: { libraryId: library.id, bookId: book.id } },
-      include: { requestedBy: true },
-    });
+    const [trophy, existing] = await Promise.all([
+      prisma.trophy.findUnique({
+        where: { libraryId_bookId: { libraryId: library.id, bookId: book.id } },
+        include: { requestedBy: true },
+      }),
+      prisma.physicalCopy.findMany({
+        where: { libraryId: library.id, bookId: book.id },
+        include: { addedBy: true },
+        orderBy: { addedAt: "asc" },
+        take: 5,
+      }),
+    ]);
+
+    if (book.isbn13 && isStale(book.olFetchedAt)) {
+      void refreshOpenLibraryRatings(book.id);
+    }
 
     const embed = bookEmbed({
       title: meta.title,
       authors: meta.authors,
       thumbnailUrl: meta.thumbnailUrl,
       isbn13: meta.isbn13,
+      edition: meta.edition ?? null,
+      ratingAvg: book.olRatingAvg,
+      ratingCount: book.olRatingCount,
       source: meta.source,
       libraryName: library.name,
-      trophy: Boolean(trophy),
     });
+
+    if (existing.length > 0) {
+      const lines = existing.map(
+        (c) =>
+          `• ${c.edition || "edition?"} · added by ${c.addedBy.displayName} on ${c.addedAt.toISOString().slice(0, 10)}`
+      );
+      embed.addFields({
+        name: `⚠️ Already in your library (${existing.length})`,
+        value: lines.join("\n"),
+      });
+    }
 
     if (trophy) {
       embed.addFields({
@@ -151,35 +206,10 @@ export const scanCommand: BotCommand = {
       return;
     }
 
-    // Dedupe check: if the library already has a copy of this book, surface
-    // it in the embed so the user knows before adding another.
-    const existing = await prisma.physicalCopy.findMany({
-      where: { libraryId: library.id, bookId: book.id },
-      include: { addedBy: true },
-      orderBy: { addedAt: "asc" },
-      take: 5,
-    });
-    if (existing.length > 0) {
-      const lines = existing.map(
-        (c) =>
-          `• ${c.edition || "edition?"} · added by ${c.addedBy.displayName} on ${c.addedAt.toISOString().slice(0, 10)}`
-      );
-      embed.addFields({
-        name: `⚠️ Already in your library (${existing.length})`,
-        value: lines.join("\n"),
-      });
-    }
-
-    // No trophy — commit immediately and offer the detail editor.
-    const copy = await createPhysicalCopy({
-      libraryId: library.id,
-      userId: user.id,
-      bookId: book.id,
-    });
     await interaction.editReply({
-      content: "Added to the family library.",
+      content: "Add this to the family library, or save it to the trophy list to buy later?",
       embeds: [embed],
-      components: [detailButton(copy.id)],
+      components: [chooseButtons(book.id)],
     });
   },
 
@@ -188,14 +218,13 @@ export const scanCommand: BotCommand = {
     const [, action, id] = interaction.customId.split(":");
 
     if (action === "detail") {
-      const copyId = id;
-      const copy = await prisma.physicalCopy.findUnique({ where: { id: copyId } });
+      const copy = await prisma.physicalCopy.findUnique({ where: { id } });
       if (!copy) {
         await interaction.reply({ content: "That copy is gone.", flags: MessageFlags.Ephemeral });
         return;
       }
       const modal = new ModalBuilder()
-        .setCustomId(`${NAME}:detail-modal:${copyId}`)
+        .setCustomId(`${NAME}:detail-modal:${id}`)
         .setTitle("Copy details")
         .addComponents(
           new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -237,28 +266,78 @@ export const scanCommand: BotCommand = {
       return;
     }
 
-    if (action === "trophy-acquire" || action === "trophy-keep" || action === "trophy-cancel") {
-      const bookId = id;
-      const library = await upsertLibrary(interaction.guild.id, interaction.guild.name);
-      const user = await upsertUser(
-        interaction.user.id,
-        interaction.user.globalName ?? interaction.user.username
-      );
-      await ensureMembership(user.id, library.id);
+    const library = await upsertLibrary(interaction.guild.id, interaction.guild.name);
+    const user = await upsertUser(
+      interaction.user.id,
+      interaction.user.globalName ?? interaction.user.username
+    );
+    await ensureMembership(user.id, library.id);
 
+    if (action === "cancel") {
+      await interaction.update({ content: "Cancelled.", embeds: [], components: [] });
+      return;
+    }
+
+    if (action === "add-library") {
+      const book = await prisma.book.findUnique({ where: { id } });
+      if (!book) {
+        await interaction.reply({ content: "Book is gone.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+      const copy = await createPhysicalCopy({
+        libraryId: library.id,
+        userId: user.id,
+        bookId: book.id,
+      });
+      await interaction.update({
+        content: "Added to the family library.",
+        components: [detailButton(copy.id)],
+      });
+      return;
+    }
+
+    if (action === "add-trophy") {
+      const book = await prisma.book.findUnique({ where: { id } });
+      if (!book) {
+        await interaction.reply({ content: "Book is gone.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+      try {
+        await prisma.trophy.create({
+          data: {
+            libraryId: library.id,
+            bookId: book.id,
+            requestedByUserId: user.id,
+            priority: 3,
+          },
+        });
+      } catch {
+        await interaction.update({
+          content: "🏆 Already on the trophy list.",
+          components: [],
+        });
+        return;
+      }
+      await interaction.update({
+        content: "🏆 Added to the family trophy list. Edit details on the web UI.",
+        components: [],
+      });
+      return;
+    }
+
+    if (action === "trophy-acquire" || action === "trophy-keep" || action === "trophy-cancel") {
       if (action === "trophy-cancel") {
         await interaction.update({ content: "Cancelled.", embeds: [], components: [] });
         return;
       }
-
       const copy = await createPhysicalCopy({
         libraryId: library.id,
         userId: user.id,
-        bookId,
+        bookId: id,
       });
       let note = "Added to the family library.";
       if (action === "trophy-acquire") {
-        await deleteTrophyIfExists(library.id, bookId);
+        await deleteTrophyIfExists(library.id, id);
         note = "🏆 Acquired! Added to the library and removed from the Trophy List.";
       }
       await interaction.update({
