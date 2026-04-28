@@ -133,13 +133,22 @@
     let pendingConfirm = null;
     let mediaStream = null;
     let wakeLock = null;
-    // Two-frame confirmation: require the same decode in two consecutive
-    // hits within this window before submitting. Catches single-frame
-    // misreads (smudge / partial occlusion / motion blur).
     let pendingDecode = null;
     let pendingDecodeAt = 0;
+    let reticleFlashTimer = null;
     const CONFIRM_WINDOW_MS = 600;
     const btnTorch = document.getElementById('btn-torch');
+    const reticleEl = document.querySelector('.camera-reticle');
+
+    function flashReticle(state) {
+      if (!reticleEl) return;
+      reticleEl.classList.remove('detect', 'lock');
+      // Forcing reflow re-triggers the animation if we flash twice in a row.
+      void reticleEl.offsetWidth;
+      reticleEl.classList.add(state);
+      if (reticleFlashTimer) clearTimeout(reticleFlashTimer);
+      reticleFlashTimer = setTimeout(function() { reticleEl.classList.remove(state); }, 600);
+    }
 
     function setStatus(msg) {
       status.textContent = msg || '';
@@ -392,7 +401,6 @@
       if (text === lastSubmitted && now - lastSubmittedAt < 4000) return;
       const cleaned = text.replace(/[^0-9Xx]/g, '');
       if (cleaned.length !== 10 && cleaned.length !== 13) {
-        // We restrict ZXing to EAN-13/EAN-8/UPC-A so this branch is rare.
         return;
       }
       // Two-frame confirmation: require the same decode twice within the
@@ -401,11 +409,13 @@
         lastSubmitted = cleaned;
         lastSubmittedAt = now;
         pendingDecode = null;
+        flashReticle('lock');
         if (navigator.vibrate) navigator.vibrate(40);
         previewLookup({ isbn: cleaned });
       } else {
         pendingDecode = cleaned;
         pendingDecodeAt = now;
+        flashReticle('detect');
       }
     }
 

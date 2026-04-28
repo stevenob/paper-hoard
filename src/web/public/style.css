@@ -124,7 +124,33 @@ form.stacked label.inline { display: flex; align-items: center; gap: .5rem; }
 form.stacked input, form.stacked select, form.stacked textarea { padding: .4rem; font: inherit; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; }
 form.stacked .hint { color: var(--muted); margin: 0; font-size: .9em; }
 
-button { padding: .4rem .9rem; border: 0; border-radius: 4px; background: var(--accent); color: var(--accent-fg); cursor: pointer; font: inherit; }
+button {
+  padding: .4rem .9rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  cursor: pointer;
+  font: inherit;
+  position: relative;
+  transition: opacity .12s ease, transform .08s ease;
+}
+button:hover { opacity: .92; }
+button:active { transform: scale(0.98); }
+button.is-loading { color: transparent; pointer-events: none; }
+button.is-loading::after {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  top: 50%; left: 50%;
+  margin: -7px 0 0 -7px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  color: var(--accent-fg);
+  animation: spin .65s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 button.danger { background: var(--danger); }
 button.primary { background: var(--accent); }
 .button { display: inline-block; padding: .4rem .9rem; border-radius: 4px; background: var(--accent); color: var(--accent-fg); }
@@ -171,12 +197,59 @@ body.camera-open { overflow: hidden; }
   50% { top: 92%; }
   100% { top: 8%; }
 }
+/* Reticle feedback when ZXing detects (yellow blink) or confirms (green). */
+.camera-reticle .corner { transition: border-color .15s ease, box-shadow .15s ease; }
+.camera-reticle.detect .corner { border-color: #ffeb3b; }
+.camera-reticle.lock .corner {
+  border-color: #4caf50;
+  box-shadow: 0 0 14px rgba(76, 175, 80, 0.7);
+  animation: lock-pulse .55s ease-out;
+}
+@keyframes lock-pulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
 
-.camera-toast { position: absolute; left: 50%; bottom: 5rem; transform: translateX(-50%); padding: .5rem 1rem; border-radius: 999px; color: white; font-weight: 600; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); pointer-events: none; }
+.camera-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 5rem;
+  transform: translate(-50%, 1rem);
+  opacity: 0;
+  padding: .5rem 1rem;
+  border-radius: 999px;
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  transition: transform .25s ease, opacity .25s ease;
+}
+.camera-toast:not([hidden]) {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
 .camera-toast.ok { background: #2a8f3f; }
 .camera-toast.err { background: var(--danger); }
 
-.confirm-card { position: absolute; left: 50%; bottom: 1rem; transform: translateX(-50%); width: calc(100% - 2rem); max-width: 380px; background: var(--card); border-radius: 10px; padding: 1rem; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
+.confirm-card {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  width: calc(100% - 2rem);
+  max-width: 380px;
+  background: var(--card);
+  border-radius: 10px;
+  padding: 1rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, 1.5rem);
+  opacity: 0;
+  transition: transform .28s cubic-bezier(.2, .8, .2, 1), opacity .2s ease;
+}
+.confirm-card:not([hidden]) {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
 .confirm-card img { width: 64px; height: auto; float: left; margin: 0 .75rem .25rem 0; border-radius: 4px; }
 .confirm-card h3 { margin: 0 0 .25rem; font-size: 1.05rem; }
 .confirm-card .hint { margin: .15rem 0; }
@@ -258,13 +331,16 @@ body.camera-open { overflow: hidden; }
   border-radius: 8px;
   overflow: hidden;
   color: var(--fg);
-  transition: transform .15s ease, box-shadow .15s ease;
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .18s ease;
   height: 100%;
 }
 .poster-link:hover {
   text-decoration: none;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+.poster-link:active {
+  transform: translateY(-1px);
 }
 .poster-link img {
   width: 100%;
@@ -272,6 +348,17 @@ body.camera-open { overflow: hidden; }
   object-fit: cover;
   display: block;
   background: var(--code-bg);
+  background-image: linear-gradient(110deg, var(--code-bg) 8%, var(--border) 18%, var(--code-bg) 33%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.poster-link img.loaded {
+  background-image: none;
+  animation: none;
+}
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
 .poster-fallback {
   width: 100%;
