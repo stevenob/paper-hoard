@@ -2,13 +2,27 @@ import { prisma } from "./db.js";
 import type { Prisma } from "@prisma/client";
 import { logger } from "./logger.js";
 
-export type NotificationKind = "trophy-acquired";
+export type NotificationKind = "trophy-acquired" | "book-added";
 
 export interface TrophyAcquiredPayload {
   bookTitle: string;
   bookAuthors: string[];
   acquiredByDisplayName: string;
   requestedByDiscordUserId: string;
+  libraryName: string;
+}
+
+export interface BookAddedPayload {
+  channelId: string;
+  destination: "library" | "trophy";
+  bookTitle: string;
+  bookAuthors: string[];
+  bookId: string;
+  isbn13: string | null;
+  thumbnailUrl: string | null;
+  edition: string | null;
+  ratingAvg: number | null;
+  ratingCount: number | null;
   libraryName: string;
 }
 

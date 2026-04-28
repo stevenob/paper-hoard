@@ -182,6 +182,7 @@ body.camera-open { overflow: hidden; }
 .confirm-card .hint { margin: .15rem 0; }
 .confirm-card .trophy { color: #b48a00; font-weight: 600; margin: .35rem 0 .25rem; clear: both; }
 .confirm-card .dup-warning { color: #b48a00; font-weight: 600; margin: .25rem 0; clear: both; font-size: .9em; }
+.share-toggle { display: flex; align-items: center; gap: .35rem; margin: .35rem 0; clear: both; font-size: .9em; color: var(--muted); }
 .confirm-actions { display: flex; gap: .5rem; clear: both; padding-top: .5rem; }
 .confirm-actions button { flex: 1; padding: .55rem; }
 

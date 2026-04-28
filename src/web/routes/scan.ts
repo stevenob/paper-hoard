@@ -3,13 +3,19 @@ import { z } from "zod";
 import { ensureMembership, recordScan } from "../../shared/repo.js";
 import { prisma } from "../../shared/db.js";
 import { isStale, refreshOpenLibraryRatings } from "../../shared/openlibrary-ratings.js";
+import { enqueueNotification, type BookAddedPayload } from "../../shared/notifications.js";
 import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
 
 const scanSchema = z.object({
   isbn: z.string().trim().optional(),
   title: z.string().trim().optional(),
   author: z.string().trim().optional(),
+  share: z.union([z.boolean(), z.literal("true"), z.literal("false")]).optional(),
 });
+
+function shouldShare(input: unknown): boolean {
+  return input === true || input === "true";
+}
 
 export async function scanRoutes(app: FastifyInstance) {
   app.get("/scan", async (req, reply) => {
@@ -41,15 +47,37 @@ export async function scanRoutes(app: FastifyInstance) {
     const result = await recordScan({
       libraryId: library.id,
       userId: user.id,
-      ...parsed.data,
+      isbn: parsed.data.isbn,
+      title: parsed.data.title,
+      author: parsed.data.author,
     });
     if (!result) return reply.status(404).send({ ok: false, error: "No matching book found." });
+
+    // Optional Discord channel post — only if the library has a configured
+    // channel AND the client opted in.
+    if (shouldShare(parsed.data.share) && library.notifyChannelId) {
+      const payload: BookAddedPayload = {
+        channelId: library.notifyChannelId,
+        destination: "library",
+        bookTitle: result.meta.title,
+        bookAuthors: result.meta.authors,
+        bookId: result.book.id,
+        isbn13: result.meta.isbn13 ?? null,
+        thumbnailUrl: result.meta.thumbnailUrl ?? null,
+        edition: result.copy.edition ?? null,
+        ratingAvg: result.book.olRatingAvg,
+        ratingCount: result.book.olRatingCount,
+        libraryName: library.name,
+      };
+      void enqueueNotification("book-added", payload as unknown as Record<string, unknown>);
+    }
 
     return reply.send({
       ok: true,
       trophyAcquired: result.trophyAcquired,
       copyId: result.copy.id,
       suggestedEdition: result.meta.edition ?? null,
+      shareEnabled: Boolean(library.notifyChannelId),
       book: {
         title: result.meta.title,
         authors: result.meta.authors,
@@ -119,6 +147,7 @@ export async function scanRoutes(app: FastifyInstance) {
 
     return reply.send({
       ok: true,
+      shareEnabled: Boolean(library.notifyChannelId),
       book: {
         title: meta.title,
         authors: meta.authors,

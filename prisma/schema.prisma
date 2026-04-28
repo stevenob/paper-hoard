@@ -13,6 +13,7 @@ model Library {
   discordGuildId  String         @unique
   name            String
   publicSlug      String?        @unique
+  notifyChannelId String?
   createdAt       DateTime       @default(now())
 
   memberships     Membership[]

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import crypto from "node:crypto";
+import { z } from "zod";
 import { prisma } from "../../shared/db.js";
 import { audit } from "../../shared/audit.js";
 import { requireUser, withChrome } from "./_helpers.js";
@@ -7,6 +8,10 @@ import { requireUser, withChrome } from "./_helpers.js";
 function newSlug(): string {
   return crypto.randomBytes(8).toString("base64url");
 }
+
+const channelSchema = z.object({
+  channelId: z.string().trim().regex(/^\d{0,30}$/, "Discord channel IDs are numeric").optional(),
+});
 
 export async function shareRoutes(app: FastifyInstance) {
   // Public read-only library view.
@@ -88,6 +93,30 @@ export async function shareRoutes(app: FastifyInstance) {
         entity: "book",
         entityId: updated.id,
         details: { share: "disabled" },
+      });
+      return reply.redirect("/about");
+    }
+  );
+
+  // Set / clear the Discord channel ID we post to on add.
+  app.post<{ Params: { id: string } }>(
+    "/libraries/:id/notify-channel",
+    async (req, reply) => {
+      const user = await requireUser(req, reply);
+      if (!user) return;
+      const parsed = channelSchema.safeParse(req.body);
+      if (!parsed.success) return reply.redirect("/about");
+      const channelId = parsed.data.channelId?.trim() || null;
+      const updated = await prisma.library.update({
+        where: { id: req.params.id },
+        data: { notifyChannelId: channelId },
+      });
+      void audit({
+        userId: user.id,
+        action: "update",
+        entity: "book",
+        entityId: updated.id,
+        details: { notifyChannel: channelId ? "set" : "cleared" },
       });
       return reply.redirect("/about");
     }

@@ -59,6 +59,9 @@
     <p class="hint" id="confirm-rating" hidden></p>
     <p id="confirm-trophy" class="trophy" hidden></p>
     <p id="confirm-dup" class="dup-warning" hidden></p>
+    <label id="confirm-share" class="share-toggle" hidden>
+      <input type="checkbox" id="confirm-share-input" /> Share to Discord channel
+    </label>
     <div class="confirm-actions">
       <button type="button" id="btn-confirm-add" class="primary">Add to library</button>
       <button type="button" id="btn-confirm-skip" class="danger">Skip</button>
@@ -110,6 +113,8 @@
     const confirmRating = document.getElementById('confirm-rating');
     const confirmTrophy = document.getElementById('confirm-trophy');
     const confirmDup = document.getElementById('confirm-dup');
+    const confirmShare = document.getElementById('confirm-share');
+    const confirmShareInput = document.getElementById('confirm-share-input');
     const btnConfirmAdd = document.getElementById('btn-confirm-add');
     const btnConfirmSkip = document.getElementById('btn-confirm-skip');
     const httpsWarning = document.getElementById('https-warning');
@@ -172,7 +177,6 @@
       } else {
         confirmTrophy.hidden = true;
       }
-      // Render duplicate warning if any existing copies in the library.
       const existing = payload.existingCopies || [];
       if (existing.length > 0) {
         const summary = existing.map(function(c) {
@@ -184,6 +188,14 @@
       } else {
         confirmDup.hidden = true;
         btnConfirmAdd.textContent = 'Add to library';
+      }
+      // Show the share-to-Discord toggle only when a notify channel is configured.
+      if (payload.shareEnabled) {
+        confirmShare.hidden = false;
+        confirmShareInput.checked = true;
+      } else {
+        confirmShare.hidden = true;
+        confirmShareInput.checked = false;
       }
       confirmCard.hidden = false;
       overlayStatus.textContent = 'Confirm to add, or skip.';
@@ -197,7 +209,8 @@
 
     btnConfirmAdd.addEventListener('click', async function() {
       if (!pendingConfirm) return;
-      const req = pendingConfirm.request;
+      const req = Object.assign({}, pendingConfirm.request);
+      if (confirmShareInput.checked) req.share = true;
       hideConfirm();
       // submitLookup hits POST /scan which mutates and returns full payload.
       await submitLookup(req);

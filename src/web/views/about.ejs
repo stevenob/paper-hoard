@@ -26,6 +26,22 @@
   </tbody>
 </table>
 
+<h2>Discord channel posts</h2>
+<% if (!library) { %>
+  <p class="hint">No library exists yet.</p>
+<% } else if (!activeUser) { %>
+  <p class="hint">Log in to manage Discord posts.</p>
+<% } else { %>
+  <p>When set, every book add (web or Discord) optionally posts a rich embed to this channel — cover, rating, ISBN, and links to Goodreads / StoryGraph / Amazon / Bookshop / Open Library.</p>
+  <form method="post" action="/libraries/<%= library.id %>/notify-channel" class="stacked">
+    <label>Discord channel ID
+      <input name="channelId" value="<%= library.notifyChannelId || '' %>" placeholder="e.g. 1489048099606364212" inputmode="numeric" maxlength="30" />
+    </label>
+    <p class="hint">In Discord: Settings → Advanced → Developer Mode on, then right-click the channel → Copy Channel ID. Leave blank to disable. Smaug must be in the server and have permission to post in the channel.</p>
+    <button type="submit"><%= library.notifyChannelId ? 'Update' : 'Save' %></button>
+  </form>
+<% } %>
+
 <h2>Public share link</h2>
 <% if (!library) { %>
   <p class="hint">No library exists yet.</p>
