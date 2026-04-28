@@ -477,10 +477,9 @@
         // a few older ones are EAN-8 / UPC-A.
         const hints = new Map();
         try {
-          // BarcodeFormat enum values (from @zxing/library) hard-coded so
-          // we don't need to import it:
-          //   EAN_13 = 5, EAN_8 = 6, UPC_A = 11
-          hints.set(2 /* DecodeHintType.POSSIBLE_FORMATS */, [5, 6, 11]);
+          // BarcodeFormat enum values (from @zxing/library):
+          //   EAN_8 = 6, EAN_13 = 7, UPC_A = 14
+          hints.set(2 /* DecodeHintType.POSSIBLE_FORMATS */, [7, 6, 14]);
           hints.set(3 /* DecodeHintType.TRY_HARDER */, true);
         } catch {}
         reader = new ZXingBrowser.BrowserMultiFormatReader(hints);
