@@ -56,6 +56,7 @@
     <h3 id="confirm-title">…</h3>
     <p class="hint" id="confirm-authors"></p>
     <p class="hint" id="confirm-isbn"></p>
+    <p class="hint" id="confirm-rating" hidden></p>
     <p id="confirm-trophy" class="trophy" hidden></p>
     <p id="confirm-dup" class="dup-warning" hidden></p>
     <div class="confirm-actions">
@@ -106,6 +107,7 @@
     const confirmTitle = document.getElementById('confirm-title');
     const confirmAuthors = document.getElementById('confirm-authors');
     const confirmIsbn = document.getElementById('confirm-isbn');
+    const confirmRating = document.getElementById('confirm-rating');
     const confirmTrophy = document.getElementById('confirm-trophy');
     const confirmDup = document.getElementById('confirm-dup');
     const btnConfirmAdd = document.getElementById('btn-confirm-add');
@@ -156,6 +158,12 @@
       confirmTitle.textContent = b.title || 'Unknown';
       confirmAuthors.textContent = (b.authors || []).join(', ') || 'Unknown author';
       confirmIsbn.textContent = b.isbn13 ? 'ISBN ' + b.isbn13 : '';
+      if (payload.rating && payload.rating.avg) {
+        confirmRating.textContent = '⭐ ' + payload.rating.avg.toFixed(2) + ' (' + payload.rating.count + ' on Open Library)';
+        confirmRating.hidden = false;
+      } else {
+        confirmRating.hidden = true;
+      }
       if (payload.trophy) {
         confirmTrophy.textContent =
           '🏆 Trophy match — requested by ' + payload.trophy.requestedBy +

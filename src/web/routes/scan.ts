@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ensureMembership, recordScan } from "../../shared/repo.js";
 import { prisma } from "../../shared/db.js";
+import { isStale, refreshOpenLibraryRatings } from "../../shared/openlibrary-ratings.js";
 import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
 
 const scanSchema = z.object({
@@ -102,6 +103,20 @@ export async function scanRoutes(app: FastifyInstance) {
         ])
       : [null, []];
 
+    // Opportunistic rating: serve cached value when we have one. If the
+    // matching Book has a stale (or never-fetched) cache, kick off a refresh
+    // in the background so the *next* scan / page view picks it up — never
+    // block the scan response on the upstream call.
+    let rating: { avg: number; count: number } | null = null;
+    if (matchingBook) {
+      if (matchingBook.olRatingAvg !== null && (matchingBook.olRatingCount ?? 0) > 0) {
+        rating = { avg: matchingBook.olRatingAvg, count: matchingBook.olRatingCount! };
+      }
+      if (isStale(matchingBook.olFetchedAt)) {
+        void refreshOpenLibraryRatings(matchingBook.id);
+      }
+    }
+
     return reply.send({
       ok: true,
       book: {
@@ -112,6 +127,7 @@ export async function scanRoutes(app: FastifyInstance) {
         source: meta.source,
         edition: meta.edition ?? null,
       },
+      rating,
       trophy: trophyMatch
         ? { requestedBy: trophyMatch.requestedBy.displayName, reason: trophyMatch.reason }
         : null,
