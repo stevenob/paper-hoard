@@ -170,4 +170,48 @@ export async function scanRoutes(app: FastifyInstance) {
       })),
     });
   });
+
+  // Share-only — posts to the configured Discord channel without creating
+  // any DB row. Use case: "spotted in a bookstore, what do you think?"
+  app.post("/scan/share", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const library = await getCurrentLibrary(req);
+    if (!library) return reply.status(400).send({ ok: false, error: "No family library yet." });
+    if (!library.notifyChannelId)
+      return reply.status(400).send({ ok: false, error: "No Discord channel configured." });
+
+    const parsed = scanSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.status(400).send({ ok: false, error: "Invalid request." });
+    if (!parsed.data.isbn && !parsed.data.title)
+      return reply.status(400).send({ ok: false, error: "Provide an ISBN or title." });
+
+    const meta = parsed.data.isbn
+      ? await (await import("../../shared/metadata.js")).lookupByIsbn(parsed.data.isbn)
+      : (await (await import("../../shared/metadata.js")).searchByTitle(
+          [parsed.data.title, parsed.data.author].filter(Boolean).join(" ")
+        ))[0];
+    if (!meta) return reply.status(404).send({ ok: false, error: "No matching book found." });
+
+    const cached = meta.isbn13
+      ? await prisma.book.findUnique({ where: { isbn13: meta.isbn13 } })
+      : null;
+
+    const payload: BookAddedPayload = {
+      channelId: library.notifyChannelId,
+      destination: "library",
+      bookTitle: meta.title,
+      bookAuthors: meta.authors,
+      bookId: cached?.id ?? "(uncatalogued)",
+      isbn13: meta.isbn13 ?? null,
+      thumbnailUrl: meta.thumbnailUrl ?? null,
+      edition: meta.edition ?? null,
+      ratingAvg: cached?.olRatingAvg ?? null,
+      ratingCount: cached?.olRatingCount ?? null,
+      libraryName: library.name,
+    };
+    void enqueueNotification("book-shared", payload as unknown as Record<string, unknown>);
+    return reply.send({ ok: true });
+  });
 }

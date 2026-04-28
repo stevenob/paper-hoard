@@ -2,7 +2,7 @@ import { prisma } from "./db.js";
 import type { Prisma } from "@prisma/client";
 import { logger } from "./logger.js";
 
-export type NotificationKind = "trophy-acquired" | "book-added";
+export type NotificationKind = "trophy-acquired" | "book-added" | "book-shared";
 
 export interface TrophyAcquiredPayload {
   bookTitle: string;

@@ -53,13 +53,18 @@ async function processOne(client: Client, n: { id: string; kind: string; payload
     );
     return;
   }
-  if (n.kind === "book-added") {
+  if (n.kind === "book-added" || n.kind === "book-shared") {
     const p = n.payload as BookAddedPayload;
     const channel = await client.channels.fetch(p.channelId);
     if (!channel || !channel.isSendable()) {
       throw new Error(`channel ${p.channelId} not found or not text-sendable`);
     }
-    const verb = p.destination === "trophy" ? "🏆 Added to the Trophy List" : "📚 Added to the library";
+    const verb =
+      n.kind === "book-shared"
+        ? "👀 Shared from a scan"
+        : p.destination === "trophy"
+          ? "🏆 Added to the Trophy List"
+          : "📚 Added to the library";
     const embed = new EmbedBuilder()
       .setTitle(p.bookTitle)
       .setDescription(p.bookAuthors.join(", ") || "Unknown author")
