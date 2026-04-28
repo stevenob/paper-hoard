@@ -32,6 +32,7 @@ export async function upsertBookFromMetadata(meta: BookMetadata) {
   const sharedFields = {
     title: meta.title,
     authors: meta.authors,
+    primaryAuthor: meta.authors[0] ?? null,
     publisher: meta.publisher,
     publishedAt: meta.publishedAt,
     thumbnailUrl: meta.thumbnailUrl,

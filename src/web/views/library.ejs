@@ -33,13 +33,13 @@
   </label>
   <label><span class="hint">Order</span>
     <select name="order">
-      <option value="desc" <%= params.order === 'desc' ? 'selected' : '' %>>desc</option>
       <option value="asc" <%= params.order === 'asc' ? 'selected' : '' %>>asc</option>
+      <option value="desc" <%= params.order === 'desc' ? 'selected' : '' %>>desc</option>
     </select>
   </label>
   <input type="hidden" name="view" value="<%= params.view %>" />
   <button type="submit">Apply</button>
-  <% if (params.q || params.sort !== 'added' || params.order !== 'desc') { %>
+  <% if (params.q || params.sort !== 'author' || params.order !== 'asc') { %>
     <a href="/library?view=<%= params.view %>" class="hint">reset</a>
   <% } %>
 </form>

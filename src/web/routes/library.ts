@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../../shared/db.js";
 import { withChrome } from "./_helpers.js";
 
@@ -11,8 +12,8 @@ const VIEW_MODES = ["grid", "list"] as const;
 const querySchema = z.object({
   q: z.string().trim().optional(),
   shelf: z.string().trim().optional(),
-  sort: z.enum(SORT_FIELDS).default("added"),
-  order: z.enum(["asc", "desc"]).default("desc"),
+  sort: z.enum(SORT_FIELDS).default("author"),
+  order: z.enum(["asc", "desc"]).default("asc"),
   view: z.enum(VIEW_MODES).default("grid"),
   page: z.coerce.number().int().min(1).default(1),
 });
@@ -44,7 +45,10 @@ export async function libraryRoutes(app: FastifyInstance) {
         case "title":
           return { book: { title: dir } } as const;
         case "author":
-          return { book: { title: dir } } as const;
+          return [
+            { book: { primaryAuthor: { sort: dir, nulls: "last" } } },
+            { book: { title: dir } },
+          ] as Prisma.PhysicalCopyOrderByWithRelationInput[];
         case "added":
         default:
           return { addedAt: dir } as const;

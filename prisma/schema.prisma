@@ -52,6 +52,7 @@ model Book {
   isbn10         String?
   title          String
   authors        String[]
+  primaryAuthor  String?
   publisher      String?
   publishedAt    String?
   thumbnailUrl   String?
@@ -65,6 +66,8 @@ model Book {
   physicalCopies PhysicalCopy[]
   completions    Completion[]
   trophies       Trophy[]
+
+  @@index([primaryAuthor])
 }
 
 model PhysicalCopy {
