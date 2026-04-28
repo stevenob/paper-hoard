@@ -10,14 +10,63 @@
   <% } %>
   <div class="book-meta">
     <h1><%= copy.book.title %></h1>
-    <p class="hint"><%= copy.book.authors.join(', ') || 'Unknown author' %></p>
+    <p class="hint"><% if (copy.book.authors && copy.book.authors.length > 0) { %><% copy.book.authors.forEach(function(a, i) { %><% if (i > 0) { %>, <% } %><% const slug = authorSlug(a); %><% if (slug) { %><a href="/authors/<%= slug %>"><%= a %></a><% } else { %><%= a %><% } %><% }) %><% } else { %>Unknown author<% } %></p>
     <% if (copy.book.publisher || copy.book.publishedAt) { %>
       <p class="hint"><%= [copy.book.publisher, copy.book.publishedAt].filter(Boolean).join(' • ') %></p>
     <% } %>
     <% if (copy.book.isbn13) { %><p class="hint">ISBN <%= copy.book.isbn13 %></p><% } %>
     <p class="hint">Added <%= copy.addedAt.toISOString().slice(0,10) %></p>
+    <% if (copy.deletedAt) { %>
+      <p class="notice">This copy is in the Trash (deleted <%= new Date(copy.deletedAt).toISOString().slice(0,10) %>).
+        <% if (activeUser) { %>
+          <form method="post" action="/library/copy/<%= copy.id %>/restore" style="display:inline">
+            <button type="submit">Restore</button>
+          </form>
+        <% } %>
+      </p>
+    <% } %>
   </div>
 </article>
+
+<% const myReading = (copy.readings || []).find(function(r){ return activeUser && r.userId === activeUser.id && !r.finishedAt; }); %>
+<% const allReadings = (copy.readings || []); %>
+<h2>Reading</h2>
+<% if (allReadings.length === 0) { %>
+  <p class="hint">Nobody has logged a reading session for this copy yet.</p>
+<% } else { %>
+  <ul class="reading-list reading-list-compact">
+    <% allReadings.forEach(function(r) { %>
+      <li>
+        <strong><%= r.user.displayName %></strong>
+        <% if (r.finishedAt) { %>
+          finished on <%= new Date(r.finishedAt).toISOString().slice(0,10) %>
+        <% } else { %>
+          <em>currently reading</em> · started <%= new Date(r.startedAt).toISOString().slice(0,10) %>
+        <% } %>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+<% if (activeUser && !copy.deletedAt) { %>
+  <% if (myReading) { %>
+    <form method="post" action="/readings/<%= myReading.id %>/finish" class="reading-finish-form">
+      <label class="hint" style="display:inline-flex;gap:.4rem;align-items:center;">
+        <input type="checkbox" name="logCompletion" value="on" checked /> Log a completion
+      </label>
+      <label class="hint">Rating
+        <select name="rating">
+          <option value="">—</option>
+          <% for (let s = 5; s >= 1; s--) { %><option value="<%= s %>"><%= s %>★</option><% } %>
+        </select>
+      </label>
+      <button type="submit">Mark finished</button>
+    </form>
+  <% } else { %>
+    <form method="post" action="/library/copy/<%= copy.id %>/start-reading" style="display:inline">
+      <button type="submit">📖 Start reading</button>
+    </form>
+  <% } %>
+<% } %>
 
 <h2>Cover photo</h2>
 <% if (!activeUser) { %>
@@ -98,9 +147,14 @@
 
 <% if (activeUser) { %>
   <h2>Danger zone</h2>
-  <form method="post" action="/library/copy/<%= copy.id %>/delete" onsubmit="return confirm('Delete this physical copy? The Book/Completion records stay.')">
-    <button type="submit" class="danger">Delete this copy</button>
-  </form>
+  <% if (copy.deletedAt) { %>
+    <p class="hint">Already in Trash. Use the <a href="/trash">trash page</a> to restore or delete forever.</p>
+  <% } else { %>
+    <form method="post" action="/library/copy/<%= copy.id %>/delete" onsubmit="return confirm('Move this copy to Trash? You can restore it for the next 30 days.')">
+      <button type="submit" class="danger">Move to Trash</button>
+    </form>
+    <p class="hint">Soft-deleted. Restore from <a href="/trash">/trash</a> within 30 days.</p>
+  <% } %>
 <% } %>
 
 <% if (completions.length > 0) { %>

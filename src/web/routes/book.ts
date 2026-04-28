@@ -24,7 +24,7 @@ export async function bookRoutes(app: FastifyInstance) {
     if (!book) return reply.status(404).send("Not found");
     const [copies, completions, trophies] = await Promise.all([
       prisma.physicalCopy.findMany({
-        where: { bookId: book.id },
+        where: { bookId: book.id, deletedAt: null },
         include: {
           addedBy: true,
           library: true,

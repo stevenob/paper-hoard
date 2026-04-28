@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { prisma } from "../../shared/db.js";
+import { authorSlug } from "../../shared/authors.js";
 import { getCurrentUser, isOAuthConfigured } from "../auth.js";
 
 export async function getActiveUser(req: FastifyRequest) {
@@ -55,6 +56,7 @@ export async function withChrome<T extends Record<string, unknown>>(
     library,
     oauthConfigured: isOAuthConfigured(),
     theme,
+    authorSlug,
   };
 }
 

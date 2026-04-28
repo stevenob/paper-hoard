@@ -1,0 +1,39 @@
+<% const pageTitle = 'Trash' %>
+<%- include('_header') %>
+
+<h1>🗑 Trash</h1>
+<p class="hint">Soft-deleted copies. Restore them or permanently remove. Anything left here for 30 days is hard-deleted automatically.</p>
+
+<% if (copies.length === 0) { %>
+  <p class="hint">Trash is empty.</p>
+<% } else { %>
+  <table class="data">
+    <thead>
+      <tr><th>Title</th><th>Authors</th><th>Deleted</th><th>By</th><th></th></tr>
+    </thead>
+    <tbody>
+      <% copies.forEach(function(c) { %>
+        <tr>
+          <td data-label="Title"><%= c.book.title %></td>
+          <td data-label="Authors"><%= c.book.authors.join(', ') %></td>
+          <td data-label="Deleted"><%= c.deletedAt ? new Date(c.deletedAt).toISOString().slice(0,16).replace('T', ' ') : '' %></td>
+          <td data-label="Originally added by"><%= c.addedBy.displayName %></td>
+          <td>
+            <% if (activeUser) { %>
+              <form method="post" action="/library/copy/<%= c.id %>/restore" style="display:inline">
+                <button type="submit">Restore</button>
+              </form>
+              <form method="post" action="/library/copy/<%= c.id %>/hard-delete" style="display:inline" onsubmit="return confirm('Permanently delete this copy? This cannot be undone.')">
+                <button type="submit" class="danger">Delete forever</button>
+              </form>
+            <% } else { %>
+              <span class="hint">log in to restore</span>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<%- include('_footer') %>

@@ -15,6 +15,10 @@ import { importRoutes } from "./import.js";
 import { themeRoutes } from "./theme.js";
 import { shareRoutes } from "./share.js";
 import { shelvesRoutes } from "./shelves.js";
+import { authorRoutes } from "./authors.js";
+import { readingRoutes } from "./readings.js";
+import { trashRoutes, sweepDeletedCopies } from "./trash.js";
+import { logger } from "../../shared/logger.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   await authRoutes(app);
@@ -33,4 +37,18 @@ export async function registerRoutes(app: FastifyInstance) {
   await auditRoutes(app);
   await importRoutes(app);
   await shelvesRoutes(app);
+  await authorRoutes(app);
+  await readingRoutes(app);
+  await trashRoutes(app);
+
+  // Sweep soft-deleted copies older than 30 days at boot, then daily.
+  void sweepDeletedCopies()
+    .then((n) => n > 0 && logger.info({ swept: n }, "Hard-deleted stale copies"))
+    .catch((err) => logger.warn({ err }, "Sweep failed"));
+  setInterval(() => {
+    void sweepDeletedCopies()
+      .then((n) => n > 0 && logger.info({ swept: n }, "Hard-deleted stale copies"))
+      .catch((err) => logger.warn({ err }, "Sweep failed"));
+  }, 24 * 60 * 60 * 1000).unref();
 }
+

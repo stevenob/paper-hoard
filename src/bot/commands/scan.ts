@@ -159,7 +159,7 @@ export const scanCommand: BotCommand = {
         include: { requestedBy: true },
       }),
       prisma.physicalCopy.findMany({
-        where: { libraryId: library.id, bookId: book.id },
+        where: { libraryId: library.id, bookId: book.id, deletedAt: null },
         include: { addedBy: true },
         orderBy: { addedAt: "asc" },
         take: 5,

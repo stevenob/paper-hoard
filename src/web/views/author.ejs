@@ -1,0 +1,51 @@
+<% const pageTitle = author %>
+<%- include('_header') %>
+
+<p><a href="/library">← back to library</a></p>
+
+<h1><%= author %></h1>
+<p class="hint"><%= copies.length %> copy<%= copies.length === 1 ? '' : 'ies' %> in <%= library ? library.name : 'the library' %></p>
+
+<% if (copies.length === 0) { %>
+  <p>No copies by this author.</p>
+<% } else { %>
+  <ul class="poster-grid">
+    <% copies.forEach(function(c) {
+      const cover = c.coverPath ? '/uploads/' + c.coverPath : c.book.thumbnailUrl;
+    %>
+      <li class="poster">
+        <a href="/library/copy/<%= c.id %>" class="poster-link" aria-label="<%= c.book.title %>">
+          <% if (cover) { %>
+            <img src="<%= cover %>" alt="" loading="lazy" />
+          <% } else { %>
+            <div class="poster-fallback"><span><%= c.book.title %></span></div>
+          <% } %>
+          <div class="poster-meta">
+            <strong class="poster-title"><%= c.book.title %></strong>
+            <% if (c.edition) { %><span class="poster-author"><%= c.edition %></span><% } %>
+          </div>
+        </a>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<% if (completions.length > 0) { %>
+  <h2>Completions (<%= completions.length %>)</h2>
+  <ul>
+    <% completions.forEach(function(c) { %>
+      <li><strong><%= c.user.displayName %></strong> finished <a href="/books/<%= c.bookId %>"><em><%= c.book.title %></em></a><%= c.completedOn ? ' on ' + c.completedOn.toISOString().slice(0,10) : '' %><%= c.rating ? ' • ' + c.rating + '★' : '' %></li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<% if (trophies.length > 0) { %>
+  <h2>On the Trophy List (<%= trophies.length %>)</h2>
+  <ul>
+    <% trophies.forEach(function(t) { %>
+      <li>🏆 <a href="/books/<%= t.bookId %>"><em><%= t.book.title %></em></a> — requested by <%= t.requestedBy.displayName %></li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<%- include('_footer') %>

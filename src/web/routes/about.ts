@@ -21,7 +21,7 @@ export async function aboutRoutes(app: FastifyInstance) {
         prisma.library.count(),
         prisma.user.count(),
         prisma.book.count(),
-        prisma.physicalCopy.count(),
+        prisma.physicalCopy.count({ where: { deletedAt: null } }),
         prisma.trophy.count(),
         prisma.completion.count(),
         prisma.auditLog.count(),

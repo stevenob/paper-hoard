@@ -23,7 +23,7 @@ export async function shareRoutes(app: FastifyInstance) {
 
     const [copies, trophies] = await Promise.all([
       prisma.physicalCopy.findMany({
-        where: { libraryId: library.id },
+        where: { libraryId: library.id, deletedAt: null },
         include: { book: true },
         orderBy: { addedAt: "desc" },
         take: 500,

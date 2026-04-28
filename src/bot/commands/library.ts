@@ -31,6 +31,7 @@ export const libraryCommand: BotCommand = {
     const copies = await prisma.physicalCopy.findMany({
       where: {
         libraryId: library.id,
+        deletedAt: null,
         ...(query
           ? {
               book: {

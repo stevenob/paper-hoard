@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { logger } from "./logger.js";
 
 export type AuditAction = "create" | "update" | "delete";
-export type AuditEntity = "physicalCopy" | "trophy" | "completion" | "book";
+export type AuditEntity = "physicalCopy" | "trophy" | "completion" | "book" | "reading";
 
 /**
  * Records an audit row. Best-effort — failures here must never break the

@@ -43,6 +43,7 @@ export async function copyRoutes(app: FastifyInstance) {
         addedBy: true,
         library: true,
         shelves: { include: { shelf: true } },
+        readings: { include: { user: true }, orderBy: { startedAt: "desc" } },
       },
     });
     if (!copy) return reply.status(404).send("Not found");
@@ -99,18 +100,31 @@ export async function copyRoutes(app: FastifyInstance) {
     const user = await requireUser(req, reply);
     if (!user) return;
     const copy = await prisma.physicalCopy.findUnique({ where: { id: req.params.id } });
-    if (copy?.coverPath) {
-      await fs
-        .unlink(path.join(path.resolve(env.UPLOADS_DIR), copy.coverPath))
-        .catch(() => undefined);
+    if (!copy) return reply.redirect("/library");
+    // Soft delete: keep the row + cover + shelf assignments so the action
+    // can be undone. The /trash page lists deletedAt!=null copies and a
+    // background sweeper hard-deletes after 30 days.
+    if (!copy.deletedAt) {
+      await prisma.physicalCopy.update({
+        where: { id: copy.id },
+        data: { deletedAt: new Date() },
+      });
     }
-    await prisma.physicalCopy.delete({ where: { id: req.params.id } }).catch(() => undefined);
     void audit({
       userId: user.id,
       action: "delete",
       entity: "physicalCopy",
-      entityId: req.params.id,
-      details: { coverPath: copy?.coverPath ?? null },
+      entityId: copy.id,
+      details: { soft: true, coverPath: copy.coverPath ?? null },
+    });
+    // 15-second undo cookie consumed by ui.js to render a toast.
+    const book = await prisma.book.findUnique({ where: { id: copy.bookId } });
+    const undoValue = `${copy.id}|${(book?.title ?? "Copy").slice(0, 80)}`;
+    reply.setCookie("ph_undo", undoValue, {
+      path: "/",
+      maxAge: 15,
+      httpOnly: false,
+      sameSite: "lax",
     });
     return reply.redirect("/library");
   });

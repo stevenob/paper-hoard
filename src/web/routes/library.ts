@@ -26,7 +26,7 @@ export async function libraryRoutes(app: FastifyInstance) {
     const params = parsed.success ? parsed.data : querySchema.parse({});
     const skip = (params.page - 1) * PAGE_SIZE;
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { deletedAt: null };
     if (params.q) {
       where.book = {
         OR: [

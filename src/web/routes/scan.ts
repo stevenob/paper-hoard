@@ -20,6 +20,7 @@ function shouldShare(input: unknown): boolean {
 export async function scanRoutes(app: FastifyInstance) {
   app.get("/scan", async (req, reply) => {
     const recent = await prisma.physicalCopy.findMany({
+      where: { deletedAt: null },
       include: { book: true, addedBy: true },
       orderBy: { addedAt: "desc" },
       take: 5,
@@ -124,7 +125,7 @@ export async function scanRoutes(app: FastifyInstance) {
             include: { requestedBy: true },
           }),
           prisma.physicalCopy.findMany({
-            where: { libraryId: library.id, bookId: matchingBook.id },
+            where: { libraryId: library.id, bookId: matchingBook.id, deletedAt: null },
             include: { addedBy: true },
             orderBy: { addedAt: "asc" },
           }),

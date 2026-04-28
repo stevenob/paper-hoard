@@ -9,7 +9,7 @@
   <% } %>
   <div class="book-meta">
     <h1><%= book.title %></h1>
-    <p class="hint"><%= book.authors.join(', ') || 'Unknown author' %></p>
+    <p class="hint"><% if (book.authors && book.authors.length > 0) { %><% book.authors.forEach(function(a, i) { %><% if (i > 0) { %>, <% } %><% const slug = authorSlug(a); %><% if (slug) { %><a href="/authors/<%= slug %>"><%= a %></a><% } else { %><%= a %><% } %><% }) %><% } else { %>Unknown author<% } %></p>
     <% if (book.publisher || book.publishedAt) { %>
       <p class="hint"><%= [book.publisher, book.publishedAt].filter(Boolean).join(' • ') %></p>
     <% } %>

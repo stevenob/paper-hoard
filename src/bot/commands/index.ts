@@ -20,8 +20,9 @@ export interface BotCommand {
 import { scanCommand } from "./scan.js";
 import { libraryCommand } from "./library.js";
 import { trophiesCommand } from "./trophies.js";
+import { readingCommand } from "./reading.js";
 
-export const commandList: BotCommand[] = [scanCommand, libraryCommand, trophiesCommand];
+export const commandList: BotCommand[] = [scanCommand, libraryCommand, trophiesCommand, readingCommand];
 
 export const commands = new Map<string, BotCommand>(
   commandList.map((c) => [c.data.name, c])
