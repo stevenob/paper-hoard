@@ -331,14 +331,6 @@ body.camera-open { overflow: hidden; }
 .confirm-secondary .link-skip { color: var(--muted); }
 .confirm-secondary button:hover { text-decoration: underline; opacity: .85; }
 .confirm-secondary button.is-loading::after { color: currentColor; }
-.confirm-card img { width: 64px; height: auto; float: left; margin: 0 .75rem .25rem 0; border-radius: 4px; }
-.confirm-card h3 { margin: 0 0 .25rem; font-size: 1.05rem; }
-.confirm-card .hint { margin: .15rem 0; }
-.confirm-card .trophy { color: #b48a00; font-weight: 600; margin: .35rem 0 .25rem; clear: both; }
-.confirm-card .dup-warning { color: #b48a00; font-weight: 600; margin: .25rem 0; clear: both; font-size: .9em; }
-.confirm-actions { display: flex; gap: .5rem; clear: both; padding-top: .5rem; flex-wrap: wrap; }
-.confirm-actions button { flex: 1; padding: .55rem; min-width: 100px; }
-.confirm-actions button.secondary { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
 
 .scan-result { display: flex; gap: .75rem; align-items: flex-start; background: var(--card); border: 1px solid var(--border); border-left: 4px solid #2a8f3f; border-radius: 6px; padding: .75rem; margin: .5rem 0; }
 .scan-result.error { border-left-color: var(--danger); color: var(--danger); }
