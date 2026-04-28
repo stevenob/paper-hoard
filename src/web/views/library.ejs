@@ -6,8 +6,8 @@
   <% function withParam(name, value) {
     const u = new URLSearchParams();
     if (params.q) u.set('q', params.q);
-    if (params.addedBy) u.set('addedBy', params.addedBy);
-    if (params.tag) u.set('tag', params.tag);
+    if (params.shelf) u.set('shelf', params.shelf);
+    if (params.shelf) u.set('shelf', params.shelf);
     u.set('sort', params.sort);
     u.set('order', params.order);
     u.set('view', name === 'view' ? value : params.view);
@@ -44,14 +44,14 @@
   <% } %>
 </form>
 
-<% if (activeTag) { %>
-  <p class="hint">Filtered by tag <a href="/library?view=<%= params.view %>" class="pill pill-tag" title="Clear">#<%= activeTag.name %> ×</a></p>
+<% if (activeShelf) { %>
+  <p class="hint">Filtered by shelf <a href="/library?view=<%= params.view %>" class="pill pill-tag" title="Clear"><%= activeShelf.name %> ×</a></p>
 <% } %>
 
 <p class="hint">Showing <%= copies.length %> of <%= total %> total<% if (totalPages > 1) { %> · page <%= params.page %> of <%= totalPages %><% } %></p>
 
 <% if (copies.length === 0) { %>
-  <% if (params.q || params.addedBy) { %>
+  <% if (params.q || params.shelf) { %>
     <p>No matches. <a href="/library?view=<%= params.view %>">Show all</a>.</p>
   <% } else { %>
     <p>No physical copies yet. Use <a href="/scan">/scan</a> in the web UI or <code>/scan</code> in Discord to add one.</p>
@@ -88,7 +88,7 @@
           <td data-label="Authors"><%= c.book.authors.join(', ') %></td>
           <td data-label="Condition"><%= c.condition || '—' %></td>
           <td data-label="Edition"><%= c.edition || '—' %></td>
-          <td data-label="Location"><%= c.location || '—' %></td>
+          <td data-label="Shelves"><% (c.shelves || []).forEach(function(sc){ %><a href="/shelves/<%= sc.shelf.slug %>" class="pill pill-tag"><%= sc.shelf.name %></a> <% }) %></td>
           <td data-label="Added"><%= c.addedAt.toISOString().slice(0,10) %></td>
         </tr>
       <% }) %>
@@ -100,8 +100,7 @@
   <% function pageUrl(n) {
     const u = new URLSearchParams();
     if (params.q) u.set('q', params.q);
-    if (params.addedBy) u.set('addedBy', params.addedBy);
-    if (params.tag) u.set('tag', params.tag);
+    if (params.shelf) u.set('shelf', params.shelf);
     u.set('sort', params.sort);
     u.set('order', params.order);
     u.set('view', params.view);

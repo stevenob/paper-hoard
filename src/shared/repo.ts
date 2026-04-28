@@ -35,8 +35,6 @@ export async function upsertBookFromMetadata(meta: BookMetadata) {
     publisher: meta.publisher,
     publishedAt: meta.publishedAt,
     thumbnailUrl: meta.thumbnailUrl,
-    seriesName: meta.seriesName,
-    seriesPosition: meta.seriesPosition,
   };
   if (meta.isbn13) {
     return prisma.book.upsert({

@@ -12,7 +12,6 @@ import { requireUser, withChrome } from "./_helpers.js";
 const updateSchema = z.object({
   condition: z.enum(["", ...CONDITIONS]).optional(),
   edition: z.enum(["", ...EDITIONS]).optional(),
-  location: z.string().max(200).optional(),
   notes: z.string().max(2000).optional(),
 });
 
@@ -39,7 +38,12 @@ export async function copyRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>("/library/copy/:id", async (req, reply) => {
     const copy = await prisma.physicalCopy.findUnique({
       where: { id: req.params.id },
-      include: { book: true, addedBy: true, library: true },
+      include: {
+        book: true,
+        addedBy: true,
+        library: true,
+        shelves: { include: { shelf: true } },
+      },
     });
     if (!copy) return reply.status(404).send("Not found");
     const completions = await prisma.completion.findMany({
@@ -47,9 +51,19 @@ export async function copyRoutes(app: FastifyInstance) {
       include: { user: true },
       orderBy: { createdAt: "desc" },
     });
+    const libraryShelves = await prisma.shelf.findMany({
+      where: { libraryId: copy.libraryId },
+      orderBy: { name: "asc" },
+    });
     return reply.view(
       "copy.ejs",
-      await withChrome(req, { copy, completions, editions: EDITIONS, conditions: CONDITIONS })
+      await withChrome(req, {
+        copy,
+        completions,
+        editions: EDITIONS,
+        conditions: CONDITIONS,
+        libraryShelves,
+      })
     );
   });
 
@@ -64,7 +78,6 @@ export async function copyRoutes(app: FastifyInstance) {
       data: {
         condition: blankToNull(data.condition),
         edition: blankToNull(data.edition),
-        location: data.location?.trim() || null,
         notes: data.notes?.trim() || null,
       },
     });

@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../shared/db.js";
 import { audit } from "../../shared/audit.js";
-import { findOrCreateTag } from "../../shared/tags.js";
 import { isStale, refreshOpenLibraryRatings } from "../../shared/openlibrary-ratings.js";
 import { requireUser, withChrome } from "./_helpers.js";
 
@@ -13,12 +12,6 @@ const editSchema = z.object({
   publishedAt: z.string().max(50).optional().default(""),
   isbn13: z.string().max(13).optional().default(""),
   thumbnailUrl: z.string().max(2000).optional().default(""),
-  seriesName: z.string().max(200).optional().default(""),
-  seriesPosition: z.string().optional().default(""),
-});
-
-const addTagSchema = z.object({
-  name: z.string().min(1).max(64),
 });
 
 function blankToNull(v: string | undefined): string | null {
@@ -27,15 +20,16 @@ function blankToNull(v: string | undefined): string | null {
 
 export async function bookRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>("/books/:id", async (req, reply) => {
-    const book = await prisma.book.findUnique({
-      where: { id: req.params.id },
-      include: { tags: { include: { tag: true } } },
-    });
+    const book = await prisma.book.findUnique({ where: { id: req.params.id } });
     if (!book) return reply.status(404).send("Not found");
     const [copies, completions, trophies] = await Promise.all([
       prisma.physicalCopy.findMany({
         where: { bookId: book.id },
-        include: { addedBy: true, library: true },
+        include: {
+          addedBy: true,
+          library: true,
+          shelves: { include: { shelf: true } },
+        },
         orderBy: { addedAt: "desc" },
       }),
       prisma.completion.findMany({
@@ -48,14 +42,20 @@ export async function bookRoutes(app: FastifyInstance) {
         include: { requestedBy: true, library: true },
       }),
     ]);
-    // Lazy refresh of Open Library rating cache. Fire and forget so the
-    // page render isn't blocked on the upstream API.
     if (book.isbn13 && isStale(book.olFetchedAt)) {
       void refreshOpenLibraryRatings(book.id);
     }
+    const shelfMap = new Map<string, { id: string; name: string; slug: string }>();
+    copies.forEach((c) =>
+      c.shelves.forEach((sc) => {
+        if (!shelfMap.has(sc.shelf.id))
+          shelfMap.set(sc.shelf.id, { id: sc.shelf.id, name: sc.shelf.name, slug: sc.shelf.slug });
+      })
+    );
+    const shelves = Array.from(shelfMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     return reply.view(
       "book.ejs",
-      await withChrome(req, { book, copies, completions, trophies })
+      await withChrome(req, { book, copies, completions, trophies, shelves })
     );
   });
 
@@ -83,8 +83,6 @@ export async function bookRoutes(app: FastifyInstance) {
       );
     }
     const d = parsed.data;
-    const positionNum = d.seriesPosition && d.seriesPosition.length > 0 ? Number(d.seriesPosition) : null;
-
     const updated = await prisma.book.update({
       where: { id: req.params.id },
       data: {
@@ -96,8 +94,6 @@ export async function bookRoutes(app: FastifyInstance) {
         publishedAt: blankToNull(d.publishedAt),
         isbn13: blankToNull(d.isbn13),
         thumbnailUrl: blankToNull(d.thumbnailUrl),
-        seriesName: blankToNull(d.seriesName),
-        seriesPosition: positionNum && !isNaN(positionNum) ? positionNum : null,
         source: "manual",
       },
     });
@@ -110,35 +106,4 @@ export async function bookRoutes(app: FastifyInstance) {
     });
     return reply.redirect(`/books/${updated.id}`);
   });
-
-  // ----- Tag attachment -----
-
-  app.post<{ Params: { id: string } }>("/books/:id/tags", async (req, reply) => {
-    const user = await requireUser(req, reply);
-    if (!user) return;
-    const parsed = addTagSchema.safeParse(req.body);
-    if (!parsed.success) return reply.redirect(`/books/${req.params.id}`);
-    const tag = await findOrCreateTag(parsed.data.name).catch(() => null);
-    if (!tag) return reply.redirect(`/books/${req.params.id}`);
-    await prisma.bookTag.upsert({
-      where: { bookId_tagId: { bookId: req.params.id, tagId: tag.id } },
-      create: { bookId: req.params.id, tagId: tag.id },
-      update: {},
-    });
-    return reply.redirect(`/books/${req.params.id}`);
-  });
-
-  app.post<{ Params: { id: string; tagId: string } }>(
-    "/books/:id/tags/:tagId/delete",
-    async (req, reply) => {
-      const user = await requireUser(req, reply);
-      if (!user) return;
-      await prisma.bookTag
-        .delete({
-          where: { bookId_tagId: { bookId: req.params.id, tagId: req.params.tagId } },
-        })
-        .catch(() => undefined);
-      return reply.redirect(`/books/${req.params.id}`);
-    }
-  );
 }

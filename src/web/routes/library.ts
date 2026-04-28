@@ -10,8 +10,7 @@ const VIEW_MODES = ["grid", "list"] as const;
 
 const querySchema = z.object({
   q: z.string().trim().optional(),
-  addedBy: z.string().trim().optional(),
-  tag: z.string().trim().optional(),
+  shelf: z.string().trim().optional(),
   sort: z.enum(SORT_FIELDS).default("added"),
   order: z.enum(["asc", "desc"]).default("desc"),
   view: z.enum(VIEW_MODES).default("grid"),
@@ -26,20 +25,18 @@ export async function libraryRoutes(app: FastifyInstance) {
     const params = parsed.success ? parsed.data : querySchema.parse({});
     const skip = (params.page - 1) * PAGE_SIZE;
 
-    const bookFilter: Record<string, unknown> = {};
-    if (params.q) {
-      bookFilter.OR = [
-        { title: { contains: params.q, mode: "insensitive" } },
-        { authors: { has: params.q } },
-      ];
-    }
-    if (params.tag) {
-      bookFilter.tags = { some: { tag: { slug: params.tag } } };
-    }
-
     const where: Record<string, unknown> = {};
-    if (Object.keys(bookFilter).length > 0) where.book = bookFilter;
-    if (params.addedBy) where.addedByUserId = params.addedBy;
+    if (params.q) {
+      where.book = {
+        OR: [
+          { title: { contains: params.q, mode: "insensitive" } },
+          { authors: { has: params.q } },
+        ],
+      };
+    }
+    if (params.shelf) {
+      where.shelves = { some: { shelf: { slug: params.shelf } } };
+    }
 
     const orderBy = (() => {
       const dir = params.order;
@@ -54,31 +51,29 @@ export async function libraryRoutes(app: FastifyInstance) {
       }
     })();
 
-    const [copies, total, members, activeTag] = await Promise.all([
+    const [copies, total, activeShelf] = await Promise.all([
       prisma.physicalCopy.findMany({
         where,
-        include: { book: true, addedBy: true, library: true },
+        include: { book: true, library: true, shelves: { include: { shelf: true } } },
         orderBy,
         take: PAGE_SIZE,
         skip,
       }),
       prisma.physicalCopy.count({ where }),
-      prisma.user.findMany({ orderBy: { displayName: "asc" } }),
-      params.tag
-        ? prisma.tag.findUnique({ where: { slug: params.tag } })
+      params.shelf
+        ? prisma.shelf.findFirst({ where: { slug: params.shelf } })
         : Promise.resolve(null),
     ]);
 
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const ctx = await withChrome(req, {
       copies,
-      members,
       params,
       total,
       totalPages,
       pageSize: PAGE_SIZE,
       sortFields: SORT_FIELDS,
-      activeTag,
+      activeShelf,
     });
     return reply.view("library.ejs", ctx);
   });

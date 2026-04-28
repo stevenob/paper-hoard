@@ -20,6 +20,7 @@ model Library {
   physicalCopies  PhysicalCopy[]
   trophies        Trophy[]
   completions     Completion[]
+  shelves         Shelf[]
 }
 
 model User {
@@ -55,8 +56,6 @@ model Book {
   publishedAt    String?
   thumbnailUrl   String?
   source         String?        // "google_books" | "open_library" | "manual"
-  seriesName     String?
-  seriesPosition Float?
   olWorkId       String?
   olRatingAvg    Float?
   olRatingCount  Int?
@@ -66,26 +65,6 @@ model Book {
   physicalCopies PhysicalCopy[]
   completions    Completion[]
   trophies       Trophy[]
-  tags           BookTag[]
-}
-
-model Tag {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-
-  books     BookTag[]
-}
-
-model BookTag {
-  book      Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  bookId    String
-  tag       Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
-  tagId     String
-
-  @@id([bookId, tagId])
-  @@index([tagId])
 }
 
 model PhysicalCopy {
@@ -98,10 +77,36 @@ model PhysicalCopy {
   addedByUserId String
   condition     String?
   edition       String?
-  location      String?
   notes         String?
   coverPath     String?
   addedAt       DateTime @default(now())
+
+  shelves       ShelfCopy[]
+}
+
+model Shelf {
+  id        String   @id @default(cuid())
+  library   Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  libraryId String
+  name      String
+  slug      String
+  isOrdered Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  copies    ShelfCopy[]
+
+  @@unique([libraryId, slug])
+}
+
+model ShelfCopy {
+  shelf    Shelf        @relation(fields: [shelfId], references: [id], onDelete: Cascade)
+  shelfId  String
+  copy     PhysicalCopy @relation(fields: [copyId], references: [id], onDelete: Cascade)
+  copyId   String
+  position Float?
+
+  @@id([shelfId, copyId])
+  @@index([copyId])
 }
 
 model Completion {

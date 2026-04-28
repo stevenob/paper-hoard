@@ -1,0 +1,49 @@
+<% const pageTitle = shelf.name %>
+<%- include('_header') %>
+
+<p><a href="/shelves">← all shelves</a></p>
+
+<h1><%= shelf.name %><% if (shelf.isOrdered) { %> <span class="hint">(ordered)</span><% } %></h1>
+
+<% if (activeUser) { %>
+<details class="shelf-edit">
+  <summary>Edit shelf</summary>
+  <form method="post" action="/shelves/<%= shelf.id %>/edit" class="stacked">
+    <label>Name <input name="name" value="<%= shelf.name %>" required maxlength="100" /></label>
+    <label class="inline"><input type="checkbox" name="isOrdered" <%= shelf.isOrdered ? 'checked' : '' %> /> Ordered (preserve position when listing)</label>
+    <button type="submit">Save</button>
+  </form>
+  <form method="post" action="/shelves/<%= shelf.id %>/delete" onsubmit="return confirm('Delete this shelf? Books on it stay; only the shelf membership is removed.')">
+    <button type="submit" class="danger">Delete shelf</button>
+  </form>
+</details>
+<% } %>
+
+<% if (items.length === 0) { %>
+  <p>No copies on this shelf yet.</p>
+<% } else { %>
+  <ul class="poster-grid poster-grid-compact">
+    <% items.forEach(function(it) {
+      const c = it.copy;
+      const cover = c.coverPath ? '/uploads/' + c.coverPath : c.book.thumbnailUrl;
+    %>
+      <li class="poster">
+        <a href="/library/copy/<%= c.id %>" class="poster-link" aria-label="<%= c.book.title %>">
+          <% if (cover) { %>
+            <img src="<%= cover %>" alt="" loading="lazy" />
+          <% } else { %>
+            <div class="poster-fallback"><span><%= c.book.title %></span></div>
+          <% } %>
+          <div class="poster-meta">
+            <strong class="poster-title"><% if (shelf.isOrdered && it.position !== null) { %>#<%= it.position %> · <% } %><%= c.book.title %></strong>
+            <span class="poster-author"><%= c.book.authors.join(', ') %></span>
+          </div>
+        </a>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<p class="hint"><a href="/library?shelf=<%= shelf.slug %>">View in library list →</a></p>
+
+<%- include('_footer') %>

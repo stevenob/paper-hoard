@@ -95,7 +95,6 @@ export async function importRoutes(app: FastifyInstance) {
                 addedByUserId: user.id,
                 condition: r.condition ?? null,
                 edition: r.edition ?? null,
-                location: r.location ?? null,
                 notes: r.notes ?? null,
               },
             });

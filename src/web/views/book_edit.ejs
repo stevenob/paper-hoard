@@ -19,8 +19,6 @@ Marks the book as <code>source: manual</code> so future scans of the same ISBN d
     <label>Published <input name="publishedAt" value="<%= book.publishedAt || '' %>" placeholder="2021-05-04" maxlength="50" /></label>
     <label>ISBN-13 <input name="isbn13" value="<%= book.isbn13 || '' %>" maxlength="13" inputmode="numeric" /></label>
     <label>Cover image URL <input name="thumbnailUrl" value="<%= book.thumbnailUrl || '' %>" maxlength="2000" placeholder="https://…" /></label>
-    <label>Series name <input name="seriesName" value="<%= book.seriesName || '' %>" maxlength="200" placeholder="e.g. Mistborn" /></label>
-    <label>Series position <input name="seriesPosition" value="<%= book.seriesPosition !== null ? book.seriesPosition : '' %>" inputmode="decimal" placeholder="1, 1.5, 2…" /></label>
     <button type="submit">Save</button>
   </fieldset>
 </form>

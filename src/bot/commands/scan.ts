@@ -245,15 +245,6 @@ export const scanCommand: BotCommand = {
           ),
           new ActionRowBuilder<TextInputBuilder>().addComponents(
             new TextInputBuilder()
-              .setCustomId("location")
-              .setLabel("Location (e.g. Living room shelf)")
-              .setRequired(false)
-              .setStyle(TextInputStyle.Short)
-              .setMaxLength(200)
-              .setValue(copy.location ?? "")
-          ),
-          new ActionRowBuilder<TextInputBuilder>().addComponents(
-            new TextInputBuilder()
               .setCustomId("notes")
               .setLabel("Notes")
               .setRequired(false)
@@ -353,11 +344,10 @@ export const scanCommand: BotCommand = {
     if (kind !== "detail-modal" || !copyId) return;
     const condition = interaction.fields.getTextInputValue("condition")?.trim() || null;
     const edition = interaction.fields.getTextInputValue("edition")?.trim() || null;
-    const location = interaction.fields.getTextInputValue("location")?.trim() || null;
     const notes = interaction.fields.getTextInputValue("notes")?.trim() || null;
     await prisma.physicalCopy.update({
       where: { id: copyId },
-      data: { condition, edition, location, notes },
+      data: { condition, edition, notes },
     });
     await interaction.reply({
       content: "Saved.",

@@ -59,15 +59,42 @@
         <% }) %>
       </select>
     </label>
-    <label>Location
-      <input name="location" value="<%= copy.location || '' %>" placeholder="e.g. Living room shelf" maxlength="200" />
-    </label>
     <label>Notes
       <textarea name="notes" rows="3" maxlength="2000"><%= copy.notes || '' %></textarea>
     </label>
     <button type="submit">Save</button>
   </fieldset>
 </form>
+
+<h2>Shelves</h2>
+<% if (copy.shelves && copy.shelves.length > 0) { %>
+  <p class="tag-chips">
+    <% copy.shelves.forEach(function(sc) { %>
+      <span class="pill pill-tag">
+        <a href="/shelves/<%= sc.shelf.slug %>"><%= sc.shelf.name %></a>
+        <% if (activeUser) { %>
+          <form method="post" action="/library/copy/<%= copy.id %>/shelves/<%= sc.shelf.id %>/delete" style="display:inline">
+            <button type="submit" title="Remove from shelf" aria-label="Remove from shelf"
+              style="background:transparent;border:0;color:inherit;cursor:pointer;padding:0 0 0 .25rem;">×</button>
+          </form>
+        <% } %>
+      </span>
+    <% }) %>
+  </p>
+<% } else { %>
+  <p class="hint">Not on any shelves.</p>
+<% } %>
+<% if (activeUser) { %>
+  <form method="post" action="/library/copy/<%= copy.id %>/shelves" class="add-tag">
+    <input list="shelf-options" name="name" placeholder="Add to shelf (existing or new)" maxlength="100" required />
+    <button type="submit">+</button>
+  </form>
+  <datalist id="shelf-options">
+    <% (libraryShelves || []).forEach(function(s) { %>
+      <option value="<%= s.name %>"></option>
+    <% }) %>
+  </datalist>
+<% } %>
 
 <% if (activeUser) { %>
   <h2>Danger zone</h2>

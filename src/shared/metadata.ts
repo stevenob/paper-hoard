@@ -10,8 +10,6 @@ export interface BookMetadata {
   publisher?: string;
   publishedAt?: string;
   thumbnailUrl?: string;
-  seriesName?: string;
-  seriesPosition?: number;
   edition?: string; // mapped to our picklist when sources expose physical_format
   source: "google_books" | "open_library" | "manual";
 }
@@ -62,9 +60,6 @@ function volumeToMetadata(v: GoogleVolume): BookMetadata {
   const ids = v.volumeInfo.industryIdentifiers ?? [];
   const isbn13 = ids.find((i) => i.type === "ISBN_13")?.identifier;
   const isbn10 = ids.find((i) => i.type === "ISBN_10")?.identifier;
-  const series = detectSeriesFromTitle(v.volumeInfo.title, v.volumeInfo.subtitle);
-  const positionStr = v.volumeInfo.seriesInfo?.bookDisplayNumber;
-  const position = positionStr ? Number(positionStr) : series?.position;
   return {
     isbn13: isbn13 ? normalizeIsbn(isbn13) : undefined,
     isbn10: isbn10 ? normalizeIsbn(isbn10) : undefined,
@@ -73,33 +68,8 @@ function volumeToMetadata(v: GoogleVolume): BookMetadata {
     publisher: v.volumeInfo.publisher,
     publishedAt: v.volumeInfo.publishedDate,
     thumbnailUrl: v.volumeInfo.imageLinks?.thumbnail,
-    seriesName: series?.name,
-    seriesPosition: typeof position === "number" && !isNaN(position) ? position : undefined,
     source: "google_books",
   };
-}
-
-/**
- * Best-effort series detection from a title string. Catches common patterns:
- *   "The Final Empire (Mistborn, #1)"
- *   "Mistborn #1: The Final Empire"
- *   "The Final Empire: Mistborn Book One"
- * Returns nothing if the pattern isn't obvious — manual override on the book
- * detail page covers the rest.
- */
-function detectSeriesFromTitle(
-  title?: string,
-  subtitle?: string
-): { name: string; position?: number } | undefined {
-  const haystack = [title, subtitle].filter(Boolean).join(" : ");
-  if (!haystack) return undefined;
-  // Pattern: "(<series>, #<n>)" or "(<series> #<n>)" or "(<series>, Book <n>)"
-  const paren = haystack.match(/\(([^()]+?)[\s,]+(?:#|book\s+)([\d.]+)\)/i);
-  if (paren) return { name: paren[1].trim(), position: Number(paren[2]) };
-  // Pattern: "<series> #<n>: <rest>"
-  const prefix = haystack.match(/^(.+?)\s+#([\d.]+)\s*[:\-]/i);
-  if (prefix) return { name: prefix[1].trim(), position: Number(prefix[2]) };
-  return undefined;
 }
 
 async function fetchOpenLibraryEdition(isbn: string): Promise<OpenLibraryEdition | null> {

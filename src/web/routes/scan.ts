@@ -164,7 +164,6 @@ export async function scanRoutes(app: FastifyInstance) {
         id: c.id,
         edition: c.edition,
         condition: c.condition,
-        location: c.location,
         addedBy: c.addedBy.displayName,
         addedAt: c.addedAt.toISOString().slice(0, 10),
       })),

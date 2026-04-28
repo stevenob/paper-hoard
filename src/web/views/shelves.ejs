@@ -1,0 +1,21 @@
+<% const pageTitle = 'Shelves' %>
+<%- include('_header') %>
+
+<h1>Shelves</h1>
+
+<p class="hint">A shelf is any named collection of physical copies — a real bookcase ("Living room shelf 2"), a series ("Mistborn"), a theme ("To re-read"). Add a copy to a shelf from its detail page.</p>
+
+<% if (shelves.length === 0) { %>
+  <p>No shelves yet. They appear here as soon as you add a copy to one.</p>
+<% } else { %>
+  <ul class="shelf-list">
+    <% shelves.forEach(function(s) { %>
+      <li>
+        <a href="/shelves/<%= s.slug %>" class="pill pill-tag"><%= s.name %><% if (s.isOrdered) { %> ▦<% } %></a>
+        <span class="hint"><%= s._count.copies %> book<%= s._count.copies === 1 ? '' : 's' %></span>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<%- include('_footer') %>
