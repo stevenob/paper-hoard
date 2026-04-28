@@ -59,9 +59,6 @@
     <p class="hint" id="confirm-rating" hidden></p>
     <p id="confirm-trophy" class="trophy" hidden></p>
     <p id="confirm-dup" class="dup-warning" hidden></p>
-    <label id="confirm-share" class="share-toggle" hidden>
-      <input type="checkbox" id="confirm-share-input" /> Share to Discord channel
-    </label>
     <div class="confirm-actions">
       <button type="button" id="btn-confirm-add" class="primary">Add to library</button>
       <button type="button" id="btn-confirm-share" class="secondary" hidden>Share only</button>
@@ -114,8 +111,6 @@
     const confirmRating = document.getElementById('confirm-rating');
     const confirmTrophy = document.getElementById('confirm-trophy');
     const confirmDup = document.getElementById('confirm-dup');
-    const confirmShare = document.getElementById('confirm-share');
-    const confirmShareInput = document.getElementById('confirm-share-input');
     const btnConfirmAdd = document.getElementById('btn-confirm-add');
     const btnConfirmShare = document.getElementById('btn-confirm-share');
     const btnConfirmSkip = document.getElementById('btn-confirm-skip');
@@ -191,16 +186,9 @@
         confirmDup.hidden = true;
         btnConfirmAdd.textContent = 'Add to library';
       }
-      // Show the share-to-Discord toggle only when a notify channel is configured.
-      if (payload.shareEnabled) {
-        confirmShare.hidden = false;
-        confirmShareInput.checked = true;
-        btnConfirmShare.hidden = false;
-      } else {
-        confirmShare.hidden = true;
-        confirmShareInput.checked = false;
-        btnConfirmShare.hidden = true;
-      }
+      // Show the Share only button when a Discord channel is configured.
+      // Add-to-library will also auto-post to Discord in that case.
+      btnConfirmShare.hidden = !payload.shareEnabled;
       confirmCard.hidden = false;
       overlayStatus.textContent = 'Confirm to add, or skip.';
     }
@@ -214,9 +202,11 @@
     btnConfirmAdd.addEventListener('click', async function() {
       if (!pendingConfirm) return;
       const req = Object.assign({}, pendingConfirm.request);
-      if (confirmShareInput.checked) req.share = true;
+      // Auto-share to Discord whenever a channel is configured. The Share-only
+      // button is the way to opt out (post without saving). To save without
+      // posting, clear the channel on /about.
+      if (pendingConfirm.payload.shareEnabled) req.share = true;
       hideConfirm();
-      // submitLookup hits POST /scan which mutates and returns full payload.
       await submitLookup(req);
     });
     btnConfirmSkip.addEventListener('click', function() {
