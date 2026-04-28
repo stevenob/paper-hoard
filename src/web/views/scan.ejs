@@ -28,9 +28,27 @@
 <div id="camera-overlay" class="camera-overlay" hidden role="dialog" aria-modal="true" aria-label="Barcode scanner">
   <div class="camera-topbar">
     <span id="overlay-status">Scanning… point at the barcode on the back cover.</span>
+    <button type="button" id="btn-torch" class="ghost" aria-pressed="false" hidden>🔦</button>
     <button type="button" id="btn-done" class="primary">Done</button>
   </div>
-  <video id="video" playsinline muted autoplay aria-label="Camera feed"></video>
+  <div class="camera-stage">
+    <video id="video" playsinline muted autoplay aria-label="Camera feed"></video>
+    <div class="camera-mask" aria-hidden="true">
+      <div class="camera-mask-row top"></div>
+      <div class="camera-mask-mid">
+        <div class="camera-mask-row side"></div>
+        <div class="camera-reticle">
+          <span class="corner tl"></span>
+          <span class="corner tr"></span>
+          <span class="corner bl"></span>
+          <span class="corner br"></span>
+          <span class="scanline"></span>
+        </div>
+        <div class="camera-mask-row side"></div>
+      </div>
+      <div class="camera-mask-row bottom"></div>
+    </div>
+  </div>
   <div class="camera-toast" id="overlay-toast" hidden role="status" aria-live="polite"></div>
   <!-- Confirm card shown after a successful barcode decode + lookup. -->
   <div id="confirm-card" class="confirm-card" hidden role="dialog" aria-label="Confirm scanned book">
@@ -109,6 +127,9 @@
     let busy = false;
     let toastTimer = null;
     let pendingConfirm = null;
+    let mediaStream = null;
+    let wakeLock = null;
+    const btnTorch = document.getElementById('btn-torch');
 
     function setStatus(msg) {
       status.textContent = msg || '';
@@ -332,8 +353,50 @@
         setStatus('Ignored non-ISBN barcode: ' + text);
         return;
       }
+      // Haptic feedback if the device supports it (Android, no-op on iOS).
+      if (navigator.vibrate) navigator.vibrate(40);
       previewLookup({ isbn: cleaned });
     }
+
+    async function tryAcquireWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+      } catch {
+        /* permission denied or not supported */
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) {
+        wakeLock.release().catch(() => undefined);
+        wakeLock = null;
+      }
+    }
+
+    function maybeShowTorch() {
+      if (!mediaStream) return;
+      const track = mediaStream.getVideoTracks()[0];
+      if (!track) return;
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (caps && 'torch' in caps) {
+        btnTorch.hidden = false;
+      }
+    }
+
+    btnTorch.addEventListener('click', async function() {
+      if (!mediaStream) return;
+      const track = mediaStream.getVideoTracks()[0];
+      if (!track) return;
+      const on = btnTorch.getAttribute('aria-pressed') !== 'true';
+      try {
+        await track.applyConstraints({ advanced: [{ torch: on }] });
+        btnTorch.setAttribute('aria-pressed', String(on));
+        btnTorch.classList.toggle('active', on);
+      } catch (err) {
+        showToast('Torch unavailable', false);
+      }
+    });
 
     async function startCamera() {
       if (!hasZxing) return;
@@ -349,6 +412,9 @@
         controls = await reader.decodeFromVideoDevice(deviceId, video, function(result) {
           if (result) onDecoded(result.getText());
         });
+        mediaStream = video.srcObject;
+        maybeShowTorch();
+        tryAcquireWakeLock();
         overlayStatus.textContent = 'Scanning…';
         setStatus('Camera open. Tap Done to close.');
       } catch (err) {
@@ -363,6 +429,11 @@
     function stopCamera() {
       if (controls) controls.stop();
       controls = null;
+      mediaStream = null;
+      btnTorch.hidden = true;
+      btnTorch.setAttribute('aria-pressed', 'false');
+      btnTorch.classList.remove('active');
+      releaseWakeLock();
       overlay.hidden = true;
       document.body.classList.remove('camera-open');
       overlayToast.hidden = true;

@@ -136,10 +136,42 @@ button.primary { background: var(--accent); }
 .camera-overlay { position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column; }
 .camera-overlay[hidden] { display: none; }
 body.camera-open { overflow: hidden; }
-.camera-topbar { display: flex; justify-content: space-between; align-items: center; padding: .75rem 1rem; background: rgba(0, 0, 0, 0.85); color: #f6f0e2; gap: 1rem; }
+.camera-topbar { display: flex; justify-content: space-between; align-items: center; padding: .75rem 1rem; background: rgba(0, 0, 0, 0.85); color: #f6f0e2; gap: .5rem; }
 .camera-topbar #overlay-status { flex: 1; min-width: 0; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .camera-topbar button { padding: .5rem 1.1rem; font-size: 1rem; }
-.camera-overlay video { flex: 1; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.camera-topbar button.ghost { background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.25); padding: .5rem .8rem; }
+.camera-topbar button.ghost.active { background: #ffd86b; color: #1a1a1a; border-color: #ffd86b; }
+
+.camera-stage { position: relative; flex: 1; min-height: 0; background: #000; }
+.camera-stage video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Reticle + dimmed mask outside the scan zone. */
+.camera-mask { position: absolute; inset: 0; display: flex; flex-direction: column; pointer-events: none; }
+.camera-mask-row { background: rgba(0, 0, 0, 0.55); }
+.camera-mask-row.top, .camera-mask-row.bottom { flex: 1; }
+.camera-mask-mid { display: flex; height: 35vh; min-height: 160px; max-height: 260px; }
+.camera-mask-row.side { flex: 1; background: rgba(0, 0, 0, 0.55); }
+.camera-reticle { position: relative; flex-basis: min(85%, 360px); }
+.camera-reticle .corner { position: absolute; width: 22px; height: 22px; border: 3px solid #ffd86b; }
+.camera-reticle .tl { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 6px; }
+.camera-reticle .tr { top: 0; right: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 6px; }
+.camera-reticle .bl { bottom: 0; left: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 6px; }
+.camera-reticle .br { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 6px; }
+.camera-reticle .scanline {
+  position: absolute;
+  left: 12px; right: 12px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #ff5252 20%, #ff5252 80%, transparent);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(255, 82, 82, 0.7);
+  animation: scan-sweep 1.8s ease-in-out infinite;
+}
+@keyframes scan-sweep {
+  0% { top: 8%; }
+  50% { top: 92%; }
+  100% { top: 8%; }
+}
+
 .camera-toast { position: absolute; left: 50%; bottom: 5rem; transform: translateX(-50%); padding: .5rem 1rem; border-radius: 999px; color: white; font-weight: 600; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); pointer-events: none; }
 .camera-toast.ok { background: #2a8f3f; }
 .camera-toast.err { background: var(--danger); }
