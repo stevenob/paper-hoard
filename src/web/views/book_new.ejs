@@ -1,0 +1,40 @@
+<% const pageTitle = 'Add a book manually' %>
+<%- include('_header') %>
+
+<p><a href="/library">← back to library</a></p>
+
+<h1>Add a book manually</h1>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<% if (!activeUser) { %><p class="notice">You need to <a href="/auth/login">log in</a> to add a book.</p><% } %>
+
+<p class="hint">Use this when Google Books and Open Library don't know the book — vintage editions, self-published, regional reprints, etc. Creates a new Book record (marked <code>source: manual</code>) and a physical copy in your library.</p>
+
+<form method="post" action="/books/new" class="stacked">
+  <fieldset <%= activeUser ? '' : 'disabled' %>>
+    <label>Title <input name="title" value="<%= prefill.title || '' %>" required maxlength="500" autofocus /></label>
+    <label>Authors <span class="hint">(comma-separated)</span>
+      <input name="authors" value="<%= prefill.authors || '' %>" maxlength="1000" placeholder="Andy Weir, Co-Author Name" />
+    </label>
+    <label>Publisher <input name="publisher" value="<%= prefill.publisher || '' %>" maxlength="200" /></label>
+    <label>Published <input name="publishedAt" value="<%= prefill.publishedAt || '' %>" placeholder="2021-05-04 or just 1973" maxlength="50" /></label>
+    <label>ISBN-13 <span class="hint">(optional — leave blank if there isn't one)</span>
+      <input name="isbn13" value="<%= prefill.isbn13 || '' %>" maxlength="13" inputmode="numeric" placeholder="9780593135204" />
+    </label>
+    <label>Cover image URL <span class="hint">(optional)</span>
+      <input name="thumbnailUrl" value="" maxlength="2000" placeholder="https://…" />
+    </label>
+    <label>Edition
+      <select name="edition">
+        <option value="">—</option>
+        <% editions.forEach(function(e) { %>
+          <option value="<%= e %>"><%= e %></option>
+        <% }) %>
+      </select>
+    </label>
+    <button type="submit">Add book and copy</button>
+    <a href="/library" class="hint">cancel</a>
+  </fieldset>
+</form>
+
+<%- include('_footer') %>

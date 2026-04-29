@@ -68,6 +68,27 @@
       </div>
     </div>
   </div>
+
+  <!-- Fallback card: shown when an ISBN lookup found nothing in either
+       Google Books or Open Library. Lets the user retry by title without
+       leaving the camera overlay, and falls through to /books/new for
+       truly obscure books. -->
+  <div id="fallback-card" class="confirm-card fallback-card" hidden role="dialog" aria-label="Lookup failed — try title">
+    <h2 class="confirm-title">Couldn't find that book</h2>
+    <p class="confirm-meta" id="fallback-isbn"></p>
+    <p class="hint">Search by title instead — vintage and self-published books often aren't in Google Books or Open Library.</p>
+    <form id="fallback-form" class="stacked">
+      <label>Title <input id="fallback-title" name="title" autocomplete="off" required maxlength="200" /></label>
+      <label>Author <input id="fallback-author" name="author" autocomplete="off" placeholder="Optional — narrows search" maxlength="200" /></label>
+      <div class="confirm-actions">
+        <button type="submit" class="primary big">🔍 Search by title</button>
+        <div class="confirm-secondary">
+          <a id="fallback-manual-link" class="link-trophy" href="/books/new">✍️ Add manually</a>
+          <button type="button" id="btn-fallback-skip" class="link-skip">Skip</button>
+        </div>
+      </div>
+    </form>
+  </div>
 </div>
 
 <h2>Or look up manually</h2>
@@ -225,6 +246,61 @@
       overlayStatus.textContent = 'Scanning…';
     }
 
+    // ---- Fallback card (ISBN miss → title search) -------------------------
+    const fallbackCard = document.getElementById('fallback-card');
+    const fallbackIsbnEl = document.getElementById('fallback-isbn');
+    const fallbackForm = document.getElementById('fallback-form');
+    const fallbackTitleEl = document.getElementById('fallback-title');
+    const fallbackAuthorEl = document.getElementById('fallback-author');
+    const fallbackManualLink = document.getElementById('fallback-manual-link');
+    const btnFallbackSkip = document.getElementById('btn-fallback-skip');
+    let lastFailedIsbn = null;
+
+    function showFallback(isbn) {
+      lastFailedIsbn = isbn || null;
+      fallbackTitleEl.value = '';
+      fallbackAuthorEl.value = '';
+      fallbackIsbnEl.textContent = isbn ? 'ISBN ' + isbn + ' wasn\u2019t found.' : '';
+      // "Add manually" deep-links to /books/new with whatever the user has
+      // typed plus the failed ISBN, so they don't have to retype anything.
+      function syncManualLink() {
+        const params = new URLSearchParams();
+        if (lastFailedIsbn) params.set('isbn', lastFailedIsbn);
+        if (fallbackTitleEl.value.trim()) params.set('title', fallbackTitleEl.value.trim());
+        if (fallbackAuthorEl.value.trim()) params.set('authors', fallbackAuthorEl.value.trim());
+        fallbackManualLink.href = '/books/new' + (params.toString() ? '?' + params.toString() : '');
+      }
+      fallbackTitleEl.oninput = syncManualLink;
+      fallbackAuthorEl.oninput = syncManualLink;
+      syncManualLink();
+      fallbackCard.hidden = false;
+      // Defer focus so iOS Safari doesn't drop the soft keyboard immediately.
+      setTimeout(function() { fallbackTitleEl.focus(); }, 50);
+      overlayStatus.textContent = 'Search by title or add manually.';
+    }
+
+    function hideFallback() {
+      fallbackCard.hidden = true;
+      lastFailedIsbn = null;
+      overlayStatus.textContent = 'Scanning…';
+    }
+
+    fallbackForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const title = fallbackTitleEl.value.trim();
+      const author = fallbackAuthorEl.value.trim();
+      if (!title) return;
+      hideFallback();
+      // Reset the ISBN debouncer so a follow-up scan of the same barcode
+      // still works after the user takes the title path.
+      lastSubmitted = null;
+      previewLookup({ title: title, author: author || undefined });
+    });
+    btnFallbackSkip.addEventListener('click', function() {
+      hideFallback();
+      lastSubmitted = null;
+    });
+
     btnConfirmAdd.addEventListener('click', async function() {
       if (!pendingConfirm) return;
       const req = Object.assign({}, pendingConfirm.request);
@@ -340,15 +416,28 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-        .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+        .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, status: res.status, json: j }; }); })
         .then(function(r) {
           if (r.ok && r.json && r.json.ok) {
             serverData = r.json;
             paint();
           } else if (!painted) {
-            // Server failure with no client data either → surface error.
-            showToast((r.json && r.json.error) || 'Not found', false);
-            overlayStatus.textContent = 'Scanning…';
+            // Server failure with no client data either. Recovery paths:
+            //   • ISBN 404 → in-overlay fallback card (try by title)
+            //   • Title 404 (already tried both) → /books/new with prefill
+            //   • Other errors (auth, network) → toast and resume scanning
+            if (r.status === 404 && payload.isbn) {
+              showFallback(payload.isbn);
+            } else if (r.status === 404 && payload.title) {
+              const params = new URLSearchParams();
+              if (lastFailedIsbn) params.set('isbn', lastFailedIsbn);
+              if (payload.title) params.set('title', payload.title);
+              if (payload.author) params.set('authors', payload.author);
+              window.location.href = '/books/new?' + params.toString();
+            } else {
+              showToast((r.json && r.json.error) || 'Not found', false);
+              overlayStatus.textContent = 'Scanning…';
+            }
             lastSubmitted = null;
           }
         })
@@ -723,6 +812,7 @@
       document.body.classList.remove('camera-open');
       overlayToast.hidden = true;
       hideConfirm();
+      hideFallback();
       setStatus('');
     }
 
