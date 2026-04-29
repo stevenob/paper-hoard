@@ -1,0 +1,72 @@
+<% const pageTitle = 'Duplicate books' %>
+<%- include('_header') %>
+
+<h1>🧹 Duplicate books</h1>
+<p class="hint">Books with the same title + primary author but separate Book records (often paperback vs hardcover scanned as different ISBNs). Merging keeps all physical copies, completions, and trophies — only the duplicate Book rows go away.</p>
+
+<% if (dupes.length === 0) { %>
+  <p>✨ No exact duplicates found. Your catalog is clean.</p>
+<% } else { %>
+  <% dupes.forEach(function(g) { %>
+    <section class="dupe-group">
+      <h2><%= g.books[0].title %> <span class="hint">— <%= g.primaryAuthor %></span></h2>
+      <table class="data dupe-table">
+        <thead>
+          <tr>
+            <th>Cover</th>
+            <th>Title</th>
+            <th>ISBN</th>
+            <th>Publisher / Year</th>
+            <th>Copies / Trophies</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% g.books.forEach(function(b, idx) { %>
+            <tr>
+              <td>
+                <% if (b.thumbnailUrl) { %>
+                  <img src="<%= b.thumbnailUrl %>" alt="" style="height:64px;width:auto;border-radius:4px;">
+                <% } else { %>—<% } %>
+              </td>
+              <td>
+                <a href="/books/<%= b.id %>"><%= b.title %></a>
+                <% if (b.authors.join(', ') !== g.primaryAuthor) { %>
+                  <div class="hint"><%= b.authors.join(', ') %></div>
+                <% } %>
+              </td>
+              <td data-label="ISBN"><%= b.isbn13 || '—' %></td>
+              <td data-label="Publisher">
+                <%= b.publisher || '—' %><% if (b.publishedAt) { %> · <%= b.publishedAt %><% } %>
+              </td>
+              <td data-label="Counts">
+                <%= b.copyCount %> copy/copies
+                <% if (b.trophyCount > 0) { %> · 🏆 <%= b.trophyCount %><% } %>
+                <% if (b.completionCount > 0) { %> · ✓ <%= b.completionCount %><% } %>
+              </td>
+              <td>
+                <% if (activeUser) { %>
+                  <details class="merge-picker">
+                    <summary class="link">Merge…</summary>
+                    <form method="post" action="/books/<%= b.id %>/merge" class="merge-form" onsubmit="return confirm('Merge this Book row into the selected one? Physical copies and completions will be repointed.')">
+                      <p class="hint">Merge "<%= b.title %>" <em>(this row)</em> into:</p>
+                      <% g.books.filter(function(x){ return x.id !== b.id; }).forEach(function(other) { %>
+                        <label class="merge-target">
+                          <input type="radio" name="intoBookId" value="<%= other.id %>" required>
+                          <span><%= other.title %> — <%= other.isbn13 || 'no ISBN' %> · <%= other.copyCount %> copy/copies</span>
+                        </label>
+                      <% }) %>
+                      <button type="submit" class="danger">Merge</button>
+                    </form>
+                  </details>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </section>
+  <% }) %>
+<% } %>
+
+<%- include('_footer') %>

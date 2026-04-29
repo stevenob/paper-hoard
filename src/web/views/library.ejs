@@ -19,7 +19,6 @@
     <a href="<%= withParam('view', 'list') %>" class="view-toggle-btn <%= params.view === 'list' ? 'active' : '' %>" role="tab" aria-selected="<%= params.view === 'list' %>">≡ List</a>
   </div>
 </div>
-
 <form method="get" action="/library" class="library-filters">
   <label><span class="hint">Search</span>
     <input type="search" name="q" value="<%= params.q || '' %>" placeholder="Title or author" />
@@ -77,13 +76,23 @@
     <% }) %>
   </ul>
 <% } else { %>
-  <table class="data">
+  <% if (activeUser) { %>
+    <p class="hint">Tip: tick rows to bulk-edit. <a href="/library/dupes">Find duplicate books →</a></p>
+  <% } %>
+  <form method="post" action="/library/bulk-edit" id="bulk-form">
+  <table class="data library-list">
     <thead>
-      <tr><th>Title</th><th>Authors</th><th>Condition</th><th>Edition</th><th>Location</th><th>Added</th></tr>
+      <tr>
+        <% if (activeUser) { %><th><input type="checkbox" id="bulk-select-all" aria-label="Select all"></th><% } %>
+        <th>Title</th><th>Authors</th><th>Condition</th><th>Edition</th><th>Shelves</th><th>Added</th>
+      </tr>
     </thead>
     <tbody>
       <% copies.forEach(function(c) { %>
         <tr>
+          <% if (activeUser) { %>
+            <td><input type="checkbox" name="copyIds" value="<%= c.id %>" class="bulk-row-checkbox" aria-label="Select copy"></td>
+          <% } %>
           <td data-label="Title"><a href="/library/copy/<%= c.id %>"><%= c.book.title %></a></td>
           <td data-label="Authors"><% if (c.book.authors && c.book.authors.length > 0) { %><% c.book.authors.forEach(function(a, i) { %><% if (i > 0) { %>, <% } %><% const aslug = authorSlug(a); %><% if (aslug) { %><a href="/authors/<%= aslug %>"><%= a %></a><% } else { %><%= a %><% } %><% }) %><% } %></td>
           <td data-label="Condition"><%= c.condition || '—' %></td>
@@ -94,6 +103,76 @@
       <% }) %>
     </tbody>
   </table>
+  <% if (activeUser) { %>
+    <div id="bulk-bar" class="bulk-bar" hidden>
+      <span><strong id="bulk-count">0</strong> selected</span>
+      <select name="action" id="bulk-action">
+        <option value="add-shelf">Add to shelf</option>
+        <option value="remove-shelf">Remove from shelf</option>
+        <option value="set-edition">Set edition</option>
+        <option value="set-condition">Set condition</option>
+        <option value="trash">Move to trash</option>
+      </select>
+      <input type="text" name="value" id="bulk-value" list="bulk-value-options" placeholder="value" />
+      <datalist id="bulk-value-options"></datalist>
+      <button type="submit" class="primary">Apply</button>
+    </div>
+  <% } %>
+  </form>
+  <script>
+    (function() {
+      const form = document.getElementById('bulk-form');
+      if (!form) return;
+      const bar = document.getElementById('bulk-bar');
+      if (!bar) return;
+      const countEl = document.getElementById('bulk-count');
+      const action = document.getElementById('bulk-action');
+      const value = document.getElementById('bulk-value');
+      const dl = document.getElementById('bulk-value-options');
+      const all = document.getElementById('bulk-select-all');
+      const rows = form.querySelectorAll('.bulk-row-checkbox');
+
+      const editions = <%- JSON.stringify(['hardcover','paperback','mass-market','special','signed','boxset','other']) %>;
+      const conditions = <%- JSON.stringify(['new','like-new','good','fair','poor']) %>;
+
+      function refresh() {
+        const checked = form.querySelectorAll('.bulk-row-checkbox:checked');
+        const n = checked.length;
+        countEl.textContent = String(n);
+        bar.hidden = n === 0;
+      }
+      function syncDatalist() {
+        dl.innerHTML = '';
+        let opts = [];
+        if (action.value === 'set-edition') opts = editions;
+        else if (action.value === 'set-condition') opts = conditions;
+        else opts = []; // shelf names: free text
+        opts.forEach(function(o) {
+          const opt = document.createElement('option');
+          opt.value = o;
+          dl.appendChild(opt);
+        });
+        // Hide the value input for trash since no value is needed.
+        value.style.display = action.value === 'trash' ? 'none' : '';
+        value.required = action.value === 'add-shelf' || action.value === 'remove-shelf';
+      }
+      rows.forEach(function(r) { r.addEventListener('change', refresh); });
+      if (all) {
+        all.addEventListener('change', function() {
+          rows.forEach(function(r) { r.checked = all.checked; });
+          refresh();
+        });
+      }
+      action.addEventListener('change', syncDatalist);
+      syncDatalist();
+      refresh();
+      form.addEventListener('submit', function(e) {
+        if (action.value === 'trash' && !confirm('Move ' + countEl.textContent + ' copies to trash?')) {
+          e.preventDefault();
+        }
+      });
+    })();
+  </script>
 <% } %>
 
 <% if (totalPages > 1) { %>

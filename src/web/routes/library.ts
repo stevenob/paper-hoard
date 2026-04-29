@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../shared/db.js";
+import { fuzzyMatchingBookIds } from "../../shared/search.js";
 import { withChrome } from "./_helpers.js";
 
 const SORT_FIELDS = ["added", "title", "author"] as const;
@@ -28,12 +29,11 @@ export async function libraryRoutes(app: FastifyInstance) {
 
     const where: Record<string, unknown> = { deletedAt: null };
     if (params.q) {
-      where.book = {
-        OR: [
-          { title: { contains: params.q, mode: "insensitive" } },
-          { authors: { has: params.q } },
-        ],
-      };
+      // Trigram-backed fuzzy search across title + primaryAuthor + authors[].
+      // Tolerates typos and word-order variations the old substring search
+      // would have missed ("projct hail mary" → "Project Hail Mary").
+      const bookIds = await fuzzyMatchingBookIds(params.q);
+      where.book = { id: { in: bookIds } };
     }
     if (params.shelf) {
       where.shelves = { some: { shelf: { slug: params.shelf } } };

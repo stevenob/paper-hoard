@@ -19,6 +19,8 @@ import { authorRoutes } from "./authors.js";
 import { readingRoutes } from "./readings.js";
 import { trashRoutes, sweepDeletedCopies } from "./trash.js";
 import { statsRoutes } from "./stats.js";
+import { bulkEditRoutes } from "./bulk-edit.js";
+import { bookMergeRoutes } from "./book-merge.js";
 import { logger } from "../../shared/logger.js";
 
 export async function registerRoutes(app: FastifyInstance) {
@@ -42,6 +44,8 @@ export async function registerRoutes(app: FastifyInstance) {
   await readingRoutes(app);
   await trashRoutes(app);
   await statsRoutes(app);
+  await bulkEditRoutes(app);
+  await bookMergeRoutes(app);
 
   // Sweep soft-deleted copies older than 30 days at boot, then daily.
   void sweepDeletedCopies()
