@@ -214,4 +214,95 @@ export async function scanRoutes(app: FastifyInstance) {
     void enqueueNotification("book-shared", payload as unknown as Record<string, unknown>);
     return reply.send({ ok: true });
   });
+
+  // Lightweight ISBN cache for offline/instant "do I already own this?"
+  // checks in the camera UI. Returns just the ISBNs in this library so the
+  // browser can flag a scanned barcode before any network round-trip.
+  app.get("/scan/cache.json", async (req, reply) => {
+    const library = await getCurrentLibrary(req);
+    if (!library) return reply.send({ owned: [], trophy: [] });
+    const [owned, trophy] = await Promise.all([
+      prisma.physicalCopy.findMany({
+        where: { libraryId: library.id, deletedAt: null, book: { isbn13: { not: null } } },
+        select: { book: { select: { isbn13: true } } },
+        distinct: ["bookId"],
+      }),
+      prisma.trophy.findMany({
+        where: { libraryId: library.id, book: { isbn13: { not: null } } },
+        select: { book: { select: { isbn13: true } } },
+      }),
+    ]);
+    reply.header("Cache-Control", "no-cache");
+    return reply.send({
+      owned: owned.map((c) => c.book.isbn13!).filter(Boolean),
+      trophy: trophy.map((t) => t.book.isbn13!).filter(Boolean),
+    });
+  });
+
+  // Add a scanned book directly to the trophy list without saving a copy.
+  // Use case: spotted a book in a store, want it for later but don't have
+  // it in hand. Same payload shape as /scan.
+  app.post("/scan/trophy", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const library = await getCurrentLibrary(req);
+    if (!library)
+      return reply
+        .status(400)
+        .send({ ok: false, error: "No family library yet. Run /library in Discord first." });
+
+    const parsed = scanSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.status(400).send({ ok: false, error: "Invalid request." });
+    if (!parsed.data.isbn && !parsed.data.title)
+      return reply.status(400).send({ ok: false, error: "Provide an ISBN or title." });
+
+    const { lookupByIsbn, searchByTitle } = await import("../../shared/metadata.js");
+    const meta = parsed.data.isbn
+      ? await lookupByIsbn(parsed.data.isbn)
+      : (await searchByTitle(
+          [parsed.data.title, parsed.data.author].filter(Boolean).join(" ")
+        ))[0];
+    if (!meta) return reply.status(404).send({ ok: false, error: "No matching book found." });
+
+    const { upsertBookFromMetadata } = await import("../../shared/repo.js");
+    const { audit } = await import("../../shared/audit.js");
+    await ensureMembership(user.id, library.id);
+    const book = await upsertBookFromMetadata(meta);
+
+    // Idempotent: if the trophy already exists, just return ok with the
+    // existing record so the UI can show the "already on trophy list" chip.
+    const existing = await prisma.trophy.findUnique({
+      where: { libraryId_bookId: { libraryId: library.id, bookId: book.id } },
+    });
+    if (existing) {
+      return reply.send({
+        ok: true,
+        alreadyExists: true,
+        trophyId: existing.id,
+        book: { title: meta.title, authors: meta.authors, isbn13: meta.isbn13 },
+      });
+    }
+    const trophy = await prisma.trophy.create({
+      data: {
+        libraryId: library.id,
+        bookId: book.id,
+        requestedByUserId: user.id,
+        priority: 3,
+      },
+    });
+    void audit({
+      userId: user.id,
+      action: "create",
+      entity: "trophy",
+      entityId: trophy.id,
+      details: { source: "scan", bookId: book.id },
+    });
+    return reply.send({
+      ok: true,
+      alreadyExists: false,
+      trophyId: trophy.id,
+      book: { title: meta.title, authors: meta.authors, isbn13: meta.isbn13 },
+    });
+  });
 }

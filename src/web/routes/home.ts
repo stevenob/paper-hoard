@@ -14,7 +14,7 @@ interface ActivityEntry {
 
 export async function homeRoutes(app: FastifyInstance) {
   app.get("/", async (req, reply) => {
-    const [physicalCount, trophyCount, completionCount, recent, auditRows, currentlyReading] =
+    const [physicalCount, trophyCount, completionCount, recent, auditRows] =
       await Promise.all([
         prisma.physicalCopy.count({ where: { deletedAt: null } }),
         prisma.trophy.count(),
@@ -28,12 +28,6 @@ export async function homeRoutes(app: FastifyInstance) {
         prisma.auditLog.findMany({
           orderBy: { createdAt: "desc" },
           take: 30,
-        }),
-        prisma.reading.findMany({
-          where: { finishedAt: null },
-          include: { user: true, copy: { include: { book: true } } },
-          orderBy: { startedAt: "desc" },
-          take: 8,
         }),
       ]);
 
@@ -140,7 +134,6 @@ export async function homeRoutes(app: FastifyInstance) {
         completionCount,
         recent,
         activity,
-        currentlyReading,
       })
     );
   });

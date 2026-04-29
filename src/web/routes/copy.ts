@@ -43,7 +43,6 @@ export async function copyRoutes(app: FastifyInstance) {
         addedBy: true,
         library: true,
         shelves: { include: { shelf: true } },
-        readings: { include: { user: true }, orderBy: { startedAt: "desc" } },
       },
     });
     if (!copy) return reply.status(404).send("Not found");

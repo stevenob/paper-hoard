@@ -28,46 +28,6 @@
   </div>
 </article>
 
-<% const myReading = (copy.readings || []).find(function(r){ return activeUser && r.userId === activeUser.id && !r.finishedAt; }); %>
-<% const allReadings = (copy.readings || []); %>
-<h2>Reading</h2>
-<% if (allReadings.length === 0) { %>
-  <p class="hint">Nobody has logged a reading session for this copy yet.</p>
-<% } else { %>
-  <ul class="reading-list reading-list-compact">
-    <% allReadings.forEach(function(r) { %>
-      <li>
-        <strong><%= r.user.displayName %></strong>
-        <% if (r.finishedAt) { %>
-          finished on <%= new Date(r.finishedAt).toISOString().slice(0,10) %>
-        <% } else { %>
-          <em>currently reading</em> · started <%= new Date(r.startedAt).toISOString().slice(0,10) %>
-        <% } %>
-      </li>
-    <% }) %>
-  </ul>
-<% } %>
-<% if (activeUser && !copy.deletedAt) { %>
-  <% if (myReading) { %>
-    <form method="post" action="/readings/<%= myReading.id %>/finish" class="reading-finish-form">
-      <label class="hint" style="display:inline-flex;gap:.4rem;align-items:center;">
-        <input type="checkbox" name="logCompletion" value="on" checked /> Log a completion
-      </label>
-      <label class="hint">Rating
-        <select name="rating">
-          <option value="">—</option>
-          <% for (let s = 5; s >= 1; s--) { %><option value="<%= s %>"><%= s %>★</option><% } %>
-        </select>
-      </label>
-      <button type="submit">Mark finished</button>
-    </form>
-  <% } else { %>
-    <form method="post" action="/library/copy/<%= copy.id %>/start-reading" style="display:inline">
-      <button type="submit">📖 Start reading</button>
-    </form>
-  <% } %>
-<% } %>
-
 <h2>Cover photo</h2>
 <% if (!activeUser) { %>
   <p class="hint"><a href="/auth/login">Log in</a> to upload a cover.</p>

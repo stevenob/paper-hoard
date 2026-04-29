@@ -26,19 +26,6 @@
   </a>
 </section>
 
-<% if (currentlyReading && currentlyReading.length > 0) { %>
-  <h2>📖 Currently reading <a href="/readings" class="hint" style="font-size:.7em;">all →</a></h2>
-  <ul class="reading-list reading-list-compact">
-    <% currentlyReading.forEach(function(r) { %>
-      <li>
-        <strong><%= r.user.displayName %></strong> —
-        <a href="/library/copy/<%= r.copy.id %>"><em><%= r.copy.book.title %></em></a>
-        <span class="hint">started <%= new Date(r.startedAt).toISOString().slice(0,10) %></span>
-      </li>
-    <% }) %>
-  </ul>
-<% } %>
-
 <% if (recent && recent.length > 0) { %>
   <h2>Recently added</h2>
   <ul class="poster-grid poster-grid-compact">

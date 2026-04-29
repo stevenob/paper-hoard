@@ -330,6 +330,7 @@ body.camera-open { overflow: hidden; }
   cursor: pointer;
 }
 .confirm-secondary .link-discord { color: #5865f2; font-weight: 600; }
+.confirm-secondary .link-trophy { color: var(--pill-trophy-fg); font-weight: 600; }
 .confirm-secondary .link-skip { color: var(--muted); }
 .confirm-secondary button:hover { text-decoration: underline; opacity: .85; }
 .confirm-secondary button.is-loading::after { color: currentColor; }

@@ -62,6 +62,7 @@
     <div class="confirm-actions">
       <button type="button" id="btn-confirm-add" class="primary big">📚 Add to library</button>
       <div class="confirm-secondary">
+        <button type="button" id="btn-confirm-trophy" class="link-trophy">🏆 Trophy</button>
         <button type="button" id="btn-confirm-share" class="link-discord" hidden>💬 Discord</button>
         <button type="button" id="btn-confirm-skip" class="link-skip">Skip</button>
       </div>
@@ -116,6 +117,7 @@
     const btnConfirmAdd = document.getElementById('btn-confirm-add');
     const btnConfirmShare = document.getElementById('btn-confirm-share');
     const btnConfirmSkip = document.getElementById('btn-confirm-skip');
+    const btnConfirmTrophy = document.getElementById('btn-confirm-trophy');
     const httpsWarning = document.getElementById('https-warning');
     const results = document.getElementById('results');
     const manualForm = document.getElementById('manual-form');
@@ -194,8 +196,11 @@
           '🏆 Trophy match — requested by ' + payload.trophy.requestedBy +
           (payload.trophy.reason ? ' (' + payload.trophy.reason + ')' : '');
         confirmTrophy.hidden = false;
+        // Already on trophy list — hide the "+ Trophy" shortcut.
+        btnConfirmTrophy.hidden = true;
       } else {
         confirmTrophy.hidden = true;
+        btnConfirmTrophy.hidden = false;
       }
       const existing = payload.existingCopies || [];
       if (existing.length > 0) {
@@ -253,6 +258,40 @@
           setStatus('Shared.');
         } else {
           showToast(json.error || 'Share failed', false);
+        }
+      } catch (err) {
+        showToast('Network error', false);
+      }
+    });
+
+    btnConfirmTrophy.addEventListener('click', async function() {
+      if (!pendingConfirm) return;
+      const req = pendingConfirm.request;
+      const isbn = req.isbn || (pendingConfirm.payload.book && pendingConfirm.payload.book.isbn13);
+      hideConfirm();
+      setStatus('Adding to trophy list…');
+      try {
+        const res = await fetch('/scan/trophy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req),
+        });
+        const json = await res.json().catch(function() { return { ok: false, error: 'Bad response' }; });
+        if (res.ok && json.ok) {
+          if (json.alreadyExists) {
+            showToast('🏆 Already on trophy list', true);
+          } else {
+            showToast('🏆 Added to trophy list', true);
+            // Update local cache so the next scan of the same book is
+            // flagged instantly without waiting on a server round-trip.
+            if (isbn && lookupCache && !lookupCache.trophy.includes(isbn)) {
+              lookupCache.trophy.push(isbn);
+              persistLookupCache();
+            }
+          }
+          setStatus('Added to trophy list.');
+        } else {
+          showToast(json.error || 'Trophy add failed', false);
         }
       } catch (err) {
         showToast('Network error', false);
@@ -484,6 +523,14 @@
             (json.trophyAcquired ? '🏆 ' : '✓ Added: ') + json.book.title,
             true
           );
+          // Keep the offline cache in sync so the next scan of the same
+          // ISBN (or a re-scan during a bulk inventory) flags as owned
+          // without a server round-trip.
+          const newIsbn = (json.book && json.book.isbn13) || payload.isbn;
+          if (newIsbn && lookupCache && lookupCache.owned.indexOf(newIsbn) === -1) {
+            lookupCache.owned.push(newIsbn);
+            persistLookupCache();
+          }
         } else {
           setStatus(json.error || 'Failed');
           showToast(json.error || 'Failed', false);
@@ -518,11 +565,57 @@
         pendingDecode = null;
         flashReticle('lock');
         if (navigator.vibrate) navigator.vibrate(40);
+        // Surface cached "already owned / on trophy" status BEFORE the
+        // network round-trip so the field-lookup case ("standing in a
+        // bookstore aisle") feels instant. The server response will refine.
+        flashCachedStatus(cleaned);
         previewLookup({ isbn: cleaned });
       } else {
         pendingDecode = cleaned;
         pendingDecodeAt = now;
         flashReticle('detect');
+      }
+    }
+
+    // ---- Offline lookup cache ---------------------------------------------
+    // Mirror of the library's owned + trophy ISBNs so the camera UI can
+    // answer "do I already own this?" instantly, even on flaky cellular.
+    // Refreshed on every scan-page load; falls back to localStorage when
+    // the network is slow.
+    const LOOKUP_CACHE_KEY = 'ph_lookup_cache_v1';
+    let lookupCache = null;
+    try {
+      const raw = localStorage.getItem(LOOKUP_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.owned) && Array.isArray(parsed.trophy)) {
+          lookupCache = parsed;
+        }
+      }
+    } catch (err) { /* localStorage unavailable, fine */ }
+
+    function persistLookupCache() {
+      if (!lookupCache) return;
+      try { localStorage.setItem(LOOKUP_CACHE_KEY, JSON.stringify(lookupCache)); }
+      catch (err) { /* full or disabled, ignore */ }
+    }
+
+    fetch('/scan/cache.json', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(c) {
+        if (c && Array.isArray(c.owned) && Array.isArray(c.trophy)) {
+          lookupCache = { owned: c.owned, trophy: c.trophy };
+          persistLookupCache();
+        }
+      })
+      .catch(function() { /* offline; whatever's in localStorage stands */ });
+
+    function flashCachedStatus(isbn) {
+      if (!lookupCache || !isbn) return;
+      if (lookupCache.owned.indexOf(isbn) !== -1) {
+        showToast('✓ Already in your library', true);
+      } else if (lookupCache.trophy.indexOf(isbn) !== -1) {
+        showToast('🏆 On your trophy list', true);
       }
     }
 
@@ -689,6 +782,24 @@
       document.getElementById('manual-author').value = '';
       document.getElementById('manual-isbn').focus();
     });
+
+    // Auto-trigger lookup when invoked with ?isbn=XXX in the URL — used by
+    // iOS Shortcuts that scan a barcode and open Paper Hoard with the value
+    // pre-populated. Strips the param after firing so a refresh doesn't
+    // re-submit the same lookup.
+    (function autoTriggerFromUrl() {
+      try {
+        const url = new URL(window.location.href);
+        const isbn = (url.searchParams.get('isbn') || '').replace(/[^0-9Xx]/g, '');
+        if (isbn.length === 10 || isbn.length === 13) {
+          url.searchParams.delete('isbn');
+          window.history.replaceState({}, '', url.toString());
+          setStatus('ISBN ' + isbn + ' — looking up…');
+          flashCachedStatus(isbn);
+          previewLookup({ isbn: isbn });
+        }
+      } catch (err) { /* old browser, skip */ }
+    })();
   })();
 </script>
 
