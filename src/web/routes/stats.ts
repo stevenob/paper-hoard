@@ -32,6 +32,7 @@ export async function statsRoutes(app: FastifyInstance) {
       addsLast90,
       editionGroups,
       authorRows,
+      valueAggregate,
     ] = await Promise.all([
       prisma.physicalCopy.count({ where: activeCopyFilter }),
       prisma.physicalCopy.count({ where: { ...libraryFilter, deletedAt: { not: null } } }),
@@ -111,6 +112,11 @@ export async function statsRoutes(app: FastifyInstance) {
         orderBy: { _count: { primaryAuthor: "desc" } },
         take: 10,
       }),
+      prisma.physicalCopy.aggregate({
+        where: { ...activeCopyFilter, priceCents: { not: null } },
+        _sum: { priceCents: true },
+        _count: { priceCents: true },
+      }),
     ]);
 
     function pct(part: number, whole: number): number {
@@ -162,6 +168,10 @@ export async function statsRoutes(app: FastifyInstance) {
         adds: { last7: addsLast7, last30: addsLast30, last90: addsLast90 },
         backfillCandidates: booksWithoutCover,
         booksMissingIsbn: booksWithoutIsbn,
+        value: {
+          totalCents: valueAggregate._sum.priceCents ?? 0,
+          recordedCount: valueAggregate._count.priceCents ?? 0,
+        },
       })
     );
   });

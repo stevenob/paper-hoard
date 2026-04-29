@@ -13,10 +13,34 @@ const updateSchema = z.object({
   condition: z.enum(["", ...CONDITIONS]).optional(),
   edition: z.enum(["", ...EDITIONS]).optional(),
   notes: z.string().max(2000).optional(),
+  acquiredFrom: z.string().max(200).optional(),
+  acquiredOn: z.string().max(50).optional(),
+  // Free-text price input — accepts "$15.99", "15.99", "15", or blank.
+  // Normalized server-side to integer cents.
+  price: z.string().max(20).optional(),
 });
 
 function blankToNull<T extends string | undefined>(v: T): string | null {
   return v && v.length > 0 ? v : null;
+}
+
+function parsePriceToCents(input: string | undefined): number | null {
+  if (!input) return null;
+  const cleaned = input.replace(/[^0-9.]/g, "");
+  if (!cleaned) return null;
+  const n = Number.parseFloat(cleaned);
+  if (!Number.isFinite(n) || n < 0) return null;
+  // Cap at $1,000,000 to keep typos like 99999999 from polluting the catalog.
+  const cents = Math.round(n * 100);
+  return cents > 100_000_000 ? null : cents;
+}
+
+function parseAcquiredOn(input: string | undefined): Date | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const d = new Date(trimmed);
+  return Number.isFinite(d.getTime()) ? d : null;
 }
 
 const ALLOWED_IMAGE_MIMES = new Set([
@@ -43,6 +67,7 @@ export async function copyRoutes(app: FastifyInstance) {
         addedBy: true,
         library: true,
         shelves: { include: { shelf: true } },
+        photos: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
       },
     });
     if (!copy) return reply.status(404).send("Not found");
@@ -79,6 +104,9 @@ export async function copyRoutes(app: FastifyInstance) {
         condition: blankToNull(data.condition),
         edition: blankToNull(data.edition),
         notes: data.notes?.trim() || null,
+        acquiredFrom: data.acquiredFrom?.trim() || null,
+        acquiredOn: parseAcquiredOn(data.acquiredOn),
+        priceCents: parsePriceToCents(data.price),
       },
     });
     void audit({
@@ -153,10 +181,19 @@ export async function copyRoutes(app: FastifyInstance) {
     await fs.mkdir(uploadsDir, { recursive: true });
     await fs.writeFile(path.join(uploadsDir, filename), buf);
 
-    // Replace previous cover if any.
+    // Replace previous cover if any. Only unlink the old file if no other
+    // copy or CopyPhoto still references it (filenames are sha256-prefixed
+    // so identical uploads share storage).
     const existing = await prisma.physicalCopy.findUnique({ where: { id: req.params.id } });
     if (existing?.coverPath && existing.coverPath !== filename) {
-      await fs.unlink(path.join(uploadsDir, existing.coverPath)).catch(() => undefined);
+      const stillUsed =
+        (await prisma.physicalCopy.count({
+          where: { coverPath: existing.coverPath, NOT: { id: existing.id } },
+        })) +
+        (await prisma.copyPhoto.count({ where: { photoPath: existing.coverPath } }));
+      if (stillUsed === 0) {
+        await fs.unlink(path.join(uploadsDir, existing.coverPath)).catch(() => undefined);
+      }
     }
 
     await prisma.physicalCopy.update({
@@ -171,9 +208,17 @@ export async function copyRoutes(app: FastifyInstance) {
     if (!user) return;
     const copy = await prisma.physicalCopy.findUnique({ where: { id: req.params.id } });
     if (copy?.coverPath) {
-      await fs
-        .unlink(path.join(path.resolve(env.UPLOADS_DIR), copy.coverPath))
-        .catch(() => undefined);
+      // Only unlink the file if no other copy/photo still uses it.
+      const stillUsed =
+        (await prisma.physicalCopy.count({
+          where: { coverPath: copy.coverPath, NOT: { id: copy.id } },
+        })) +
+        (await prisma.copyPhoto.count({ where: { photoPath: copy.coverPath } }));
+      if (stillUsed === 0) {
+        await fs
+          .unlink(path.join(path.resolve(env.UPLOADS_DIR), copy.coverPath))
+          .catch(() => undefined);
+      }
       await prisma.physicalCopy.update({
         where: { id: req.params.id },
         data: { coverPath: null },
@@ -181,4 +226,126 @@ export async function copyRoutes(app: FastifyInstance) {
     }
     return reply.redirect(`/library/copy/${req.params.id}`);
   });
+
+  // Multi-photo gallery: dust jacket / signed page / damage / etc. The
+  // upload pipeline mirrors the cover-upload flow above (sha256 dedupe,
+  // size cap, mime check) but writes to CopyPhoto rows instead of
+  // overwriting PhysicalCopy.coverPath.
+  app.post<{ Params: { id: string } }>(
+    "/library/copy/:id/photos",
+    async (req, reply) => {
+      const user = await requireUser(req, reply);
+      if (!user) return;
+      const copy = await prisma.physicalCopy.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!copy) return reply.status(404).send("Not found");
+
+      let label: string | null = null;
+      let buf: Buffer | null = null;
+      let mimetype: string | null = null;
+      let truncated = false;
+      const parts = req.parts();
+      for await (const part of parts) {
+        if (part.type === "file" && part.fieldname === "photo") {
+          const chunks: Buffer[] = [];
+          for await (const c of part.file) chunks.push(c);
+          buf = Buffer.concat(chunks);
+          mimetype = part.mimetype;
+          truncated = part.file.truncated;
+        } else if (part.type === "field" && part.fieldname === "label") {
+          label =
+            typeof part.value === "string" && part.value.trim().length > 0
+              ? part.value.trim().slice(0, 200)
+              : null;
+        }
+      }
+      if (!buf || !mimetype) return reply.status(400).send("No file uploaded");
+      if (!ALLOWED_IMAGE_MIMES.has(mimetype))
+        return reply.status(415).send(`Unsupported file type: ${mimetype}`);
+      if (truncated) return reply.status(413).send("File too large (max 5MB)");
+
+      const sha = crypto.createHash("sha256").update(buf).digest("hex").slice(0, 16);
+      const ext = extForMime(mimetype);
+      const filename = `${sha}${ext}`;
+      const uploadsDir = path.resolve(env.UPLOADS_DIR);
+      await fs.mkdir(uploadsDir, { recursive: true });
+      await fs.writeFile(path.join(uploadsDir, filename), buf);
+
+      const lastPosition = await prisma.copyPhoto.aggregate({
+        where: { copyId: copy.id },
+        _max: { position: true },
+      });
+      const position = (lastPosition._max.position ?? -1) + 1;
+      const photo = await prisma.copyPhoto.create({
+        data: { copyId: copy.id, photoPath: filename, label, position },
+      });
+      void audit({
+        userId: user.id,
+        action: "create",
+        entity: "physicalCopy",
+        entityId: copy.id,
+        details: { photo: photo.id, label },
+      });
+      return reply.redirect(`/library/copy/${copy.id}#photos`);
+    }
+  );
+
+  app.post<{ Params: { id: string; photoId: string } }>(
+    "/library/copy/:id/photos/:photoId/delete",
+    async (req, reply) => {
+      const user = await requireUser(req, reply);
+      if (!user) return;
+      const photo = await prisma.copyPhoto.findUnique({
+        where: { id: req.params.photoId },
+      });
+      if (!photo || photo.copyId !== req.params.id)
+        return reply.redirect(`/library/copy/${req.params.id}#photos`);
+      // Only delete the file from disk if no other photo on any copy
+      // references the same content-addressed filename. (Cover uploads
+      // share the same naming scheme — we don't want to remove a file
+      // that's still being used as a cover or another photo.)
+      const stillUsedAsCover = await prisma.physicalCopy.count({
+        where: { coverPath: photo.photoPath },
+      });
+      const stillUsedByOtherPhoto = await prisma.copyPhoto.count({
+        where: { photoPath: photo.photoPath, NOT: { id: photo.id } },
+      });
+      if (stillUsedAsCover === 0 && stillUsedByOtherPhoto === 0) {
+        await fs
+          .unlink(path.join(path.resolve(env.UPLOADS_DIR), photo.photoPath))
+          .catch(() => undefined);
+      }
+      await prisma.copyPhoto.delete({ where: { id: photo.id } });
+      void audit({
+        userId: user.id,
+        action: "delete",
+        entity: "physicalCopy",
+        entityId: req.params.id,
+        details: { photo: photo.id },
+      });
+      return reply.redirect(`/library/copy/${req.params.id}#photos`);
+    }
+  );
+
+  app.post<{ Params: { id: string; photoId: string } }>(
+    "/library/copy/:id/photos/:photoId/label",
+    async (req, reply) => {
+      const user = await requireUser(req, reply);
+      if (!user) return;
+      const labelSchema = z.object({ label: z.string().max(200).optional() });
+      const parsed = labelSchema.safeParse(req.body);
+      if (!parsed.success) return reply.status(400).send({ error: "Invalid input" });
+      const photo = await prisma.copyPhoto.findUnique({
+        where: { id: req.params.photoId },
+      });
+      if (!photo || photo.copyId !== req.params.id)
+        return reply.redirect(`/library/copy/${req.params.id}#photos`);
+      await prisma.copyPhoto.update({
+        where: { id: photo.id },
+        data: { label: parsed.data.label?.trim() || null },
+      });
+      return reply.redirect(`/library/copy/${req.params.id}#photos`);
+    }
+  );
 }

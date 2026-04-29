@@ -50,6 +50,7 @@
   <p class="notice">You need to <a href="/auth/login">log in</a> to edit.</p>
 <% } %>
 
+<% function priceDisplay(cents) { return cents == null ? '' : (cents / 100).toFixed(2); } %>
 <form method="post" action="/library/copy/<%= copy.id %>/edit" class="stacked">
   <fieldset <%= activeUser ? '' : 'disabled' %>>
     <label>Condition
@@ -71,9 +72,56 @@
     <label>Notes
       <textarea name="notes" rows="3" maxlength="2000"><%= copy.notes || '' %></textarea>
     </label>
+
+    <h3 style="margin-top:1rem;font-size:1em;">Provenance</h3>
+    <p class="hint" style="margin-top:-.25rem;">Useful for insurance, resale tracking, or just remembering which trip you bought a book on. All optional.</p>
+    <label>Where bought / acquired from
+      <input name="acquiredFrom" value="<%= copy.acquiredFrom || '' %>" maxlength="200" placeholder="Powell's Books, Portland · gift from Anna · library sale 2024" />
+    </label>
+    <label>Acquired on
+      <input type="date" name="acquiredOn" value="<%= copy.acquiredOn ? new Date(copy.acquiredOn).toISOString().slice(0,10) : '' %>" />
+    </label>
+    <label>Price paid
+      <input name="price" inputmode="decimal" value="<%= priceDisplay(copy.priceCents) %>" placeholder="15.99" maxlength="20" />
+      <span class="hint">USD or whatever currency you tend to think in — stored as cents.</span>
+    </label>
+
     <button type="submit">Save</button>
   </fieldset>
 </form>
+
+<h2 id="photos">Photos</h2>
+<% if (!copy.photos || copy.photos.length === 0) { %>
+  <p class="hint">No supplementary photos. Use these for the dust jacket, signed pages, damage, or anything else worth recording beyond the front cover.</p>
+<% } else { %>
+  <ul class="photo-gallery">
+    <% copy.photos.forEach(function(p) { %>
+      <li class="photo-tile">
+        <a href="/uploads/<%= p.photoPath %>" target="_blank" rel="noopener">
+          <img src="/uploads/<%= p.photoPath %>" alt="<%= p.label || 'photo' %>" loading="lazy" />
+        </a>
+        <% if (activeUser) { %>
+          <form method="post" action="/library/copy/<%= copy.id %>/photos/<%= p.id %>/label" class="photo-label-form">
+            <input type="text" name="label" value="<%= p.label || '' %>" maxlength="200" placeholder="Label (e.g. signed page)" />
+            <button type="submit">Save</button>
+          </form>
+          <form method="post" action="/library/copy/<%= copy.id %>/photos/<%= p.id %>/delete" onsubmit="return confirm('Delete this photo?')">
+            <button type="submit" class="link danger">remove</button>
+          </form>
+        <% } else if (p.label) { %>
+          <p class="hint"><%= p.label %></p>
+        <% } %>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+<% if (activeUser) { %>
+  <form method="post" action="/library/copy/<%= copy.id %>/photos" enctype="multipart/form-data" class="upload-form" style="margin-top:.65rem;">
+    <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/gif" required />
+    <input type="text" name="label" maxlength="200" placeholder="Label (optional)" />
+    <button type="submit">Add photo</button>
+  </form>
+<% } %>
 
 <h2>Shelves</h2>
 <% if (copy.shelves && copy.shelves.length > 0) { %>

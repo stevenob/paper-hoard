@@ -86,11 +86,28 @@ model PhysicalCopy {
   coverPath     String?
   addedAt       DateTime @default(now())
   deletedAt     DateTime?
+  acquiredFrom  String?
+  acquiredOn    DateTime?
+  priceCents    Int?
 
   shelves       ShelfCopy[]
   readings      Reading[]
+  photos        CopyPhoto[]
 
   @@index([deletedAt])
+  @@index([priceCents])
+}
+
+model CopyPhoto {
+  id        String       @id @default(cuid())
+  copy      PhysicalCopy @relation(fields: [copyId], references: [id], onDelete: Cascade)
+  copyId    String
+  photoPath String
+  label     String?
+  position  Int          @default(0)
+  createdAt DateTime     @default(now())
+
+  @@index([copyId])
 }
 
 model Reading {

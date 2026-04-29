@@ -86,6 +86,15 @@
   <li><strong><%= adds.last90 %></strong> added in the last <strong>90 days</strong></li>
 </ul>
 
+<% if (value.recordedCount > 0) { %>
+  <h2>Catalog value</h2>
+  <p>$<strong><%= (value.totalCents / 100).toFixed(2) %></strong>
+    <span class="hint">across <%= value.recordedCount %> copy<%= value.recordedCount === 1 ? '' : 'ies' %> with a recorded price</span>
+    (<%= totals.copies > 0 ? Math.round((value.recordedCount / totals.copies) * 100) : 0 %>% of catalog)
+  </p>
+  <p class="hint">Add prices on each copy's edit page under "Provenance".</p>
+<% } %>
+
 <script>
   (function() {
     const btn = document.getElementById('btn-backfill');
