@@ -11,10 +11,24 @@ const scanSchema = z.object({
   title: z.string().trim().optional(),
   author: z.string().trim().optional(),
   share: z.union([z.boolean(), z.literal("true"), z.literal("false")]).optional(),
+  // Optional user overrides applied AFTER metadata lookup. Used when the
+  // ISBN is in Google Books / Open Library but the source data is missing
+  // critical fields (most commonly the author array is empty for older
+  // books and indie presses).
+  overrideTitle: z.string().trim().max(500).optional(),
+  overrideAuthors: z.string().trim().max(1000).optional(),
+  overridePublisher: z.string().trim().max(200).optional(),
+  overrideEdition: z.string().trim().max(50).optional(),
 });
 
 function shouldShare(input: unknown): boolean {
   return input === true || input === "true";
+}
+
+function parseAuthorList(s: string | undefined): string[] | null {
+  if (!s) return null;
+  const list = s.split(",").map((x) => x.trim()).filter(Boolean);
+  return list.length > 0 ? list : null;
 }
 
 export async function scanRoutes(app: FastifyInstance) {
@@ -54,18 +68,52 @@ export async function scanRoutes(app: FastifyInstance) {
     });
     if (!result) return reply.status(404).send({ ok: false, error: "No matching book found." });
 
+    // Apply user overrides on top of the metadata lookup. Anything left
+    // blank in the override falls back to whatever the source returned.
+    const overrideAuthors = parseAuthorList(parsed.data.overrideAuthors);
+    const bookUpdate: Record<string, unknown> = {};
+    if (parsed.data.overrideTitle && parsed.data.overrideTitle !== result.meta.title) {
+      bookUpdate.title = parsed.data.overrideTitle;
+    }
+    if (overrideAuthors) {
+      bookUpdate.authors = overrideAuthors;
+      bookUpdate.primaryAuthor = overrideAuthors[0];
+    }
+    if (parsed.data.overridePublisher) {
+      bookUpdate.publisher = parsed.data.overridePublisher;
+    }
+    if (Object.keys(bookUpdate).length > 0) {
+      // Mark as manual so future automatic refetches don't clobber the
+      // user's edits.
+      bookUpdate.source = "manual";
+      await prisma.book.update({ where: { id: result.book.id }, data: bookUpdate });
+    }
+    if (parsed.data.overrideEdition !== undefined) {
+      const trimmed = parsed.data.overrideEdition.trim();
+      if (trimmed !== (result.copy.edition ?? "")) {
+        await prisma.physicalCopy.update({
+          where: { id: result.copy.id },
+          data: { edition: trimmed || null },
+        });
+      }
+    }
+
+    // Effective title/authors used in any downstream Discord post.
+    const effectiveTitle = (bookUpdate.title as string | undefined) ?? result.meta.title;
+    const effectiveAuthors = (bookUpdate.authors as string[] | undefined) ?? result.meta.authors;
+
     // Optional Discord channel post — only if the library has a configured
     // channel AND the client opted in.
     if (shouldShare(parsed.data.share) && library.notifyChannelId) {
       const payload: BookAddedPayload = {
         channelId: library.notifyChannelId,
         destination: "library",
-        bookTitle: result.meta.title,
-        bookAuthors: result.meta.authors,
+        bookTitle: effectiveTitle,
+        bookAuthors: effectiveAuthors,
         bookId: result.book.id,
         isbn13: result.meta.isbn13 ?? null,
         thumbnailUrl: result.meta.thumbnailUrl ?? null,
-        edition: result.copy.edition ?? null,
+        edition: (parsed.data.overrideEdition?.trim() || result.copy.edition) ?? null,
         ratingAvg: result.book.olRatingAvg,
         ratingCount: result.book.olRatingCount,
         libraryName: library.name,
@@ -80,11 +128,11 @@ export async function scanRoutes(app: FastifyInstance) {
       suggestedEdition: result.meta.edition ?? null,
       shareEnabled: Boolean(library.notifyChannelId),
       book: {
-        title: result.meta.title,
-        authors: result.meta.authors,
+        title: effectiveTitle,
+        authors: effectiveAuthors,
         isbn13: result.meta.isbn13,
         thumbnailUrl: result.meta.thumbnailUrl,
-        source: result.meta.source,
+        source: bookUpdate.source ?? result.meta.source,
       },
     });
   });

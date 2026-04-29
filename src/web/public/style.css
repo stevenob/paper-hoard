@@ -609,3 +609,34 @@ body.camera-open { overflow: hidden; }
 .merge-form { margin-top: .5rem; padding: .65rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
 .merge-target { display: flex; gap: .5rem; align-items: center; padding: .25rem 0; }
 .merge-target input { margin: 0; }
+
+/* --- Confirm-card inline edit (v2.7) ------------------------------- */
+.confirm-edit {
+  margin: .5rem 0 .25rem;
+  padding: .35rem 0;
+  border-top: 1px dashed var(--border);
+}
+.confirm-edit > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: .9em;
+  list-style: none;
+  padding: .25rem 0;
+}
+.confirm-edit > summary::-webkit-details-marker { display: none; }
+.confirm-edit[open] > summary { font-weight: 600; }
+.confirm-edit label {
+  display: flex; flex-direction: column; gap: .15rem;
+  margin: .35rem 0;
+  font-size: .85em;
+}
+.confirm-edit input,
+.confirm-edit select {
+  padding: .35rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 1em;
+}
+.confirm-edit .hint { font-weight: normal; color: var(--muted); }

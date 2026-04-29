@@ -124,10 +124,12 @@ export async function bookRoutes(app: FastifyInstance) {
     return reply.redirect(`/library/copy/${copy.id}`);
   });
 
-  app.get<{ Params: { id: string } }>("/books/:id", async (req, reply) => {
-    const book = await prisma.book.findUnique({ where: { id: req.params.id } });
-    if (!book) return reply.status(404).send("Not found");
-    const [copies, completions, trophies] = await Promise.all([
+  app.get<{ Params: { id: string }; Querystring: { refetched?: string } }>(
+    "/books/:id",
+    async (req, reply) => {
+      const book = await prisma.book.findUnique({ where: { id: req.params.id } });
+      if (!book) return reply.status(404).send("Not found");
+      const [copies, completions, trophies] = await Promise.all([
       prisma.physicalCopy.findMany({
         where: { bookId: book.id, deletedAt: null },
         include: {
@@ -160,7 +162,14 @@ export async function bookRoutes(app: FastifyInstance) {
     const shelves = Array.from(shelfMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     return reply.view(
       "book.ejs",
-      await withChrome(req, { book, copies, completions, trophies, shelves })
+      await withChrome(req, {
+        book,
+        copies,
+        completions,
+        trophies,
+        shelves,
+        refetched: req.query.refetched ?? null,
+      })
     );
   });
 
@@ -195,6 +204,10 @@ export async function bookRoutes(app: FastifyInstance) {
         authors: d.authors
           ? d.authors.split(",").map((s) => s.trim()).filter(Boolean)
           : [],
+        primaryAuthor:
+          (d.authors
+            ? d.authors.split(",").map((s) => s.trim()).filter(Boolean)[0]
+            : null) ?? null,
         publisher: blankToNull(d.publisher),
         publishedAt: blankToNull(d.publishedAt),
         isbn13: blankToNull(d.isbn13),
@@ -211,4 +224,66 @@ export async function bookRoutes(app: FastifyInstance) {
     });
     return reply.redirect(`/books/${updated.id}`);
   });
+
+  // Re-fetch metadata from Google Books / Open Library and fill in any
+  // fields that are currently null. Skipped for source: 'manual' books
+  // unless ?force=1 is set, so user-curated overrides aren't clobbered.
+  app.post<{ Params: { id: string }; Querystring: { force?: string } }>(
+    "/books/:id/refetch",
+    async (req, reply) => {
+      const user = await requireUser(req, reply);
+      if (!user) return;
+      const book = await prisma.book.findUnique({ where: { id: req.params.id } });
+      if (!book) return reply.status(404).send("Not found");
+      if (!book.isbn13)
+        return reply.status(400).send("Book has no ISBN-13 — refetch needs one.");
+      const force = req.query.force === "1" || req.query.force === "true";
+      if (book.source === "manual" && !force) {
+        return reply.redirect(`/books/${book.id}?refetched=skipped`);
+      }
+      const { lookupByIsbn } = await import("../../shared/metadata.js");
+      const fetched = await lookupByIsbn(book.isbn13);
+      if (!fetched) return reply.redirect(`/books/${book.id}?refetched=miss`);
+      const meta = fetched;
+
+      // Conservative merge: only overwrite null/empty fields unless force
+      // is set. Authors[] is treated as needing repair when empty.
+      const data: Record<string, unknown> = {};
+      function fill(field: "title" | "publisher" | "publishedAt" | "thumbnailUrl" | "isbn10", current: unknown) {
+        if (force || current === null || current === undefined || current === "") {
+          const v = meta[field];
+          if (v !== undefined && v !== null && v !== "") data[field] = v;
+        }
+      }
+      fill("title", book.title);
+      if (force || book.authors.length === 0) {
+        if (meta.authors.length > 0) {
+          data.authors = meta.authors;
+          data.primaryAuthor = meta.authors[0];
+        }
+      }
+      fill("publisher", book.publisher);
+      fill("publishedAt", book.publishedAt);
+      fill("thumbnailUrl", book.thumbnailUrl);
+      fill("isbn10", book.isbn10);
+
+      if (Object.keys(data).length > 0) {
+        await prisma.book.update({ where: { id: book.id }, data });
+        void audit({
+          userId: user.id,
+          action: "update",
+          entity: "book",
+          entityId: book.id,
+          details: {
+            refetched: true,
+            force,
+            fields: Object.keys(data),
+          },
+        });
+      }
+      return reply.redirect(
+        `/books/${book.id}?refetched=${Object.keys(data).length > 0 ? "ok" : "nochange"}`
+      );
+    }
+  );
 }

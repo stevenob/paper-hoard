@@ -3,6 +3,16 @@
 
 <p><a href="/library">← back to library</a> <% if (activeUser) { %>· <a href="/books/<%= book.id %>/edit">edit metadata</a><% } %></p>
 
+<% if (refetched === 'ok') { %>
+  <p class="notice">✓ Refetched metadata — missing fields filled in.</p>
+<% } else if (refetched === 'nochange') { %>
+  <p class="notice">Refetch ran but everything was already filled in.</p>
+<% } else if (refetched === 'miss') { %>
+  <p class="notice">Refetch couldn't find this ISBN in Google Books or Open Library.</p>
+<% } else if (refetched === 'skipped') { %>
+  <p class="notice">Skipped — this book is marked <code>source: manual</code>. Use the force option below if you want to overwrite hand-edited fields.</p>
+<% } %>
+
 <article class="book-detail">
   <% if (book.thumbnailUrl) { %>
     <img class="cover" src="<%= book.thumbnailUrl %>" alt="">
@@ -63,6 +73,28 @@
   <% trophies.forEach(function(t) { %>
     <p>🏆 Requested by <strong><%= t.requestedBy.displayName %></strong> · priority <%= t.priority %><% if (t.desiredFormat) { %> · wants <%= t.desiredFormat %><% } %><% if (t.reason) { %> — <%= t.reason %><% } %></p>
   <% }) %>
+<% } %>
+
+<% if (activeUser && book.isbn13) { %>
+  <h2>Repair metadata</h2>
+  <p class="hint">Re-runs Google Books + Open Library and fills in any blank fields. Skipped if this book is marked <code>source: manual</code> — tick the force box to overwrite hand-edited values too.</p>
+  <form method="post" action="/books/<%= book.id %>/refetch" class="refetch-form" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+    <button type="submit">🔄 Refetch metadata</button>
+    <label class="hint" style="display:inline-flex;gap:.35rem;align-items:center;">
+      <input type="checkbox" name="force" value="1" /> Force overwrite (manual books too)
+    </label>
+  </form>
+  <script>
+    document.querySelector('.refetch-form').addEventListener('submit', function(e) {
+      // Append force as a query param when ticked, since hidden form fields
+      // would always send "1" otherwise.
+      const cb = e.target.querySelector('input[name="force"]');
+      if (cb && cb.checked) {
+        e.target.action = e.target.action + (e.target.action.includes('?') ? '&' : '?') + 'force=1';
+      }
+      cb.disabled = true;
+    });
+  </script>
 <% } %>
 
 <h2>Completions (<%= completions.length %>)</h2>

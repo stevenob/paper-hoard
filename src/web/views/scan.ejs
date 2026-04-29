@@ -65,6 +65,35 @@
     <p class="confirm-meta" id="confirm-meta"></p>
     <p id="confirm-trophy" class="confirm-flag trophy" hidden></p>
     <p id="confirm-dup" class="confirm-flag dup" hidden></p>
+
+    <!-- Inline edit form: hidden by default, auto-opens when authors[]
+         comes back empty so the user has to fix the most-common gap
+         before the Add button does anything. Generic ✏️ link below
+         opens it for any other field tweak. -->
+    <details id="confirm-edit" class="confirm-edit">
+      <summary>✏️ Edit before adding</summary>
+      <p id="confirm-edit-author-warning" class="confirm-flag dup" hidden>
+        ⚠️ No author found in the source data. Add one before confirming.
+      </p>
+      <label>Title <input id="edit-title" maxlength="500" /></label>
+      <label>Authors <span class="hint">(comma-separated)</span>
+        <input id="edit-authors" maxlength="1000" placeholder="Andy Weir" />
+      </label>
+      <label>Publisher <input id="edit-publisher" maxlength="200" /></label>
+      <label>Edition
+        <select id="edit-edition">
+          <option value="">—</option>
+          <option value="hardcover">hardcover</option>
+          <option value="paperback">paperback</option>
+          <option value="mass-market">mass-market</option>
+          <option value="special">special</option>
+          <option value="signed">signed</option>
+          <option value="boxset">boxset</option>
+          <option value="other">other</option>
+        </select>
+      </label>
+    </details>
+
     <div class="confirm-actions">
       <button type="button" id="btn-confirm-add" class="primary big">📚 Add to library</button>
       <div class="confirm-secondary">
@@ -145,6 +174,12 @@
     const btnConfirmShare = document.getElementById('btn-confirm-share');
     const btnConfirmSkip = document.getElementById('btn-confirm-skip');
     const btnConfirmTrophy = document.getElementById('btn-confirm-trophy');
+    const confirmEdit = document.getElementById('confirm-edit');
+    const editTitleEl = document.getElementById('edit-title');
+    const editAuthorsEl = document.getElementById('edit-authors');
+    const editPublisherEl = document.getElementById('edit-publisher');
+    const editEditionEl = document.getElementById('edit-edition');
+    const editAuthorWarning = document.getElementById('confirm-edit-author-warning');
     const httpsWarning = document.getElementById('https-warning');
     const results = document.getElementById('results');
     const manualForm = document.getElementById('manual-form');
@@ -291,6 +326,17 @@
         btnConfirmAdd.textContent = '📚 Add to library';
       }
       btnConfirmShare.hidden = !payload.shareEnabled;
+
+      // Reset and pre-fill the edit form. Auto-open + warning when authors
+      // came back empty — that's the most common scan-data hole.
+      editTitleEl.value = b.title || '';
+      editAuthorsEl.value = (b.authors || []).join(', ');
+      editPublisherEl.value = b.publisher || '';
+      editEditionEl.value = b.edition || '';
+      const authorMissing = !b.authors || b.authors.length === 0;
+      confirmEdit.open = authorMissing;
+      editAuthorWarning.hidden = !authorMissing;
+
       confirmCard.hidden = false;
       overlayStatus.textContent = 'Confirm to add, or skip.';
     }
@@ -359,9 +405,41 @@
     btnConfirmAdd.addEventListener('click', async function() {
       if (!pendingConfirm) return;
       const req = Object.assign({}, pendingConfirm.request);
-      // Auto-share to Discord whenever a channel is configured. The Share-only
-      // button is the way to opt out (post without saving). To save without
-      // posting, clear the channel on /about.
+      const original = pendingConfirm.payload.book || {};
+
+      // Collect any user edits and pass them as override* fields on /scan.
+      // Anything left at the original value is omitted to keep payloads clean.
+      const newTitle = editTitleEl.value.trim();
+      const newAuthorsRaw = editAuthorsEl.value.trim();
+      const newPublisher = editPublisherEl.value.trim();
+      const newEdition = editEditionEl.value.trim();
+      if (newTitle && newTitle !== (original.title || '')) {
+        req.overrideTitle = newTitle;
+      }
+      const origAuthorsStr = (original.authors || []).join(', ');
+      if (newAuthorsRaw !== origAuthorsStr) {
+        req.overrideAuthors = newAuthorsRaw;
+      }
+      if (newPublisher && newPublisher !== (original.publisher || '')) {
+        req.overridePublisher = newPublisher;
+      }
+      if (newEdition !== (original.edition || '')) {
+        req.overrideEdition = newEdition;
+      }
+
+      // Refuse to commit while the author field is still empty — protects
+      // against the easy mistake of confirming a metadata-incomplete book.
+      const effectiveAuthors = req.overrideAuthors !== undefined
+        ? req.overrideAuthors.trim()
+        : origAuthorsStr;
+      if (!effectiveAuthors) {
+        confirmEdit.open = true;
+        editAuthorsEl.focus();
+        editAuthorWarning.textContent = '⚠️ Please add at least one author before adding.';
+        editAuthorWarning.hidden = false;
+        return;
+      }
+
       if (pendingConfirm.payload.shareEnabled) req.share = true;
       hideConfirm();
       await submitLookup(req);
