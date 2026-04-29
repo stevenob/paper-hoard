@@ -290,6 +290,46 @@ suspenders so a typo in `PAPERHOARD_HOSTS` (e.g. accidentally listing a real
 public domain) can't trigger a public ACME order.
 
 
+## Remote access via Tailscale (no port forward, real Let's Encrypt cert)
+
+For access away from home, use Tailscale instead of port-forwarding 8443.
+This avoids any public exposure and gives you a real LE cert.
+
+### One-time setup
+
+1. Install the **Tailscale** iX app from the TrueNAS Apps catalog.
+   - Hostname: `obrienserver` (becomes the tailnet URL)
+   - Auth key: leave blank, authenticate via the URL printed in Logs
+   - State volume: bind a dataset (e.g. `apps/tailscale/state`) at owner
+     `apps:apps` (UID/GID **568**), mode `0700` — it stores the node private key.
+2. Sign in via the URL in the Tailscale app's logs.
+3. In the Tailscale admin (https://login.tailscale.com/admin/dns):
+   - Toggle **MagicDNS** ON
+   - Toggle **HTTPS Certificates** ON
+4. Provision the cert + start the reverse proxy on TrueNAS:
+   ```bash
+   sudo docker exec ix-tailscale-tailscale-1 tailscale cert obrienserver.<tailnet>.ts.net
+   sudo docker exec ix-tailscale-tailscale-1 tailscale serve --bg --https=443 http://127.0.0.1:3000
+   ```
+   `--bg` persists the config across container restarts.
+5. Add the new OAuth callback to the Discord developer portal:
+   `https://obrienserver.<tailnet>.ts.net/auth/discord/callback`
+6. In the TrueNAS Apps UI, set the web service env var
+   `WEB_BASE_URL=https://obrienserver.<tailnet>.ts.net` (additionally — keep Caddy
+   running for LAN access; the env var only controls the OAuth round-trip URL).
+7. Install Tailscale on every device that needs remote access.
+
+After setup you have two access paths simultaneously:
+
+| From | URL | Path |
+|---|---|---|
+| LAN (home) | `https://obrienserver.local:8443` | Caddy (self-signed) |
+| Anywhere on tailnet | `https://obrienserver.<tailnet>.ts.net` | `tailscale serve` (Let's Encrypt) |
+
+Both Discord callback URLs can be registered simultaneously in the developer
+portal — they don't conflict.
+
+### Postgres backups
 
 Because Postgres data is on `POOL/apps/paperhoard/pgdata`, set a TrueNAS
 **Periodic Snapshot Task** on that dataset (e.g. daily, retain 14). For
