@@ -21,6 +21,8 @@ import { trashRoutes, sweepDeletedCopies } from "./trash.js";
 import { statsRoutes } from "./stats.js";
 import { bulkEditRoutes } from "./bulk-edit.js";
 import { bookMergeRoutes } from "./book-merge.js";
+import { exportRoutes } from "./exports.js";
+import { scheduleAutoBackup } from "./_auto-backup.js";
 import { logger } from "../../shared/logger.js";
 
 export async function registerRoutes(app: FastifyInstance) {
@@ -46,6 +48,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await statsRoutes(app);
   await bulkEditRoutes(app);
   await bookMergeRoutes(app);
+  await exportRoutes(app);
 
   // Sweep soft-deleted copies older than 30 days at boot, then daily.
   void sweepDeletedCopies()
@@ -56,5 +59,10 @@ export async function registerRoutes(app: FastifyInstance) {
       .then((n) => n > 0 && logger.info({ swept: n }, "Hard-deleted stale copies"))
       .catch((err) => logger.warn({ err }, "Sweep failed"));
   }, 24 * 60 * 60 * 1000).unref();
+
+  // Daily JSON backup of every library to BACKUPS_DIR with 30-day
+  // retention. Application-consistent companion to the Postgres dataset
+  // ZFS snapshot policy that already covers crash-consistency.
+  scheduleAutoBackup();
 }
 

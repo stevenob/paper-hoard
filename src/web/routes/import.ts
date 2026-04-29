@@ -105,6 +105,37 @@ export async function importRoutes(app: FastifyInstance) {
               entityId: copy.id,
               details: { source: "csv-import", format, row: i + 2 },
             });
+          } else if (type === "trophy") {
+            // Idempotent: skip if a trophy already exists for this book.
+            const existing = await prisma.trophy.findUnique({
+              where: { libraryId_bookId: { libraryId: library.id, bookId: book.id } },
+            });
+            if (existing) {
+              summary.skipped++;
+              summary.imported--;
+              summary.errors.push({
+                row: i + 2,
+                reason: "already on trophy list",
+                title: r.title,
+              });
+              // Don't double-count as imported below.
+              continue;
+            }
+            const trophy = await prisma.trophy.create({
+              data: {
+                libraryId: library.id,
+                bookId: book.id,
+                requestedByUserId: user.id,
+                priority: 3,
+              },
+            });
+            void audit({
+              userId: user.id,
+              action: "create",
+              entity: "trophy",
+              entityId: trophy.id,
+              details: { source: "csv-import", format, row: i + 2 },
+            });
           } else {
             const completion = await prisma.completion.create({
               data: {

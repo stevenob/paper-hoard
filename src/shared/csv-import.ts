@@ -22,7 +22,7 @@ export interface ParseResult {
 }
 
 export type CsvFormat = "generic" | "goodreads" | "storygraph";
-export type ImportType = "physical" | "completion";
+export type ImportType = "physical" | "completion" | "trophy";
 
 function pickHeader(headers: string[], candidates: string[]): string | undefined {
   const lower = headers.map((h) => h.toLowerCase().trim());
@@ -112,6 +112,9 @@ function parseGoodreads(
   for (const r of data) {
     const shelf = shelfH ? clean(r[shelfH])?.toLowerCase() : undefined;
     if (type === "completion" && shelf && shelf !== "read") continue;
+    // Trophy import: only books on the "to-read" shelf become wishlist
+    // entries. Goodreads stores this as `Exclusive Shelf == "to-read"`.
+    if (type === "trophy" && shelf && shelf !== "to-read") continue;
     rows.push({
       isbn: isbnH ? clean(r[isbnH]) : undefined,
       title: titleH ? clean(r[titleH]) : undefined,

@@ -18,6 +18,7 @@ const schema = z.object({
   COOKIE_SECRET: z.string().min(8).default("dev-cookie-secret-change-me"),
   GOOGLE_BOOKS_API_KEY: optionalString(),
   UPLOADS_DIR: z.string().default("./data/uploads"),
+  BACKUPS_DIR: z.string().default("./data/backups"),
   GIT_SHA: z.string().default("dev"),
   IMAGE_TAG: z.string().default("dev"),
   LOG_LEVEL: z.string().default("info"),

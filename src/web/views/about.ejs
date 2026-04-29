@@ -42,6 +42,63 @@
   </form>
 <% } %>
 
+<h2>Backup &amp; export</h2>
+<p class="hint">A daily JSON backup of every library is written to the <code>BACKUPS_DIR</code> volume (30-day retention). For one-off downloads, use the buttons below.</p>
+<p>
+  <a class="button" href="/library/export.csv">📊 Download CSV</a>
+  <a class="button" href="/library/export.json">📦 Download JSON</a>
+  <% if (activeUser) { %>
+    <button type="button" id="btn-backup-now">💾 Run backup now</button>
+  <% } %>
+</p>
+<p class="hint">CSV is one row per active copy with shelves joined by <code>;</code>. JSON is a full snapshot suitable for restore (books + copies + shelves + trophies + completions).</p>
+<div id="backup-status" class="hint"></div>
+<ul id="backup-list" class="hint" style="margin-top:.25rem;"></ul>
+<script>
+  (function() {
+    const list = document.getElementById('backup-list');
+    const status = document.getElementById('backup-status');
+    const btn = document.getElementById('btn-backup-now');
+
+    function fmtBytes(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+      return (b / 1024 / 1024).toFixed(2) + ' MB';
+    }
+    async function refresh() {
+      try {
+        const res = await fetch('/library/backups.json');
+        const json = await res.json();
+        list.innerHTML = '';
+        if (!json.backups || json.backups.length === 0) {
+          status.textContent = json.dirMissing
+            ? 'BACKUPS_DIR doesn\u2019t exist yet — first scheduled backup will create it ~60s after server start.'
+            : 'No backup files yet.';
+          return;
+        }
+        status.textContent = json.backups.length + ' backup(s) on disk · ' + (json.dir || '');
+        json.backups.slice(0, 10).forEach(function(b) {
+          const li = document.createElement('li');
+          li.textContent = b.name + ' · ' + fmtBytes(b.size) + ' · ' + b.mtime.replace('T', ' ').slice(0, 16);
+          list.appendChild(li);
+        });
+      } catch (err) { /* ignore */ }
+    }
+    if (btn) btn.addEventListener('click', async function() {
+      btn.disabled = true;
+      btn.textContent = 'Running…';
+      try {
+        await fetch('/library/backup-now', { method: 'POST' });
+        await refresh();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '💾 Run backup now';
+      }
+    });
+    refresh();
+  })();
+</script>
+
 <h2>Public share link</h2>
 <% if (!library) { %>
   <p class="hint">No library exists yet.</p>

@@ -66,12 +66,14 @@ services:
       DISCORD_GUILD_IDS: "CHANGE_ME_quote_the_full_18-19_digit_guild_id"
       GOOGLE_BOOKS_API_KEY: ""
       UPLOADS_DIR: "/data/uploads"
+      BACKUPS_DIR: "/data/backups"
       LOG_LEVEL: "info"
       NODE_ENV: "production"
     ports:
       - "3000:3000"
     volumes:
       - /mnt/POOL/apps/paperhoard/uploads:/data/uploads
+      - /mnt/POOL/apps/paperhoard/backups:/data/backups
     command: sh -c "npx prisma migrate deploy && node dist/web/index.js"
 
   bot:
