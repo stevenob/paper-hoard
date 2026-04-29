@@ -28,6 +28,7 @@
 <div id="camera-overlay" class="camera-overlay" hidden role="dialog" aria-modal="true" aria-label="Barcode scanner">
   <div class="camera-topbar">
     <span id="overlay-status">Scanning… point at the barcode on the back cover.</span>
+    <button type="button" id="btn-bulk" class="ghost" aria-pressed="false" title="Bulk scan mode — auto-add new books, skip duplicates">🚀</button>
     <button type="button" id="btn-torch" class="ghost" aria-pressed="false" hidden>🔦</button>
     <button type="button" id="btn-done" class="primary">Done</button>
   </div>
@@ -50,6 +51,11 @@
     </div>
   </div>
   <div class="camera-toast" id="overlay-toast" hidden role="status" aria-live="polite"></div>
+
+  <!-- Bulk-mode queue: tiny chips along the bottom of the overlay showing
+       what was just auto-added, so the user can verify at a glance. -->
+  <div id="bulk-queue" class="bulk-queue" hidden aria-live="polite" aria-label="Recently added"></div>
+
   <!-- Confirm card shown after a successful barcode decode + lookup. -->
   <div id="confirm-card" class="confirm-card" hidden role="dialog" aria-label="Confirm scanned book">
     <img id="confirm-cover" alt="" class="confirm-cover" hidden />
@@ -163,7 +169,32 @@
     let reticleFlashTimer = null;
     const CONFIRM_WINDOW_MS = 600;
     const btnTorch = document.getElementById('btn-torch');
+    const btnBulk = document.getElementById('btn-bulk');
+    const bulkQueue = document.getElementById('bulk-queue');
     const reticleEl = document.querySelector('.camera-reticle');
+
+    let bulkMode = false;
+
+    btnBulk.addEventListener('click', function() {
+      bulkMode = !bulkMode;
+      btnBulk.setAttribute('aria-pressed', String(bulkMode));
+      btnBulk.classList.toggle('active', bulkMode);
+      if (bulkMode) {
+        showToast('🚀 Bulk mode: new books auto-add, duplicates skip', true);
+        bulkQueue.hidden = false;
+      } else {
+        showToast('Bulk mode off — back to confirm-each-scan', true);
+        // Keep queue contents for review even after disabling bulk mode.
+      }
+    });
+
+    function pushBulkChip(title) {
+      const chip = document.createElement('span');
+      chip.className = 'bulk-chip';
+      chip.textContent = '✓ ' + (title || '(added)');
+      bulkQueue.prepend(chip);
+      while (bulkQueue.children.length > 8) bulkQueue.removeChild(bulkQueue.lastChild);
+    }
 
     function flashReticle(state) {
       if (!reticleEl) return;
@@ -189,6 +220,30 @@
     }
 
     function showConfirm(payload, originalRequest) {
+      // Bulk mode: skip the confirm card. New books auto-add, duplicates
+      // are flagged + skipped (no second copy created), trophy matches go
+      // through the auto-add path so the trophy is correctly acquired.
+      if (bulkMode) {
+        const titleStr = (payload.book && payload.book.title) || 'Unknown';
+        const dup = (payload.existingCopies || []).length > 0;
+        if (dup && !payload.trophy) {
+          showToast('⚠️ Skipped (already owned): ' + titleStr, false);
+          if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+          // Important: don't keep the result busy / pendingConfirm set.
+          pendingConfirm = null;
+          overlayStatus.textContent = 'Scanning…';
+          return;
+        }
+        // Auto-commit. The submitLookup() call posts to /scan and records
+        // the copy. Don't await — let scanning resume immediately.
+        pendingConfirm = null;
+        pushBulkChip(titleStr);
+        if (navigator.vibrate) navigator.vibrate(60);
+        submitLookup(originalRequest);
+        overlayStatus.textContent = 'Scanning…';
+        return;
+      }
+
       pendingConfirm = { payload: payload, request: originalRequest };
       const b = payload.book;
       if (b.thumbnailUrl) {
@@ -640,6 +695,9 @@
     function onDecoded(text) {
       // Skip new decodes while a confirm card is up.
       if (pendingConfirm) return;
+      // Don't decode while a network commit is in flight — bulk mode would
+      // otherwise queue duplicates faster than the server can finish.
+      if (busy) return;
       const now = Date.now();
       if (text === lastSubmitted && now - lastSubmittedAt < 4000) return;
       const cleaned = text.replace(/[^0-9Xx]/g, '');

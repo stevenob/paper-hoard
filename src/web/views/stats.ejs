@@ -1,0 +1,140 @@
+<% const pageTitle = 'Catalog stats' %>
+<%- include('_header') %>
+
+<h1>📊 Catalog stats</h1>
+
+<section class="cards">
+  <div class="card"><h2><%= totals.copies %></h2><p>Active copies</p></div>
+  <div class="card"><h2><%= totals.books %></h2><p>Distinct books</p></div>
+  <div class="card"><h2><%= totals.trophies %></h2><p>On trophy list</p></div>
+  <div class="card"><h2><%= totals.shelves %></h2><p>Shelves</p></div>
+  <% if (totals.trash > 0) { %>
+    <a class="card" href="/trash"><h2><%= totals.trash %></h2><p>In trash</p></a>
+  <% } %>
+</section>
+
+<h2>Catalog completeness</h2>
+<p class="hint">How much of the metadata for each copy is filled in. Higher = cleaner catalog.</p>
+<ul class="completeness-list">
+  <% [
+    ['Has a cover', completeness.cover],
+    ['Has an ISBN', completeness.isbn],
+    ['Condition recorded', completeness.condition],
+    ['Edition recorded', completeness.edition],
+    ['Assigned to a shelf', completeness.shelf],
+  ].forEach(function(row) { const label = row[0], data = row[1]; %>
+    <li>
+      <div class="completeness-row">
+        <span class="completeness-label"><%= label %></span>
+        <span class="completeness-value"><strong><%= data.pct %>%</strong>
+          <span class="hint">(<%= data.value %>/<%= data.of %>)</span></span>
+      </div>
+      <div class="completeness-bar"><span style="width: <%= data.pct %>%"></span></div>
+    </li>
+  <% }) %>
+</ul>
+
+<% if (backfillCandidates > 0) { %>
+  <h2>Cover backfill</h2>
+  <p class="hint"><%= backfillCandidates %> book<%= backfillCandidates === 1 ? '' : 's' %> with an ISBN but no cover image. Re-runs Google Books + Open Library lookups for each.</p>
+  <% if (activeUser) { %>
+    <button type="button" id="btn-backfill" class="primary big">🔄 Refetch missing covers</button>
+    <p id="backfill-status" class="hint" style="margin-top: .5rem;"></p>
+    <div class="completeness-bar" id="backfill-bar" hidden><span></span></div>
+  <% } else { %>
+    <p class="hint"><a href="/auth/login">Log in</a> to run cover backfill.</p>
+  <% } %>
+<% } %>
+<% if (booksMissingIsbn > 0) { %>
+  <p class="hint"><%= booksMissingIsbn %> book<%= booksMissingIsbn === 1 ? '' : 's' %> in your library have no ISBN at all (manual entries / pre-1970 / self-pub) and can't be auto-backfilled.</p>
+<% } %>
+
+<h2>Editions breakdown</h2>
+<% if (editions.length === 0) { %>
+  <p class="hint">No copies yet.</p>
+<% } else { %>
+  <table class="data">
+    <thead><tr><th>Edition</th><th>Copies</th></tr></thead>
+    <tbody>
+      <% editions.forEach(function(e) { %>
+        <tr><td data-label="Edition"><%= e.label %></td><td data-label="Copies"><%= e.count %></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<h2>Top authors</h2>
+<% if (topAuthors.length === 0) { %>
+  <p class="hint">No books with a primary author yet.</p>
+<% } else { %>
+  <ol class="top-authors">
+    <% topAuthors.forEach(function(a) {
+      const slug = authorSlug(a.primaryAuthor);
+    %>
+      <li>
+        <% if (slug) { %><a href="/authors/<%= slug %>"><%= a.primaryAuthor %></a><% } else { %><%= a.primaryAuthor %><% } %>
+        <span class="hint">— <%= a.bookCount %> book<%= a.bookCount === 1 ? '' : 's' %></span>
+      </li>
+    <% }) %>
+  </ol>
+<% } %>
+
+<h2>Catalog growth</h2>
+<ul class="growth-list">
+  <li><strong><%= adds.last7 %></strong> added in the last <strong>7 days</strong></li>
+  <li><strong><%= adds.last30 %></strong> added in the last <strong>30 days</strong></li>
+  <li><strong><%= adds.last90 %></strong> added in the last <strong>90 days</strong></li>
+</ul>
+
+<script>
+  (function() {
+    const btn = document.getElementById('btn-backfill');
+    if (!btn) return;
+    const status = document.getElementById('backfill-status');
+    const bar = document.getElementById('backfill-bar');
+    const barInner = bar.querySelector('span');
+    let totalProcessed = 0;
+    let totalUpdated = 0;
+
+    async function step(initial) {
+      btn.disabled = true;
+      status.textContent = 'Processing…';
+      bar.hidden = false;
+      try {
+        const res = await fetch('/stats/backfill-covers', { method: 'POST' });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          status.textContent = (json && json.error) || 'Backfill failed';
+          btn.disabled = false;
+          return;
+        }
+        totalProcessed += json.processed;
+        totalUpdated += json.updated;
+        const total = totalProcessed + json.remaining;
+        const pct = total === 0 ? 100 : Math.round((totalProcessed / total) * 100);
+        barInner.style.width = pct + '%';
+        status.textContent = 'Processed ' + totalProcessed + ' · updated ' + totalUpdated + ' · ' + json.remaining + ' remaining';
+        if (json.remaining > 0 && json.processed > 0) {
+          // Yield briefly so the UI repaints, then continue.
+          setTimeout(step, 250);
+        } else {
+          status.textContent = '✓ Done — ' + totalUpdated + ' covers refreshed of ' + totalProcessed + ' attempted.';
+          btn.disabled = false;
+          if (totalUpdated > 0) {
+            const reload = document.createElement('a');
+            reload.href = '/stats';
+            reload.textContent = ' Reload stats';
+            reload.style.marginLeft = '.5rem';
+            status.appendChild(reload);
+          }
+        }
+      } catch (err) {
+        status.textContent = 'Network error: ' + (err.message || err);
+        btn.disabled = false;
+      }
+    }
+    btn.addEventListener('click', function() { totalProcessed = 0; totalUpdated = 0; step(); });
+  })();
+</script>
+
+<%- include('_footer') %>

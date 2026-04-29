@@ -18,6 +18,7 @@ import { shelvesRoutes } from "./shelves.js";
 import { authorRoutes } from "./authors.js";
 import { readingRoutes } from "./readings.js";
 import { trashRoutes, sweepDeletedCopies } from "./trash.js";
+import { statsRoutes } from "./stats.js";
 import { logger } from "../../shared/logger.js";
 
 export async function registerRoutes(app: FastifyInstance) {
@@ -40,6 +41,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await authorRoutes(app);
   await readingRoutes(app);
   await trashRoutes(app);
+  await statsRoutes(app);
 
   // Sweep soft-deleted copies older than 30 days at boot, then daily.
   void sweepDeletedCopies()
