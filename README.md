@@ -2,77 +2,80 @@
 
 A self-hosted physical book library + Discord bot for households.
 
-> Track your physical library and the digital reads worth adding to your hoard.
+> Track the books you own, scan a barcode in a bookstore to instantly check whether you already have it, and never accidentally buy *Project Hail Mary* twice again.
 
 ## What it does
 
-- **Physical Library** — every book you own physically, scanned by ISBN, organized into series and tags
-- **Trophy List** — digital books you finished and now want to buy physically
-- **Digital Completions** — ebooks/audiobooks you read elsewhere (Kindle, Audible, Libby…)
-- **Smaug** — a Discord bot for the household: `/scan`, `/library`, `/trophies`
-- **Web UI** — Plex-style cover grid, per-book detail with reviews from Goodreads/StoryGraph/LibraryThing/Open Library, mobile camera scanning, dark mode, optional public read-only share link
+- **Physical Library** — every book you own physically, scanned by ISBN or photo, organized into shelves.
+- **Trophy List** — books you'd like to own ("wishlist"). Smaug DMs you when someone in the household acquires one.
+- **Field lookup** — open the scanner on your phone in a bookstore aisle, scan the barcode, get an instant **"already owned"** or **"on trophy list"** chip from a local cache. Works offline.
+- **Smaug** — Discord bot: `/scan`, `/library`, `/trophies`, `/found <isbn>` for quick checks from chat.
+- **Web UI** — cover grid, fuzzy search, bulk edit, book merge, catalog stats, JSON+CSV export, automated backups, QR spine labels, multi-photo per copy.
 
-Discord identity is the source of truth: log in with Discord OAuth, the bot sees the same users, scope is one library per Discord guild (one household).
+Discord identity is the source of truth. Scope is one library per Discord guild (one household).
 
-## Features
+## Features at a glance
 
 | Area | What you get |
 | --- | --- |
-| **Scanning** | Phone camera (ZXing) with barcode confirmation card, photo upload from camera roll, manual ISBN/title/author entry, Smaug `/scan isbn:` or `/scan title: author:` |
-| **Metadata** | Google Books primary, Open Library fallback, manual override per book, auto-detected binding (HC/PB/mass-market) and series |
-| **Browse** | Cover grid, list view, search, sort/filter, per-book detail page, per-tag, per-series, paginated 60/page |
-| **Trophy** | Detected on scan with confirm-buttons in Discord, Smaug DMs the requester when their trophy is acquired |
-| **Imports** | Goodreads CSV, StoryGraph CSV, generic CSV (physical or completions) |
-| **Operations** | Audit log, /about page with version + DB counts, automated `pg_dump` backup script, public share link with regenerable slug |
-| **Quality of life** | PWA install (Add to Home Screen), dark mode (auto + manual toggle), service worker for snappy reloads, accessibility (focus rings, ARIA, Esc closes camera) |
+| **Scanning** | Phone camera (ZXing), two-frame confirmation, speculative server lookup, bulk mode for shelf inventory, photo upload, manual ISBN/title/author entry, iOS Shortcut friendly (`?isbn=` URL param), QR spine-sticker scan |
+| **Field lookup** | Instant "already owned / on trophy list" chip from a local ISBN cache (works offline), confirmation card with cover + rating + edition + dedupe |
+| **Match repair** | Inline edit on confirm card (title/authors/publisher/edition), missing-author rescue prompt, refetch metadata button on book detail, manual book entry for ISBN-less editions |
+| **Metadata** | Google Books primary, Open Library fallback, DB-cached on re-scan, manual override per book, OL ratings cached with stale-after-7-days refresh |
+| **Browse** | Cover grid, list view with checkbox bulk-edit, fuzzy search via Postgres pg_trgm, sort/filter, per-book detail, per-author page (`/authors/<slug>`), per-shelf page, paginated 60/page |
+| **Catalog quality** | `/library/dupes` book merge tool, `/stats` completeness dashboard, one-click cover backfill, bulk shelf/edition/condition assignment |
+| **Provenance** | Per-copy `acquiredFrom`, `acquiredOn`, `priceCents`, multi-photo gallery (dust jacket, signed page, damage), catalog value rollup |
+| **Trophy** | Auto-detected on scan with one-tap acquisition; Smaug DMs the requester when fulfilled. Optional reason capture in field. Goodreads "Want to Read" CSV import |
+| **Backup** | Daily automatic JSON dump per library (30-day retention), CSV + JSON export endpoints, "Run backup now" button on /about |
+| **Operations** | Audit log, /about page with counts, soft-delete + 30-day trash sweeper + undo toast, public share link with regenerable slug, healthz endpoint |
+| **Physical tools** | `/library/labels` generates print-ready QR spine stickers; scanning a sticker deep-links to the copy detail |
+| **Quality of life** | PWA install, dark mode (auto + manual), service worker for offline scanning, accessibility (focus rings, ARIA, Esc closes camera), Tailscale-friendly |
 
 ## Quick start (local dev)
 
 Requires Node 22+ and Docker.
 
 ```bash
-cp .env.example .env                # then fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_IDS, COOKIE_SECRET
+cp .env.example .env                # set DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_IDS, COOKIE_SECRET
 npm install
 npm run build
 
-# Postgres
 docker run -d --name paperhoard-pg \
   -e POSTGRES_USER=paperhoard -e POSTGRES_PASSWORD=paperhoard -e POSTGRES_DB=paperhoard \
   -p 5432:5432 postgres:16-alpine
 npx prisma migrate deploy
 
-# Web (separate terminal)
 npm run dev:web                     # http://localhost:3000
-
-# Bot (only if you have a Discord token)
-npm run register-commands           # one-time per command change
-npm run dev:bot
+npm run register-commands           # one-time, when slash command set changes
+npm run dev:bot                     # only if you have a Discord token
 ```
 
 ## Self-hosting on TrueNAS SCALE
 
-See [`truenas/README.md`](truenas/README.md). Recommended path:
+See [`truenas/README.md`](truenas/README.md). Recommended path: **GHCR-published image + Caddy or Tailscale-served HTTPS**.
 
 1. Run the GitHub Actions workflow once (push a `vX.Y.Z` tag).
 2. Make the GHCR package public.
-3. Install the **`compose.published-with-caddy.yml`** as a Custom App on TrueNAS — pulls the image from GHCR, runs the web + bot + Postgres + a self-signed-HTTPS Caddy proxy in one shot.
+3. Install **`compose.published-with-caddy.yml`** as a Custom App in TrueNAS.
 4. After that, every new tag → `Restart` in the TrueNAS Apps UI, no SSH.
 
 The TrueNAS guide also covers:
 
-- Mounting Postgres + uploads + Caddy data on snapshot-able datasets
-- Trusting Caddy's local CA on iPhone so the camera scanner works in Safari
-- Backup cron job + restore
+- Mounting Postgres + uploads + backups + Caddy data on snapshot-able datasets
+- Trusting Caddy's local CA on iPhone for LAN access
+- **Tailscale + `tailscale serve`** for off-LAN access with real Let's Encrypt certs and zero public exposure
 - Discord OAuth setup for web login
+- The TrueNAS Apps UI YAML quirks to watch out for
 
 ## Architecture
 
 - **Node.js 22 + TypeScript**, single repo, two entrypoints (`bot`, `web`) sharing a `shared/` module
-- **Fastify + EJS** for the web UI (server-rendered HTML, minimal JS)
+- **Fastify + EJS** for the web UI (server-rendered HTML, minimal JS, vanilla service worker)
 - **discord.js v14** for Smaug (slash commands + buttons + modals)
-- **Prisma + Postgres 16** for persistence
-- **ZXing-js** vendored for in-browser barcode decoding
-- **Caddy** in front for HTTPS termination on LAN
+- **Prisma + Postgres 16** with `pg_trgm` for fuzzy search
+- **ZXing-js** vendored for in-browser barcode + QR decoding
+- **`qrcode`** for server-rendered SVG spine labels
+- **Caddy or Tailscale Serve** in front for HTTPS termination
 - **GitHub Actions → GHCR** for image publishing on tag
 
 Single household = single library. Multi-library is in the parking lot but not implemented.
@@ -80,14 +83,15 @@ Single household = single library. Multi-library is in the parking lot but not i
 ## Project layout
 
 ```
-prisma/schema.prisma     Data model
-src/shared/              DB, env, logger, metadata providers, audit, notifications, picklists, tags
-src/bot/                 Smaug entrypoint + slash command handlers + notification poller
-src/web/                 Fastify routes + EJS views + public assets (incl. service worker)
-src/scripts/             One-off maintenance scripts (e.g. backfill-editions)
-truenas/                 Compose files + Caddyfile + deployment guide
-scripts/                 Host-side helpers (e.g. backup.sh)
-.github/workflows/       CI — image publish on tag
+prisma/schema.prisma         Data model
+prisma/migrations/           Hand-written SQL migrations (prisma migrate deploy)
+src/shared/                  DB, env, logger, metadata providers, audit, notifications, search, exports
+src/bot/                     Smaug entrypoint + slash command handlers + notification poller
+src/web/                     Fastify routes + EJS views + public assets (sw.js, ui.js, style.css)
+src/scripts/                 One-off maintenance scripts (e.g. backfill-editions, backfill-ratings)
+tests/                       Vitest smoke tests (boots the app via fastify.inject)
+truenas/                     Compose files + Caddyfile + deployment guide
+.github/workflows/           CI — image publish on tag
 ```
 
 ## Useful commands
@@ -98,10 +102,9 @@ scripts/                 Host-side helpers (e.g. backup.sh)
 | `npm run dev:web` | Web with watch (tsx) |
 | `npm run dev:bot` | Bot with watch |
 | `npm run register-commands` | Push slash command definitions to Discord |
-| `npm run prisma:migrate` | Create + apply a new migration |
 | `npm run prisma:deploy` | Apply existing migrations (used in containers) |
 | `npm run lint` | Type-check only |
-| `npm run test` | Vitest |
+| `npm test` | Vitest smoke tests (requires running Postgres at `localhost:5432`) |
 | `git tag vX.Y.Z && git push origin vX.Y.Z` | Cut a release; GitHub Actions publishes to GHCR |
 
 ## License

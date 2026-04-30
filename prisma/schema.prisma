@@ -21,7 +21,6 @@ model Library {
   trophies        Trophy[]
   completions     Completion[]
   shelves         Shelf[]
-  readings        Reading[]
 }
 
 model User {
@@ -34,7 +33,6 @@ model User {
   addedCopies       PhysicalCopy[] @relation("AddedBy")
   completions       Completion[]
   requestedTrophies Trophy[]       @relation("RequestedBy")
-  readings          Reading[]
 }
 
 model Membership {
@@ -91,7 +89,6 @@ model PhysicalCopy {
   priceCents    Int?
 
   shelves       ShelfCopy[]
-  readings      Reading[]
   photos        CopyPhoto[]
 
   @@index([deletedAt])
@@ -108,22 +105,6 @@ model CopyPhoto {
   createdAt DateTime     @default(now())
 
   @@index([copyId])
-}
-
-model Reading {
-  id         String   @id @default(cuid())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     String
-  library    Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
-  libraryId  String
-  copy       PhysicalCopy @relation(fields: [copyId], references: [id], onDelete: Cascade)
-  copyId     String
-  startedAt  DateTime @default(now())
-  finishedAt DateTime?
-  notes      String?
-
-  @@index([userId, finishedAt])
-  @@index([libraryId, finishedAt])
 }
 
 model Shelf {

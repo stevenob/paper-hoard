@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
 import multipart from "@fastify/multipart";
@@ -16,7 +16,18 @@ void logger;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-async function main() {
+/**
+ * Build the configured Fastify app without binding to a port. Used by
+ * main() to listen for real and by tests to fastify.inject() requests.
+ *
+ * The `viewsRoot` and `publicRoot` overrides exist so tests run against
+ * the source-tree views (src/web/views) instead of dist/ which only
+ * exists after a build.
+ */
+export async function buildApp(opts: {
+  viewsRoot?: string;
+  publicRoot?: string;
+} = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: { level: env.LOG_LEVEL }, trustProxy: true });
 
   await app.register(cookie, { secret: env.COOKIE_SECRET });
@@ -26,11 +37,11 @@ async function main() {
   });
   await app.register(view, {
     engine: { ejs },
-    root: path.join(__dirname, "views"),
+    root: opts.viewsRoot ?? path.join(__dirname, "views"),
     defaultContext: { appName: "Paper Hoard" },
   });
   await app.register(staticPlugin, {
-    root: path.join(__dirname, "public"),
+    root: opts.publicRoot ?? path.join(__dirname, "public"),
     prefix: "/static/",
   });
 
@@ -45,13 +56,26 @@ async function main() {
   });
 
   await registerRoutes(app);
-
-  await app.listen({ host: "0.0.0.0", port: env.WEB_PORT });
-  app.log.info({ port: env.WEB_PORT, uploadsDir }, "Paper Hoard web UI listening");
+  return app;
 }
 
-main().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error("Web UI failed to start", err);
-  process.exit(1);
-});
+async function main() {
+  const app = await buildApp();
+  await app.listen({ host: "0.0.0.0", port: env.WEB_PORT });
+  app.log.info(
+    { port: env.WEB_PORT, uploadsDir: path.resolve(env.UPLOADS_DIR) },
+    "Paper Hoard web UI listening"
+  );
+}
+
+// Only auto-start when this module is the entrypoint. Tests import
+// buildApp directly without triggering listen().
+const isEntry =
+  process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isEntry) {
+  main().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error("Web UI failed to start", err);
+    process.exit(1);
+  });
+}

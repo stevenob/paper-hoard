@@ -16,7 +16,6 @@ import { themeRoutes } from "./theme.js";
 import { shareRoutes } from "./share.js";
 import { shelvesRoutes } from "./shelves.js";
 import { authorRoutes } from "./authors.js";
-import { readingRoutes } from "./readings.js";
 import { trashRoutes, sweepDeletedCopies } from "./trash.js";
 import { statsRoutes } from "./stats.js";
 import { bulkEditRoutes } from "./bulk-edit.js";
@@ -44,7 +43,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await importRoutes(app);
   await shelvesRoutes(app);
   await authorRoutes(app);
-  await readingRoutes(app);
   await trashRoutes(app);
   await statsRoutes(app);
   await bulkEditRoutes(app);
