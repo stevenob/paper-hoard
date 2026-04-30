@@ -14,22 +14,43 @@ interface ActivityEntry {
 
 export async function homeRoutes(app: FastifyInstance) {
   app.get("/", async (req, reply) => {
-    const [physicalCount, trophyCount, completionCount, recent, auditRows] =
-      await Promise.all([
-        prisma.physicalCopy.count({ where: { deletedAt: null } }),
-        prisma.trophy.count(),
-        prisma.completion.count(),
-        prisma.physicalCopy.findMany({
-          where: { deletedAt: null },
-          include: { book: true, addedBy: true },
-          orderBy: { addedAt: "desc" },
-          take: 12,
-        }),
-        prisma.auditLog.findMany({
-          orderBy: { createdAt: "desc" },
-          take: 30,
-        }),
-      ]);
+    const [
+      physicalCount,
+      trophyCount,
+      shelfCount,
+      authorCount,
+      recent,
+      auditRows,
+    ] = await Promise.all([
+      prisma.physicalCopy.count({ where: { deletedAt: null } }),
+      prisma.trophy.count(),
+      prisma.shelf.count(),
+      // Distinct primary authors across active copies — used for the
+      // "Authors" stat card on the home dashboard.
+      prisma.book
+        .findMany({
+          where: {
+            primaryAuthor: { not: null },
+            physicalCopies: { some: { deletedAt: null } },
+          },
+          distinct: ["primaryAuthor"],
+          select: { primaryAuthor: true },
+        })
+        .then((rows) => rows.length),
+      prisma.physicalCopy.findMany({
+        where: { deletedAt: null },
+        include: { book: true, addedBy: true },
+        orderBy: { addedAt: "desc" },
+        take: 12,
+      }),
+      prisma.auditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      }),
+    ]);
+
+    // Drop the now-unused completion count alias so chrome stays consistent.
+    const completionCount = 0;
 
     const userIds = Array.from(
       new Set(auditRows.map((r) => r.userId).filter((x): x is string => Boolean(x)))
@@ -132,6 +153,8 @@ export async function homeRoutes(app: FastifyInstance) {
         physicalCount,
         trophyCount,
         completionCount,
+        shelfCount,
+        authorCount,
         recent,
         activity,
       })

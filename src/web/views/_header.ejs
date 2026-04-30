@@ -11,6 +11,9 @@
     <link rel="icon" type="image/svg+xml" href="/static/icon.svg" />
     <link rel="apple-touch-icon" href="/static/icon.svg" />
     <title><%= typeof pageTitle !== 'undefined' ? pageTitle + ' · ' + appName : appName %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css" />
     <link rel="preconnect" href="https://openlibrary.org" crossorigin>
     <link rel="preconnect" href="https://covers.openlibrary.org" crossorigin>
@@ -27,7 +30,6 @@
         <a href="/stats">Stats</a>
         <a href="/library/labels">Labels</a>
         <a href="/import">Import</a>
-        <a href="/users">Users</a>
         <a href="/about">About</a>
         <a href="/search" class="search-link" aria-label="Search">🔍</a>
       </nav>
@@ -36,7 +38,7 @@
           <button type="submit" class="theme-toggle" aria-label="Toggle theme" title="Toggle light/dark"><%= theme === 'dark' ? '☀︎' : '☾' %></button>
         </form>
         <% if (activeUser) { %>
-          <span>👤 <strong><%= activeUser.displayName %></strong></span>
+          <span><strong><%= activeUser.displayName %></strong></span>
           <form method="post" action="/auth/logout" style="display:inline">
             <button type="submit" class="link">logout</button>
           </form>

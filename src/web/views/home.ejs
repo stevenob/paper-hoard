@@ -1,33 +1,42 @@
 <% const pageTitle = 'Home' %>
 <%- include('_header') %>
 
-<h1>Welcome to Paper Hoard</h1>
-<% if (!library) { %>
-  <p class="notice">No family library is connected yet. Invite Smaug to your Discord server and run <code>/library</code> to create one — that's how Paper Hoard discovers your household guild.</p>
-<% } else { %>
-  <p>Connected to family library: <strong><%= library.name %></strong></p>
-  <% if (!activeUser && oauthConfigured) { %>
-    <p class="hint"><a href="/auth/login">Log in with Discord</a> to scan, log completions, or curate the trophy list.</p>
+<section class="hero">
+  <h1>
+    <small>Paper Hoard</small>
+    <% if (activeUser) { %>Welcome back, <%= activeUser.displayName %>.<% } else if (library) { %><%= library.name %><% } else { %>Set up your library<% } %>
+  </h1>
+  <% if (!library) { %>
+    <p class="notice" style="margin-top:1.5rem;">No family library is connected yet. Invite Smaug to your Discord server and run <code>/library</code> to create one — that's how Paper Hoard discovers your household.</p>
+  <% } else if (!activeUser && oauthConfigured) { %>
+    <p style="margin-top:1.5rem;"><a href="/auth/login">Log in with Discord</a> to scan, log, or curate the trophy list.</p>
   <% } %>
-<% } %>
+</section>
 
 <section class="cards">
   <a class="card" href="/library">
     <h2><%= physicalCount %></h2>
-    <p>Physical books</p>
+    <p>Books</p>
   </a>
   <a class="card" href="/trophies">
     <h2><%= trophyCount %></h2>
-    <p>Trophy items</p>
+    <p>On trophy list</p>
   </a>
-  <a class="card" href="/completions">
-    <h2><%= completionCount %></h2>
-    <p>Digital completions</p>
+  <a class="card" href="/library">
+    <h2><%= authorCount %></h2>
+    <p>Authors</p>
+  </a>
+  <a class="card" href="/shelves">
+    <h2><%= shelfCount %></h2>
+    <p>Shelves</p>
   </a>
 </section>
 
 <% if (recent && recent.length > 0) { %>
-  <h2>Recently added</h2>
+  <div class="section-head" style="display:flex;align-items:baseline;justify-content:space-between;margin:2rem 0 1.25rem;">
+    <h2 style="margin:0;">Recently added</h2>
+    <a href="/library" style="color:var(--accent);text-decoration:none;font-size:.9rem;">View all <%= physicalCount %> →</a>
+  </div>
   <ul class="poster-grid poster-grid-compact">
     <% recent.forEach(function(c) {
       const cover = c.coverPath ? '/uploads/' + c.coverPath : c.book.thumbnailUrl;
@@ -50,7 +59,7 @@
 <% } %>
 
 <% if (activity && activity.length > 0) { %>
-  <h2>Recent activity</h2>
+  <h2 style="margin-top:3rem;">Recent activity</h2>
   <ul class="activity-feed">
     <% activity.forEach(function(a) { %>
       <li>
