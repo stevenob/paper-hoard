@@ -22,6 +22,7 @@ import { statsRoutes } from "./stats.js";
 import { bulkEditRoutes } from "./bulk-edit.js";
 import { bookMergeRoutes } from "./book-merge.js";
 import { exportRoutes } from "./exports.js";
+import { labelRoutes } from "./labels.js";
 import { scheduleAutoBackup } from "./_auto-backup.js";
 import { logger } from "../../shared/logger.js";
 
@@ -49,6 +50,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await bulkEditRoutes(app);
   await bookMergeRoutes(app);
   await exportRoutes(app);
+  await labelRoutes(app);
 
   // Sweep soft-deleted copies older than 30 days at boot, then daily.
   void sweepDeletedCopies()

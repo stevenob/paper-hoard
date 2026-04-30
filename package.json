@@ -29,6 +29,7 @@
     "@fastify/view": "^11.0.0",
     "@prisma/client": "^6.1.0",
     "@types/papaparse": "^5.5.2",
+    "@types/qrcode": "^1.5.6",
     "@zxing/browser": "^0.2.0",
     "@zxing/library": "^0.22.0",
     "discord.js": "^14.16.3",
@@ -38,6 +39,7 @@
     "papaparse": "^5.5.3",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
+    "qrcode": "^1.5.4",
     "undici": "^7.2.0",
     "zod": "^3.24.1"
   },

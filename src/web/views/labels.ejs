@@ -1,0 +1,80 @@
+<% const pageTitle = 'Spine labels' %>
+<%- include('_header') %>
+
+<div class="labels-toolbar no-print">
+  <h1>🏷 Spine labels</h1>
+  <p class="hint">Print this page on label sheets (e.g. Avery 5160, 30-up). Each QR deep-links to that copy's detail page when scanned with any phone camera.</p>
+  <form method="get" action="/library/labels" class="labels-filters">
+    <label>Shelf
+      <select name="shelf">
+        <option value="">All copies</option>
+        <% allShelves.forEach(function(s) { %>
+          <option value="<%= s.slug %>" <%= shelfFilter === s.slug ? 'selected' : '' %>><%= s.name %></option>
+        <% }) %>
+      </select>
+    </label>
+    <label>Size
+      <select name="size">
+        <option value="small" <%= size === 'small' ? 'selected' : '' %>>Small (30-up sheet)</option>
+        <option value="large" <%= size === 'large' ? 'selected' : '' %>>Large (10-up sheet)</option>
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+    <button type="button" onclick="window.print()" class="primary">🖨 Print</button>
+  </form>
+  <p class="hint">Showing <%= labels.length %> label<%= labels.length === 1 ? '' : 's' %><% if (labels.length === 600) { %> (capped — narrow with the shelf filter to print more pages)<% } %>.</p>
+</div>
+
+<div class="labels-grid labels-grid-<%= size %>">
+  <% labels.forEach(function(l) { %>
+    <div class="label">
+      <div class="label-qr"><%- l.qrSvg %></div>
+      <div class="label-text">
+        <strong><%= l.title %></strong>
+        <% if (l.primaryAuthor) { %><span class="hint"><%= l.primaryAuthor %></span><% } %>
+      </div>
+    </div>
+  <% }) %>
+</div>
+
+<style>
+  /* Print-optimized layout. Targets Avery 5160 (small) and 5163 (large). */
+  .labels-grid { display: grid; gap: .25rem; }
+  .labels-grid-small { grid-template-columns: repeat(3, 1fr); }
+  .labels-grid-large { grid-template-columns: repeat(2, 1fr); }
+  .label {
+    display: flex; gap: .35rem; align-items: center;
+    padding: .35rem;
+    border: 1px dashed var(--border);
+    page-break-inside: avoid;
+    overflow: hidden;
+  }
+  .label-qr { flex: 0 0 auto; }
+  .label-qr svg { width: 56px; height: 56px; display: block; }
+  .labels-grid-large .label-qr svg { width: 96px; height: 96px; }
+  .label-text { font-size: .8em; line-height: 1.2; min-width: 0; }
+  .labels-grid-large .label-text { font-size: 1em; }
+  .label-text strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .label-text .hint { font-size: .85em; }
+
+  @media print {
+    body { background: white; color: black; margin: 0; }
+    .topbar, .topbar nav, .no-print, footer { display: none !important; }
+    main { padding: 0 !important; max-width: none !important; }
+    .label { border: 0; }
+    .labels-grid-small {
+      grid-template-columns: repeat(3, 1fr);
+      grid-auto-rows: 1in;
+      column-gap: 0.125in;
+      row-gap: 0;
+    }
+    .labels-grid-large {
+      grid-template-columns: repeat(2, 1fr);
+      grid-auto-rows: 2in;
+      gap: 0;
+    }
+    @page { size: letter; margin: 0.5in 0.1875in; }
+  }
+</style>
+
+<%- include('_footer') %>

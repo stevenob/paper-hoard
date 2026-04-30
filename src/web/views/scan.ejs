@@ -776,6 +776,18 @@
       // Don't decode while a network commit is in flight — bulk mode would
       // otherwise queue duplicates faster than the server can finish.
       if (busy) return;
+
+      // Spine-sticker fast-path: when we see a QR that points at one of
+      // our own /library/copy/<id> URLs (printed via /library/labels),
+      // navigate straight to the copy detail page. No ISBN flow at all.
+      const copyMatch = text.match(/\/library\/copy\/([A-Za-z0-9_-]{6,40})(?:[?#].*)?$/);
+      if (copyMatch) {
+        flashReticle('lock');
+        if (navigator.vibrate) navigator.vibrate(40);
+        window.location.href = '/library/copy/' + copyMatch[1];
+        return;
+      }
+
       const now = Date.now();
       if (text === lastSubmitted && now - lastSubmittedAt < 4000) return;
       const cleaned = text.replace(/[^0-9Xx]/g, '');
@@ -897,8 +909,10 @@
         const hints = new Map();
         try {
           // BarcodeFormat enum values (from @zxing/library):
-          //   EAN_8 = 6, EAN_13 = 7, UPC_A = 14
-          hints.set(2 /* DecodeHintType.POSSIBLE_FORMATS */, [7, 6, 14]);
+          //   QR_CODE = 11, EAN_8 = 6, EAN_13 = 7, UPC_A = 14
+          // Adding QR_CODE so spine stickers (printed via /library/labels)
+          // jump straight to the copy detail page when scanned.
+          hints.set(2 /* DecodeHintType.POSSIBLE_FORMATS */, [7, 6, 14, 11]);
           hints.set(3 /* DecodeHintType.TRY_HARDER */, true);
         } catch {}
         reader = new ZXingBrowser.BrowserMultiFormatReader(hints);
