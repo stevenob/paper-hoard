@@ -663,3 +663,41 @@ body.camera-open { overflow: hidden; }
 }
 .photo-label-form button { padding: .25rem .55rem; font-size: .85em; }
 .photo-tile .link.danger { color: var(--danger); background: transparent; border: 0; cursor: pointer; padding: 0; font-size: .85em; align-self: flex-start; }
+
+/* --- Saved/abandoned scans strip ----------------------------------- */
+.saved-scans-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; gap: .5rem; overflow-x: auto;
+  padding-bottom: .25rem;
+}
+.saved-scan-chip {
+  flex: 0 0 auto;
+  display: flex; gap: .5rem; align-items: center;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: .35rem .5rem;
+  max-width: 280px;
+}
+.saved-scan-chip img {
+  width: 40px; height: 56px; object-fit: cover; border-radius: 4px; flex: 0 0 auto;
+}
+.saved-scan-fallback {
+  width: 40px; height: 56px; border-radius: 4px;
+  display: grid; place-items: center; background: var(--code-bg);
+}
+.saved-scan-meta {
+  display: flex; flex-direction: column; min-width: 0;
+  font-size: .85em;
+}
+.saved-scan-meta strong {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
+}
+.saved-scan-meta .hint { font-size: .85em; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-scan-actions { display: flex; flex-direction: column; gap: .15rem; }
+.saved-scan-actions button {
+  font-size: .75em; padding: .15rem .45rem;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--fg); cursor: pointer;
+}
+.saved-scan-actions button.link-skip {
+  border: 0; background: transparent; color: var(--muted);
+}

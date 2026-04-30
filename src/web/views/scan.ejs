@@ -127,6 +127,7 @@
 </div>
 
 <h2>Or look up manually</h2>
+<div id="saved-scans" hidden></div>
 <form id="manual-form" class="stacked">
   <label>ISBN <input id="manual-isbn" name="isbn" placeholder="9780593135204" autocomplete="off" inputmode="numeric" /></label>
   <p class="hint">— or —</p>
@@ -447,6 +448,23 @@
     btnConfirmSkip.addEventListener('click', function() {
       // Reset debouncer so the same barcode can be re-scanned intentionally.
       lastSubmitted = null;
+      // Stash the skipped book locally so the user can revisit it later
+      // from the "Recently skipped" strip on /scan. Useful pattern: walk
+      // away from a book in a store, then weeks later remember it.
+      if (pendingConfirm && pendingConfirm.payload && pendingConfirm.payload.book) {
+        const b = pendingConfirm.payload.book;
+        const isbn = (pendingConfirm.request && pendingConfirm.request.isbn) || b.isbn13;
+        if (isbn) {
+          rememberSavedScan({
+            isbn: isbn,
+            title: b.title || 'Unknown',
+            authors: (b.authors || []).join(', '),
+            thumbnailUrl: b.thumbnailUrl || null,
+            at: Date.now(),
+          });
+          renderSavedScans();
+        }
+      }
       hideConfirm();
     });
 
@@ -477,8 +495,16 @@
       if (!pendingConfirm) return;
       const req = pendingConfirm.request;
       const isbn = req.isbn || (pendingConfirm.payload.book && pendingConfirm.payload.book.isbn13);
+      const titleStr = (pendingConfirm.payload.book && pendingConfirm.payload.book.title) || '';
+      // Quick optional reason capture — "for Sam's birthday", "anniversary
+      // trip", etc. Cancel still adds the trophy with no reason. Empty
+      // string is treated as no reason.
+      const reason = window.prompt('Add a reason? (optional — cancel to add without one)', '');
       hideConfirm();
       setStatus('Adding to trophy list…');
+      if (reason && reason.trim()) {
+        req.reason = reason.trim();
+      }
       try {
         const res = await fetch('/scan/trophy', {
           method: 'POST',
@@ -490,13 +516,16 @@
           if (json.alreadyExists) {
             showToast('🏆 Already on trophy list', true);
           } else {
-            showToast('🏆 Added to trophy list', true);
+            showToast('🏆 Added to trophy list' + (req.reason ? ' — ' + req.reason : ''), true);
             // Update local cache so the next scan of the same book is
             // flagged instantly without waiting on a server round-trip.
             if (isbn && lookupCache && !lookupCache.trophy.includes(isbn)) {
               lookupCache.trophy.push(isbn);
               persistLookupCache();
             }
+            // Remove from saved-scans if it was there.
+            removeSavedScan(isbn);
+            renderSavedScans();
           }
           setStatus('Added to trophy list.');
         } else {
@@ -505,6 +534,7 @@
       } catch (err) {
         showToast('Network error', false);
       }
+      void titleStr; // reserved for future toast detail
     });
 
     async function previewLookup(payload) {
@@ -911,6 +941,99 @@
         showToast('🏆 On your trophy list', true);
       }
     }
+
+    // ---- Saved-skipped-scans (revisit later) ------------------------------
+    // Stored in localStorage. Each entry is the smallest book preview we
+    // had at the moment of Skip, capped at 20 most-recent. UI renders as
+    // a horizontal strip above the manual-lookup form so the user can
+    // re-add or forget without retyping the ISBN.
+    const SAVED_SCANS_KEY = 'ph_saved_scans_v1';
+    const SAVED_SCANS_MAX = 20;
+    function readSavedScans() {
+      try {
+        const raw = localStorage.getItem(SAVED_SCANS_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch { return []; }
+    }
+    function writeSavedScans(list) {
+      try { localStorage.setItem(SAVED_SCANS_KEY, JSON.stringify(list.slice(0, SAVED_SCANS_MAX))); }
+      catch { /* full or disabled, ignore */ }
+    }
+    function rememberSavedScan(entry) {
+      const list = readSavedScans().filter(function(e) { return e.isbn !== entry.isbn; });
+      list.unshift(entry);
+      writeSavedScans(list);
+    }
+    function removeSavedScan(isbn) {
+      writeSavedScans(readSavedScans().filter(function(e) { return e.isbn !== isbn; }));
+    }
+    function renderSavedScans() {
+      const host = document.getElementById('saved-scans');
+      if (!host) return;
+      const list = readSavedScans();
+      if (list.length === 0) { host.hidden = true; host.innerHTML = ''; return; }
+      host.hidden = false;
+      host.innerHTML = '<h3 class="hint" style="margin:.25rem 0">Recently skipped</h3>';
+      const ul = document.createElement('ul');
+      ul.className = 'saved-scans-list';
+      list.forEach(function(e) {
+        const li = document.createElement('li');
+        li.className = 'saved-scan-chip';
+        const cover = e.thumbnailUrl
+          ? '<img src="' + e.thumbnailUrl + '" alt="" loading="lazy" />'
+          : '<div class="saved-scan-fallback">📕</div>';
+        const safeTitle = (e.title || '').replace(/[<>&"]/g, function(c) {
+          return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c];
+        });
+        li.innerHTML = cover +
+          '<div class="saved-scan-meta">' +
+            '<strong>' + safeTitle + '</strong>' +
+            (e.authors ? '<span class="hint">' + e.authors + '</span>' : '') +
+          '</div>' +
+          '<div class="saved-scan-actions">' +
+            '<button type="button" data-act="add" data-isbn="' + e.isbn + '">+ Library</button>' +
+            '<button type="button" data-act="trophy" data-isbn="' + e.isbn + '">🏆</button>' +
+            '<button type="button" data-act="forget" data-isbn="' + e.isbn + '" class="link-skip">forget</button>' +
+          '</div>';
+        ul.appendChild(li);
+      });
+      host.appendChild(ul);
+      ul.addEventListener('click', async function(ev) {
+        const btn = ev.target.closest('button[data-act]');
+        if (!btn) return;
+        const isbn = btn.getAttribute('data-isbn');
+        const act = btn.getAttribute('data-act');
+        if (act === 'forget') {
+          removeSavedScan(isbn);
+          renderSavedScans();
+          return;
+        }
+        const url = act === 'trophy' ? '/scan/trophy' : '/scan';
+        btn.disabled = true;
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isbn: isbn }),
+          });
+          const json = await res.json().catch(function() { return { ok: false }; });
+          if (res.ok && json.ok) {
+            removeSavedScan(isbn);
+            renderSavedScans();
+            showToast(act === 'trophy' ? '🏆 Added to trophy' : '✓ Added to library', true);
+          } else {
+            showToast((json && json.error) || 'Failed', false);
+            btn.disabled = false;
+          }
+        } catch {
+          showToast('Network error', false);
+          btn.disabled = false;
+        }
+      });
+    }
+    renderSavedScans();
 
     async function tryAcquireWakeLock() {
       if (!('wakeLock' in navigator)) return;

@@ -65,6 +65,10 @@ const scanSchema = z.object({
   overrideAuthors: z.string().trim().max(1000).optional(),
   overridePublisher: z.string().trim().max(200).optional(),
   overrideEdition: z.string().trim().max(50).optional(),
+  // Optional trophy reason — captured when tapping 🏆 in the scan flow
+  // ("for Sam's birthday", "anniversary trip", etc.). Stored on the
+  // Trophy row by /scan/trophy. Ignored by other endpoints.
+  reason: z.string().trim().max(500).optional(),
 });
 
 function shouldShare(input: unknown): boolean {
@@ -362,10 +366,19 @@ export async function scanRoutes(app: FastifyInstance) {
 
     // Idempotent: if the trophy already exists, just return ok with the
     // existing record so the UI can show the "already on trophy list" chip.
+    // If a reason is supplied AND the existing trophy didn't have one, fill
+    // it in — useful when the user re-scans to add a reason after the fact.
+    const reason = parsed.data.reason?.trim() || null;
     const existing = await prisma.trophy.findUnique({
       where: { libraryId_bookId: { libraryId: library.id, bookId: book.id } },
     });
     if (existing) {
+      if (reason && !existing.reason) {
+        await prisma.trophy.update({
+          where: { id: existing.id },
+          data: { reason },
+        });
+      }
       return reply.send({
         ok: true,
         alreadyExists: true,
@@ -379,6 +392,7 @@ export async function scanRoutes(app: FastifyInstance) {
         bookId: book.id,
         requestedByUserId: user.id,
         priority: 3,
+        reason,
       },
     });
     void audit({
@@ -386,7 +400,7 @@ export async function scanRoutes(app: FastifyInstance) {
       action: "create",
       entity: "trophy",
       entityId: trophy.id,
-      details: { source: "scan", bookId: book.id },
+      details: { source: "scan", bookId: book.id, reason: reason ?? undefined },
     });
     return reply.send({
       ok: true,
