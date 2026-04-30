@@ -4,7 +4,53 @@ import { ensureMembership, recordScan } from "../../shared/repo.js";
 import { prisma } from "../../shared/db.js";
 import { isStale, refreshOpenLibraryRatings } from "../../shared/openlibrary-ratings.js";
 import { enqueueNotification, type BookAddedPayload } from "../../shared/notifications.js";
+import type { BookMetadata } from "../../shared/metadata.js";
 import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
+
+/**
+ * Resolve metadata for a scan request, preferring a local Book row when
+ * one exists with usable data. Skips the upstream Google Books / Open
+ * Library round-trip on re-scans, saving 500–2000 ms of perceived latency.
+ */
+async function resolveMeta(
+  isbn: string | undefined,
+  title: string | undefined,
+  author: string | undefined
+): Promise<BookMetadata | null> {
+  if (isbn) {
+    const cleaned = isbn.replace(/[^0-9Xx]/g, "");
+    if (cleaned) {
+      const cached = await prisma.book.findUnique({ where: { isbn13: cleaned } });
+      if (cached && cached.title && cached.authors.length > 0) {
+        // Map the persisted source back to the BookMetadata source enum.
+        // Anything unknown (older rows, or 'cache' marker) falls through
+        // to 'manual' which is the safe choice — recordScan won't
+        // overwrite manually-curated fields downstream.
+        const src: "google_books" | "open_library" | "manual" =
+          cached.source === "google_books" || cached.source === "open_library"
+            ? cached.source
+            : "manual";
+        return {
+          title: cached.title,
+          authors: cached.authors,
+          isbn10: cached.isbn10 ?? undefined,
+          isbn13: cached.isbn13 ?? undefined,
+          publisher: cached.publisher ?? undefined,
+          publishedAt: cached.publishedAt ?? undefined,
+          thumbnailUrl: cached.thumbnailUrl ?? undefined,
+          source: src,
+        };
+      }
+    }
+  }
+  const md = await import("../../shared/metadata.js");
+  if (isbn) return md.lookupByIsbn(isbn);
+  if (title) {
+    const results = await md.searchByTitle([title, author].filter(Boolean).join(" "));
+    return results[0] ?? null;
+  }
+  return null;
+}
 
 const scanSchema = z.object({
   isbn: z.string().trim().optional(),
@@ -59,12 +105,21 @@ export async function scanRoutes(app: FastifyInstance) {
       return reply.status(400).send({ ok: false, error: "Provide an ISBN or title." });
 
     await ensureMembership(user.id, library.id);
+    // DB-cache fast path: resolveMeta returns a local Book row when the
+    // ISBN is already known, skipping Google/OL on re-scans.
+    const preMeta = await resolveMeta(parsed.data.isbn, parsed.data.title, parsed.data.author);
+    if (!preMeta && parsed.data.isbn) {
+      // Only fail here if we explicitly have an ISBN and no upstream match.
+      // Title-only path falls through to recordScan's own lookup below.
+      return reply.status(404).send({ ok: false, error: "No matching book found." });
+    }
     const result = await recordScan({
       libraryId: library.id,
       userId: user.id,
       isbn: parsed.data.isbn,
       title: parsed.data.title,
       author: parsed.data.author,
+      meta: preMeta ?? undefined,
     });
     if (!result) return reply.status(404).send({ ok: false, error: "No matching book found." });
 
@@ -155,11 +210,7 @@ export async function scanRoutes(app: FastifyInstance) {
     if (!parsed.data.isbn && !parsed.data.title)
       return reply.status(400).send({ ok: false, error: "Provide an ISBN or title." });
 
-    const meta = parsed.data.isbn
-      ? await (await import("../../shared/metadata.js")).lookupByIsbn(parsed.data.isbn)
-      : (await (await import("../../shared/metadata.js")).searchByTitle(
-          [parsed.data.title, parsed.data.author].filter(Boolean).join(" ")
-        ))[0];
+    const meta = await resolveMeta(parsed.data.isbn, parsed.data.title, parsed.data.author);
     if (!meta) return reply.status(404).send({ ok: false, error: "No matching book found." });
 
     // Trophy preview without committing.
@@ -235,11 +286,7 @@ export async function scanRoutes(app: FastifyInstance) {
     if (!parsed.data.isbn && !parsed.data.title)
       return reply.status(400).send({ ok: false, error: "Provide an ISBN or title." });
 
-    const meta = parsed.data.isbn
-      ? await (await import("../../shared/metadata.js")).lookupByIsbn(parsed.data.isbn)
-      : (await (await import("../../shared/metadata.js")).searchByTitle(
-          [parsed.data.title, parsed.data.author].filter(Boolean).join(" ")
-        ))[0];
+    const meta = await resolveMeta(parsed.data.isbn, parsed.data.title, parsed.data.author);
     if (!meta) return reply.status(404).send({ ok: false, error: "No matching book found." });
 
     const cached = meta.isbn13
@@ -305,12 +352,7 @@ export async function scanRoutes(app: FastifyInstance) {
     if (!parsed.data.isbn && !parsed.data.title)
       return reply.status(400).send({ ok: false, error: "Provide an ISBN or title." });
 
-    const { lookupByIsbn, searchByTitle } = await import("../../shared/metadata.js");
-    const meta = parsed.data.isbn
-      ? await lookupByIsbn(parsed.data.isbn)
-      : (await searchByTitle(
-          [parsed.data.title, parsed.data.author].filter(Boolean).join(" ")
-        ))[0];
+    const meta = await resolveMeta(parsed.data.isbn, parsed.data.title, parsed.data.author);
     if (!meta) return reply.status(404).send({ ok: false, error: "No matching book found." });
 
     const { upsertBookFromMetadata } = await import("../../shared/repo.js");

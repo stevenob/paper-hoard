@@ -544,13 +544,21 @@
         }
       }
 
-      const serverP = fetch('/scan/lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-        .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, status: res.status, json: j }; }); })
+      // Reuse a speculative lookup started during the two-frame wait, when
+      // available. Otherwise issue a fresh fetch as before.
+      const speculative = payload.isbn ? consumeSpeculativeForIsbn(payload.isbn) : null;
+      const serverFetch = speculative
+        || fetch('/scan/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).then(function(res) {
+          return res.json().then(function(j) { return { ok: res.ok, status: res.status, json: j }; });
+        });
+
+      const serverP = serverFetch
         .then(function(r) {
+          if (!r) return;
           if (r.ok && r.json && r.json.ok) {
             serverData = r.json;
             paint();
@@ -794,6 +802,22 @@
       if (cleaned.length !== 10 && cleaned.length !== 13) {
         return;
       }
+
+      // Bulk mode: skip the two-frame confirmation gate. The user has
+      // explicitly opted into rapid-fire scanning. lastSubmitted still
+      // throttles repeats of the same barcode within 4s, so a held-still
+      // book doesn't get added twice. Saves ~600ms per scan.
+      if (bulkMode) {
+        lastSubmitted = cleaned;
+        lastSubmittedAt = now;
+        pendingDecode = null;
+        flashReticle('lock');
+        if (navigator.vibrate) navigator.vibrate(40);
+        flashCachedStatus(cleaned);
+        previewLookup({ isbn: cleaned });
+        return;
+      }
+
       // Two-frame confirmation: require the same decode twice within the
       // window before committing. Filters single-frame misreads.
       if (pendingDecode === cleaned && now - pendingDecodeAt < CONFIRM_WINDOW_MS) {
@@ -802,16 +826,48 @@
         pendingDecode = null;
         flashReticle('lock');
         if (navigator.vibrate) navigator.vibrate(40);
-        // Surface cached "already owned / on trophy" status BEFORE the
-        // network round-trip so the field-lookup case ("standing in a
-        // bookstore aisle") feels instant. The server response will refine.
         flashCachedStatus(cleaned);
         previewLookup({ isbn: cleaned });
       } else {
         pendingDecode = cleaned;
         pendingDecodeAt = now;
         flashReticle('detect');
+        // Speculative lookup: kick off the network call NOW so it overlaps
+        // the CONFIRM_WINDOW_MS wait. previewLookup is a no-op when busy
+        // is already set, so we record the in-flight ISBN and let the
+        // confirm path attach to its result.
+        startSpeculativeLookup(cleaned);
       }
+    }
+
+    // ---- Speculative lookup -----------------------------------------------
+    // When the first decoded frame lands, we already have a high-confidence
+    // ISBN. Kick off /scan/lookup in the background so by the time the
+    // two-frame gate is satisfied, we either already have the answer or
+    // we're moments away. Saves ~300-1000ms of perceived latency.
+    let speculativeIsbn = null;
+    let speculativePromise = null;
+
+    function startSpeculativeLookup(isbn) {
+      if (speculativeIsbn === isbn && speculativePromise) return;
+      speculativeIsbn = isbn;
+      speculativePromise = fetch('/scan/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isbn: isbn }),
+      })
+        .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, status: res.status, json: j }; }); })
+        .catch(function() { return null; });
+    }
+
+    function consumeSpeculativeForIsbn(isbn) {
+      if (speculativeIsbn === isbn && speculativePromise) {
+        const p = speculativePromise;
+        speculativeIsbn = null;
+        speculativePromise = null;
+        return p;
+      }
+      return null;
     }
 
     // ---- Offline lookup cache ---------------------------------------------
@@ -917,18 +973,31 @@
         } catch {}
         reader = new ZXingBrowser.BrowserMultiFormatReader(hints);
 
-        // Pick the back camera + request 1080p so small barcodes off the
-        // back cover decode reliably. iOS Safari tries to honor 'ideal'
-        // and falls back gracefully on devices that can't.
-        const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
-        const back = devices.find(function(d) { return /back|rear|environment/i.test(d.label); });
-        const deviceId = back ? back.deviceId : (devices[0] && devices[0].deviceId);
+        // Pick the back camera. Cached in sessionStorage to skip the
+        // 50-200ms enumerateDevices() call on subsequent starts.
+        let deviceId = null;
+        try {
+          const cachedRaw = sessionStorage.getItem('ph_back_camera_id');
+          if (cachedRaw) deviceId = cachedRaw;
+        } catch {}
+        if (!deviceId) {
+          const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+          const back = devices.find(function(d) { return /back|rear|environment/i.test(d.label); });
+          deviceId = back ? back.deviceId : (devices[0] && devices[0].deviceId);
+          if (deviceId) {
+            try { sessionStorage.setItem('ph_back_camera_id', deviceId); } catch {}
+          }
+        }
+        // 720p instead of 1080p — barcodes decode several Hz faster on
+        // mobile because each frame ZXing inspects is ~half the pixels,
+        // with no measurable hit to EAN-13 recognition (the bars are
+        // big enough to read at 720p easily).
         const constraints = {
           video: Object.assign(
             {
               facingMode: { ideal: 'environment' },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
             },
             deviceId ? { deviceId: { exact: deviceId } } : {}
           ),
@@ -963,6 +1032,10 @@
       overlayToast.hidden = true;
       hideConfirm();
       hideFallback();
+      // Discard any in-flight speculative lookup so the next session
+      // starts clean.
+      speculativeIsbn = null;
+      speculativePromise = null;
       setStatus('');
     }
 

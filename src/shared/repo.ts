@@ -79,8 +79,11 @@ export async function recordScan(args: {
   isbn?: string;
   title?: string;
   author?: string;
+  // Optional pre-fetched metadata. Lets callers skip the lookup if they
+  // already resolved it (e.g. via a DB-cached fast-path in the route).
+  meta?: BookMetadata;
 }): Promise<ScanResult | null> {
-  const meta = await lookupBook(args);
+  const meta = args.meta ?? (await lookupBook(args));
   if (!meta) return null;
 
   const book = await upsertBookFromMetadata(meta);
