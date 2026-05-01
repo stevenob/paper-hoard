@@ -74,11 +74,27 @@ export async function trophiesRoutes(app: FastifyInstance) {
   });
 
   /**
-   * Create a Trophy from the +Add modal. Either {isbn} (preferred — looks
-   * up live so we always have title/cover/publisher) or a manual
-   * {title, author?, isbn?} pair.
+   * Create a Trophy from the +Add modal. Three input shapes are accepted:
+   *   1. {pickedBook}   — full BookMetadata from the search results.
+   *                       This is what the search UI sends. We trust it
+   *                       and skip the re-lookup that used to substitute
+   *                       a different edition's metadata at write-time.
+   *   2. {isbn}         — bare ISBN paste; we look it up live.
+   *   3. {title, author?} — manual entry escape hatch.
    */
+  const pickedBookSchema = z.object({
+    title: z.string().trim().min(1).max(500),
+    authors: z.array(z.string()).optional(),
+    isbn13: z.string().optional(),
+    isbn10: z.string().optional(),
+    publisher: z.string().optional(),
+    publishedAt: z.string().optional(),
+    thumbnailUrl: z.string().optional(),
+    edition: z.string().optional(),
+    source: z.enum(["google_books", "open_library", "manual"]).optional(),
+  });
   const createSchema = z.object({
+    pickedBook: pickedBookSchema.optional(),
     isbn: z.string().optional(),
     title: z.string().trim().min(1).max(500).optional(),
     author: z.string().trim().max(500).optional(),
@@ -98,17 +114,31 @@ export async function trophiesRoutes(app: FastifyInstance) {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success)
       return reply.status(400).send({ ok: false, error: "Invalid request." });
-    const { isbn, title, author, editionNotes, maxPriceCents, priority, reason } = parsed.data;
+    const { pickedBook, isbn, title, author, editionNotes, maxPriceCents, priority, reason } = parsed.data;
 
-    // Resolve a Book row. If an ISBN is provided, look it up live so we
-    // capture the latest cover + publisher; falling back to manual data.
     let book;
-    if (isbn) {
+    if (pickedBook) {
+      // Trust the client's pick. The metadata the user saw in the search
+      // results IS what they want stored — title, ISBN, cover. Re-running
+      // lookupByIsbn here would risk substituting a different edition
+      // (e.g. a Spanish translation that shares an ISBN-prefix in
+      // Google's catalogue but renders with the wrong cover).
+      book = await upsertBookFromMetadata({
+        title: pickedBook.title,
+        authors: pickedBook.authors ?? [],
+        isbn13: pickedBook.isbn13,
+        isbn10: pickedBook.isbn10,
+        publisher: pickedBook.publisher,
+        publishedAt: pickedBook.publishedAt,
+        thumbnailUrl: pickedBook.thumbnailUrl,
+        edition: pickedBook.edition,
+        source: pickedBook.source ?? "google_books",
+      });
+    } else if (isbn) {
       const meta = await lookupByIsbn(isbn);
       if (meta) {
         book = await upsertBookFromMetadata(meta);
       } else if (title) {
-        // ISBN didn't resolve but user typed a title — store as manual.
         book = await upsertBookFromMetadata({
           title,
           authors: author ? [author] : [],

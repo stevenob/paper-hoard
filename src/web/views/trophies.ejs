@@ -316,10 +316,22 @@
       submitBtn.disabled = true;
       errorEl.hidden = true;
       const maxPrice = maxPriceEl.value ? Math.round(parseFloat(maxPriceEl.value) * 100) : null;
+      // v3.5.29: send the FULL picked metadata, not just (isbn, title,
+      // author). Server used to re-lookup by ISBN which sometimes
+      // substituted a different edition's metadata at write time
+      // (Spanish translation surfacing for an English Supergirl pick).
       const body = {
-        isbn: pickedBook.isbn13 || pickedBook.isbn10 || undefined,
-        title: pickedBook.title,
-        author: (pickedBook.authors || [])[0],
+        pickedBook: {
+          title: pickedBook.title,
+          authors: pickedBook.authors,
+          isbn13: pickedBook.isbn13,
+          isbn10: pickedBook.isbn10,
+          publisher: pickedBook.publisher,
+          publishedAt: pickedBook.publishedAt,
+          thumbnailUrl: pickedBook.thumbnailUrl,
+          edition: pickedBook.edition,
+          source: pickedBook.source,
+        },
         editionNotes: editionEl.value.trim() || undefined,
         maxPriceCents: maxPrice == null ? undefined : maxPrice,
         priority: Number(priorityEl.value) || 3,
