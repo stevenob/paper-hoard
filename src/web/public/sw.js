@@ -6,7 +6,7 @@
 // assets. Combined with the stale-while-revalidate fetch handler below,
 // existing clients pick up the new bundle on their next page load — no
 // hard-refresh / "clear site data" required.
-const CACHE = "ph-shell-v5";
+const CACHE = "ph-shell-v6";
 const PRECACHE = [
   "/",
   "/scan",
@@ -51,6 +51,12 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
+  // Bypass the SW entirely for /uploads/ — let the browser handle them
+  // natively. Caching uploads here introduced a class of "broken image
+  // on mobile" bugs (stale 404s, mistyped responses, version drift).
+  // The offline shell doesn't need cover photos to feel responsive.
+  if (url.pathname.startsWith("/uploads/")) return;
+
   // /scan/cache.json — stale-while-revalidate so the field-lookup chip
   // works instantly offline AND eventually refreshes when online.
   if (url.pathname === "/scan/cache.json") {
@@ -84,14 +90,14 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-  // Stale-while-revalidate for /static/ + /uploads/ — serve the cached
-  // copy immediately for snappiness, but refresh in the background so
-  // the next visit gets the latest CSS/JS. Old strategy was cache-first
+  // Stale-while-revalidate for /static/ — serve the cached copy
+  // immediately for snappiness, but refresh in the background so the
+  // next visit gets the latest CSS/JS. Old strategy was cache-first
   // with no revalidation, which left users stuck on stale style.css and
   // ui.js for as long as the cache name held — the v3.5.22 hamburger
   // menu hit this: HTML updated to reference a new ☰ button but cached
   // ui.js had no handler for it, so taps did nothing.
-  if (url.pathname.startsWith("/static/") || url.pathname.startsWith("/uploads/")) {
+  if (url.pathname.startsWith("/static/")) {
     event.respondWith(
       caches.match(req).then((cached) => {
         const fetched = fetch(req)
