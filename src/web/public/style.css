@@ -997,3 +997,84 @@ body.camera-open { overflow: hidden; }
   .copy-hero-meta h1 { font-size: 2rem; }
   .copy-field-row { grid-template-columns: 1fr; }
 }
+
+/* --- Scan page hero + two-col grid (v3.5.4) ------------------------ */
+.scan-hero {
+  margin: 0 -2rem 2.5rem;
+  padding: 3.5rem 2rem 3rem;
+  background: radial-gradient(ellipse at center -50%, var(--accent-glow), transparent 65%);
+  border-bottom: 1px solid var(--rule);
+  text-align: center;
+}
+.scan-hero h1 {
+  font-size: 3rem;
+  margin: 0 0 1rem;
+  line-height: 1.05;
+}
+.scan-hero-tagline {
+  color: var(--muted);
+  max-width: 60ch;
+  margin: 0 auto 2rem;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+.scan-hero .scanner-launch-buttons {
+  display: flex; gap: .85rem; justify-content: center; flex-wrap: wrap;
+  margin: 0;
+}
+.scan-hero .scanner-launch-buttons button,
+.scan-hero .scanner-launch-buttons label.button {
+  font-size: 1rem;
+  padding: .85rem 1.75rem;
+  font-weight: 600;
+}
+.scan-hero .scanner-launch-buttons label.button {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: inline-flex; align-items: center;
+  box-shadow: none;
+}
+.scan-hero .scanner-launch-buttons label.button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.scan-status-line {
+  margin: 1rem auto 0;
+  min-height: 1.25em;
+  text-align: center;
+}
+
+.scan-grid {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.scan-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+}
+.scan-card h2 {
+  font-size: 1.4rem;
+  margin: 0 0 1rem;
+}
+.scan-card .stacked { max-width: none; }
+.scan-card #saved-scans { margin-bottom: 1rem; }
+.scan-recent ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0; }
+.scan-recent li { padding: .65rem 0; border-bottom: 1px solid var(--rule); }
+.scan-recent li:last-child { border-bottom: 0; }
+.scan-recent li a { color: var(--fg); text-decoration: none; font-family: 'Fraunces', Georgia, serif; }
+.scan-recent li a:hover { color: var(--accent); }
+.scan-recent li .hint { display: block; font-size: .85em; margin-top: .15rem; }
+
+@media (max-width: 720px) {
+  .scan-hero { margin: 0 -1.5rem 1.5rem; padding: 2.5rem 1.5rem 2rem; }
+  .scan-hero h1 { font-size: 2.25rem; }
+  .scan-grid { grid-template-columns: 1fr; }
+}
