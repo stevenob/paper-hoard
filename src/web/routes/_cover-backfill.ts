@@ -73,6 +73,12 @@ export async function refetchMissingCovers(batchSize: number): Promise<BackfillR
  * entirely if no source has a real image.
  *
  * Books marked source: 'manual' are skipped to preserve user uploads.
+ *
+ * The criteria intentionally include any Google Books `zoom=` URL: we
+ * can't tell from the URL alone whether it's a real cover or the "image
+ * not available" placeholder, only the HEAD-size check in pickValidCover
+ * can. Books with valid zoom=2 covers no-op cheaply (one HEAD request);
+ * books with broken zoom=2 placeholders fall through to OL.
  */
 export async function refreshLowResCovers(batchSize: number): Promise<BackfillResult> {
   const lowResWhere = {
@@ -80,8 +86,7 @@ export async function refreshLowResCovers(batchSize: number): Promise<BackfillRe
     thumbnailUrl: { not: null },
     source: { not: "manual" },
     OR: [
-      { thumbnailUrl: { contains: "zoom=1" } },
-      { thumbnailUrl: { contains: "zoom=0" } },
+      { thumbnailUrl: { contains: "zoom=" } },
       { thumbnailUrl: { contains: "edge=curl" } },
       { thumbnailUrl: { contains: "-M.jpg" } },
       { thumbnailUrl: { contains: "-S.jpg" } },

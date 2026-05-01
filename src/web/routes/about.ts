@@ -184,8 +184,7 @@ export async function aboutRoutes(app: FastifyInstance) {
             thumbnailUrl: { not: null },
             source: { not: "manual" },
             OR: [
-              { thumbnailUrl: { contains: "zoom=1" } },
-              { thumbnailUrl: { contains: "zoom=0" } },
+              { thumbnailUrl: { contains: "zoom=" } },
               { thumbnailUrl: { contains: "edge=curl" } },
               { thumbnailUrl: { contains: "-M.jpg" } },
               { thumbnailUrl: { contains: "-S.jpg" } },
