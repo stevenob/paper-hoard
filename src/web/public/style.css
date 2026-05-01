@@ -1362,23 +1362,16 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
   from { transform: translateY(-4px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
-.activity-row::before {
-  font-weight: 600; font-size: 1rem; line-height: 1; text-align: center;
+.activity-row .row-icon {
   flex: 0 0 1.25em;
+  font-weight: 600; font-size: 1rem; line-height: 1; text-align: center;
 }
-.activity-row.kept::before     { content: '✓'; color: var(--success, #4ec27d); }
-.activity-row.repaired::before { content: '↻'; color: var(--accent); }
-.activity-row.nulled::before   { content: '✗'; color: var(--danger, #ef5350); }
-.activity-row.failed::before   { content: '!'; color: var(--muted); }
-/* Reorder so visual flow is: cover → icon → text → detail → fix-link.
-   ::before is the first child of the flex container by default; using
-   `order` puts it after .row-cover. */
-.activity-row::before { order: 2; }
-.activity-row .row-cover { order: 1; flex: 0 0 28px; }
-.activity-row .row-text  { order: 3; flex: 1 1 auto; min-width: 0; }
-.activity-row .row-detail { order: 4; flex: 0 0 auto; }
-.activity-row .row-fix   { order: 5; flex: 0 0 auto; }
+.activity-row.kept .row-icon     { color: var(--success, #4ec27d); }
+.activity-row.repaired .row-icon { color: var(--accent); }
+.activity-row.nulled .row-icon   { color: var(--danger, #ef5350); }
+.activity-row.failed .row-icon   { color: var(--muted); }
 .row-cover {
+  flex: 0 0 28px;
   width: 28px; aspect-ratio: 2 / 3;
   border-radius: 3px; object-fit: cover;
   background: var(--surface);
@@ -1388,7 +1381,11 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
 .row-cover-placeholder {
   background: repeating-linear-gradient(45deg, var(--surface), var(--surface) 4px, var(--bg) 4px, var(--bg) 8px);
 }
-.row-text { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
+.row-text {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex; flex-direction: column; gap: 1px; overflow: hidden;
+}
 .row-title {
   font-family: 'Fraunces', Georgia, serif; font-style: italic;
   color: var(--fg); text-decoration: none;
@@ -1401,25 +1398,25 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
 }
 .row-author.muted { font-style: italic; }
 .row-detail {
+  flex: 0 1 auto;
+  min-width: 0;
   color: var(--muted); font-size: .76rem;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   white-space: nowrap; padding-left: .5rem;
-  max-width: 40%;
   overflow: hidden; text-overflow: ellipsis;
 }
 .activity-row .row-fix {
-  order: 5;
-  font-size: .72rem; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  flex: 0 0 auto;
+  font-size: .9rem;
   color: var(--accent); text-decoration: none;
-  padding: .15rem .5rem; border-radius: 999px;
+  padding: .15rem .35rem; border-radius: 6px;
   border: 1px solid transparent;
-  white-space: nowrap; margin-left: .35rem;
+  white-space: nowrap;
   transition: background .15s, border-color .15s;
 }
 .activity-row .row-fix:hover {
   background: var(--accent-glow);
   border-color: var(--accent);
-  color: var(--accent);
 }
 .repair-summary {
   margin: .65rem 0 0; font-size: .85rem;

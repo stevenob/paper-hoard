@@ -376,27 +376,30 @@
       const coverHtml = cover
         ? '<img class="row-cover" src="' + escapeHtml(cover) + '" alt="" loading="lazy" />'
         : '<span class="row-cover row-cover-placeholder"></span>';
+      const iconChar = r.action === 'kept' ? '✓'
+        : r.action === 'repaired' ? '↻'
+        : r.action === 'nulled' ? '✗'
+        : '!';
+      const iconHtml = '<span class="row-icon">' + iconChar + '</span>';
       const titleHtml = titleHref
         ? '<a class="row-title" href="' + escapeHtml(titleHref) + '">' + escapeHtml(r.title) + '</a>'
         : '<span class="row-title">' + escapeHtml(r.title) + '</span>';
       const authorHtml = r.author
         ? '<span class="row-author">' + escapeHtml(r.author) + '</span>'
         : '<span class="row-author muted">—</span>';
-      // For failed cover lookups with a copy on hand, offer a one-tap
-      // jump to the copy's Manage tab where the cover-upload form lives.
-      // The user has the physical book in front of them — just snap a photo.
-      let detailHtml = '<span class="row-detail">' + escapeHtml(r.detail || '') + '</span>';
+      const detailHtml = '<span class="row-detail">' + escapeHtml(r.detail || '') + '</span>';
       const isCoverFail = (r.action === 'failed' || r.action === 'nulled')
         && r.copyId
         && /no source|cover|nulled/i.test(r.detail || '');
-      if (isCoverFail) {
-        detailHtml +=
-          '<a class="row-fix" href="/library/copy/' + escapeHtml(r.copyId) + '#manage" title="Upload a cover from your phone">📷 add cover</a>';
-      }
+      const fixHtml = isCoverFail
+        ? '<a class="row-fix" href="/library/copy/' + escapeHtml(r.copyId) + '#manage" title="Upload a cover from your phone">📷</a>'
+        : '';
       li.innerHTML =
         coverHtml +
+        iconHtml +
         '<div class="row-text">' + titleHtml + authorHtml + '</div>' +
-        detailHtml;
+        detailHtml +
+        fixHtml;
       return li;
     }
 
