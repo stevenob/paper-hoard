@@ -1,7 +1,7 @@
 import { prisma } from "../../shared/db.js";
-import { lookupByIsbn } from "../../shared/metadata.js";
+import { lookupByIsbn, thingIsbn } from "../../shared/metadata.js";
 import { logger } from "../../shared/logger.js";
-import { olCoverUrlByIsbn, ltCoverUrlByIsbn, validateCoverUrl } from "../../shared/cover-validation.js";
+import { olCoverUrlByIsbn, validateCoverUrl } from "../../shared/cover-validation.js";
 
 export type RepairAction = "kept" | "repaired" | "nulled" | "failed";
 
@@ -53,6 +53,38 @@ async function pickValidCoverWithSource(
     if (!c.url) continue;
     const ok = await validateCoverUrl(c.url);
     if (ok) return { url: ok, source: c.source };
+  }
+  return null;
+}
+
+/**
+ * After Google + OL fail for the user's specific edition, ask LibraryThing
+ * for sister-edition ISBNs of the same work and try Google + OL on those.
+ * Book covers usually carry across reprints/translations, so a hit on a
+ * sister edition is a perfectly good cover for our row.
+ *
+ * Capped at MAX_SISTER_EDITIONS to keep total latency reasonable — each
+ * sister edition adds 1 metadata fetch + up to 2 HEAD validations.
+ */
+const MAX_SISTER_EDITIONS = 3;
+async function pickValidCoverFromSisterEditions(
+  isbn: string
+): Promise<{ url: string; source: string } | null> {
+  const siblings = await thingIsbn(isbn);
+  if (siblings.length === 0) return null;
+  for (const sib of siblings.slice(0, MAX_SISTER_EDITIONS)) {
+    let sibMeta;
+    try {
+      sibMeta = await lookupByIsbn(sib);
+    } catch {
+      continue;
+    }
+    const sibPicked = await pickValidCoverWithSource([
+      { url: sibMeta?.thumbnailUrl, source: `sister(${sib}) Google` },
+      { url: olCoverUrlByIsbn(sib, "L"), source: `sister(${sib}) OL-L` },
+      { url: olCoverUrlByIsbn(sib, "M"), source: `sister(${sib}) OL-M` },
+    ]);
+    if (sibPicked) return sibPicked;
   }
   return null;
 }
@@ -129,12 +161,16 @@ export async function refetchMissingCovers(batchSize: number, scope: RepairScope
     }
     try {
       const meta = await lookupByIsbn(c.isbn13);
-      const picked = await pickValidCoverWithSource([
+      let picked = await pickValidCoverWithSource([
         { url: meta?.thumbnailUrl, source: "Google" },
         { url: olCoverUrlByIsbn(c.isbn13, "L"), source: "OL-L" },
         { url: olCoverUrlByIsbn(c.isbn13, "M"), source: "OL-M" },
-        { url: ltCoverUrlByIsbn(c.isbn13, "large"), source: "LibraryThing" },
       ]);
+      // v3.5.17: when the direct edition has no cover anywhere, ask
+      // LibraryThing for sister-edition ISBNs (other reprints / translations
+      // of the same work) and try Google + OL on those. Often a sister
+      // edition shares the cover art and rescues a "no source" miss.
+      if (!picked) picked = await pickValidCoverFromSisterEditions(c.isbn13);
       const validated = picked?.url ?? null;
       // Always stamp coverAttemptedAt so this book drops out of the
       // candidate pool until RETRY_AFTER_DAYS, even when no cover was
@@ -245,12 +281,13 @@ export async function refreshLowResCovers(batchSize: number, scope: RepairScope)
       // Step 2: validate the candidate URLs in order. Tracks which source
       // produced the winning URL so the activity log can show "Google"
       // vs "OL-L" rather than just a URL diff.
-      const picked = await pickValidCoverWithSource([
+      let picked = await pickValidCoverWithSource([
         { url: meta?.thumbnailUrl, source: "Google" },
         { url: olCoverUrlByIsbn(c.isbn13, "L"), source: "OL-L" },
         { url: olCoverUrlByIsbn(c.isbn13, "M"), source: "OL-M" },
-        { url: ltCoverUrlByIsbn(c.isbn13, "large"), source: "LibraryThing" },
       ]);
+      // v3.5.17 sister-edition fallback (see refetchMissingCovers).
+      if (!picked) picked = await pickValidCoverFromSisterEditions(c.isbn13);
       const validated = picked?.url ?? null;
       await prisma.book.update({
         where: { id: c.id },

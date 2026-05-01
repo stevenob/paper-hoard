@@ -89,19 +89,15 @@ export function olCoverUrlByIsbn(isbn13: string, size: "S" | "M" | "L" = "L"): s
 }
 
 /**
- * Construct a LibraryThing covers URL by ISBN. Requires LIBRARYTHING_DEVKEY
- * (free at https://www.librarything.com/services/keys.php). Returns null
- * when no key is configured so callers can cleanly skip this source.
+ * Construct a LibraryThing covers URL by ISBN.
  *
- * LibraryThing has surprisingly good coverage for niche / kids' / licensed
- * tie-in books that Google Books and Open Library miss — adding it as a
- * 3rd cascading source rescues a chunk of the "no source has it" pile.
+ * NOTE (v3.5.17): LibraryThing retired their public covers service in
+ * favor of the paid Bowker / Talpa offerings. The `/devkey/.../isbn/`
+ * endpoint now returns a placeholder. Kept here as a no-op stub in case
+ * an unofficial mirror reappears, but the cascade no longer calls it —
+ * thingISBN sister-edition lookup replaced it as the v3.5.17+ third
+ * tier (see thingIsbn() in metadata.ts).
  */
-export function ltCoverUrlByIsbn(
-  isbn13: string,
-  size: "small" | "medium" | "large" = "large"
-): string | null {
-  const key = (process.env.LIBRARYTHING_DEVKEY ?? "").trim();
-  if (!key) return null;
-  return `https://covers.librarything.com/devkey/${encodeURIComponent(key)}/${size}/isbn/${encodeURIComponent(isbn13)}`;
+export function ltCoverUrlByIsbn(): string | null {
+  return null;
 }

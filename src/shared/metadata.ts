@@ -237,3 +237,59 @@ export async function searchByTitle(query: string): Promise<BookMetadata[]> {
     return [];
   }
 }
+
+/**
+ * LibraryThing thingISBN — given an ISBN, returns ISBNs of OTHER editions
+ * of the same work (different reprints, translations, paperback/hardcover
+ * pairings). Used as a third-tier cover-rescue when Google Books and
+ * Open Library both fail for the user's specific edition: the cover for
+ * a sister edition is usually the same anyway.
+ *
+ * The endpoint returns XML like:
+ *   <idlist>
+ *     <isbn>9780553293357</isbn>
+ *     <isbn>0345253426</isbn>
+ *     ...
+ *   </idlist>
+ *
+ * Requires a free dev token from
+ *   https://www.librarything.com/services/keys.php
+ * stored in LIBRARYTHING_DEVKEY. Returns [] when no key is configured or
+ * the request fails — callers should treat as "no sister editions found"
+ * and fall through to the next strategy.
+ */
+export async function thingIsbn(rawIsbn: string): Promise<string[]> {
+  const isbn = normalizeIsbn(rawIsbn);
+  if (isbn.length !== 10 && isbn.length !== 13) return [];
+  const token = (env.LIBRARYTHING_DEVKEY ?? "").trim();
+  if (!token) return [];
+  const url = `https://www.librarything.com/api/${encodeURIComponent(token)}/thingISBN/${encodeURIComponent(isbn)}`;
+  try {
+    const { statusCode, body } = await request(url, { headersTimeout: 5000, bodyTimeout: 5000 });
+    if (statusCode >= 400) {
+      logger.debug({ statusCode, isbn }, "thingISBN request failed");
+      return [];
+    }
+    const xml = await body.text();
+    // Cheap XML scrape — pulling <isbn>...</isbn> contents avoids a
+    // dependency on a full parser. The response is a flat list, so the
+    // regex is enough.
+    const matches = Array.from(xml.matchAll(/<isbn>([^<]+)<\/isbn>/g));
+    const results = matches
+      .map((m) => normalizeIsbn(m[1]))
+      .filter((s) => s !== isbn && (s.length === 10 || s.length === 13));
+    // De-duplicate while preserving order.
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    for (const r of results) {
+      if (!seen.has(r)) {
+        seen.add(r);
+        ordered.push(r);
+      }
+    }
+    return ordered;
+  } catch (err) {
+    logger.debug({ err, isbn }, "thingISBN request error");
+    return [];
+  }
+}

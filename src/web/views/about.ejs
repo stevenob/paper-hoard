@@ -141,10 +141,10 @@
               <div>
                 <% if (backfillCandidates > 0) { %>
                   <strong><%= backfillCandidates %></strong> book<%= backfillCandidates === 1 ? '' : 's' %> missing covers
-                  <div class="sub">Re-runs Google Books, Open Library<%= process.env.LIBRARYTHING_DEVKEY ? ', LibraryThing' : '' %></div>
+                  <div class="sub">Re-runs Google Books, Open Library<%= process.env.LIBRARYTHING_DEVKEY ? ', sister editions via LibraryThing' : '' %></div>
                 <% } else { %>
                   <strong><%= booksCoverInCooldown %></strong> orphan cover<%= booksCoverInCooldown === 1 ? '' : 's' %>
-                  <div class="sub">Tried in last 30d with no source. Click ↻ retry to test against current sources<%= process.env.LIBRARYTHING_DEVKEY ? ' (incl. LibraryThing)' : '' %>.</div>
+                  <div class="sub">Tried in last 30d with no source. Click ↻ retry to test against current sources<%= process.env.LIBRARYTHING_DEVKEY ? ' (incl. LibraryThing sister editions)' : '' %>.</div>
                 <% } %>
               </div>
               <% if (backfillCandidates > 0) { %>
