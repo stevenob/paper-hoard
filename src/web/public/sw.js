@@ -6,7 +6,7 @@
 // assets. Combined with the stale-while-revalidate fetch handler below,
 // existing clients pick up the new bundle on their next page load — no
 // hard-refresh / "clear site data" required.
-const CACHE = "ph-shell-v4";
+const CACHE = "ph-shell-v5";
 const PRECACHE = [
   "/",
   "/scan",

@@ -112,7 +112,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 code { background: var(--code-bg); padding: 2px 5px; border-radius: 3px; font-size: .9em; }
 
-.topbar { display: flex; align-items: center; gap: 1.5rem; padding: .9rem 2rem; background: var(--topbar-bg); color: var(--topbar-fg); border-bottom: 1px solid var(--rule); }
+.topbar { display: flex; align-items: center; gap: 1.5rem; padding: .9rem 2rem; background: var(--topbar-bg); color: var(--topbar-fg); border-bottom: 1px solid var(--rule); position: relative; }
 .topbar a { color: var(--topbar-fg); text-decoration: none; }
 .topbar .brand { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 1.25rem; letter-spacing: -0.015em; }
 .topbar nav { display: flex; gap: .25rem; flex-wrap: wrap; }
