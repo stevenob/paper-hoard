@@ -74,17 +74,16 @@ function volumeToMetadata(v: GoogleVolume): BookMetadata {
 
 /**
  * Google Books returns thumbnails at ~128px width by default and over
- * plain HTTP. Both are fixable via URL surgery — the same content URL
- * accepts a different `zoom` value (0 = largest available, often 1500px+)
- * and supports https. Apply both here so callers always get a usable URL.
+ * plain HTTP. We upgrade to https + a larger zoom value, but specifically
+ * NOT zoom=0 — that returns Google's "image not available" placeholder
+ * for books where they don't store a hi-res copy (small publishers,
+ * older titles, etc). zoom=2 reliably returns a ~256px real image for
+ * any book that has any cover at all.
  */
 function upgradeGoogleBooksImageUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   let url = raw.replace(/^http:\/\//, "https://");
-  // `zoom=1` is the small ~128px default. Replacing with `zoom=0` returns
-  // the largest size Google has on file. The `&edge=curl` artifact is the
-  // visual page-fold which looks bad on bigger renders, drop it.
-  url = url.replace(/([?&])zoom=\d+/g, "$1zoom=0");
+  url = url.replace(/([?&])zoom=\d+/g, "$1zoom=2");
   url = url.replace(/[?&]edge=curl/g, "");
   return url;
 }

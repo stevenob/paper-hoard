@@ -56,24 +56,28 @@ export async function refetchMissingCovers(batchSize: number): Promise<BackfillR
 
 /**
  * Refresh existing thumbnails to higher-resolution versions. Targets books
- * whose thumbnailUrl points at known low-res patterns (Google Books default
- * `zoom=1`, Open Library `-M.jpg`/`-S.jpg`) so we don't re-fetch covers
- * that are already big. Skips manual entries to preserve user uploads.
+ * whose thumbnailUrl points at known low-res or broken patterns (Google
+ * Books default `zoom=1`, the placeholder-prone `zoom=0`, Open Library
+ * `-M.jpg`/`-S.jpg`, http://) so we don't re-fetch covers that are already
+ * in the new format. Skips manual entries to preserve user uploads.
  */
 export async function refreshLowResCovers(batchSize: number): Promise<BackfillResult> {
+  const lowResWhere = {
+    isbn13: { not: null },
+    thumbnailUrl: { not: null },
+    source: { not: "manual" },
+    OR: [
+      { thumbnailUrl: { contains: "zoom=1" } },
+      { thumbnailUrl: { contains: "zoom=0" } },
+      { thumbnailUrl: { contains: "edge=curl" } },
+      { thumbnailUrl: { contains: "-M.jpg" } },
+      { thumbnailUrl: { contains: "-S.jpg" } },
+      { thumbnailUrl: { startsWith: "http://" } },
+    ],
+  };
+
   const candidates = await prisma.book.findMany({
-    where: {
-      isbn13: { not: null },
-      thumbnailUrl: { not: null },
-      source: { not: "manual" },
-      OR: [
-        { thumbnailUrl: { contains: "zoom=1" } },
-        { thumbnailUrl: { contains: "edge=curl" } },
-        { thumbnailUrl: { contains: "-M.jpg" } },
-        { thumbnailUrl: { contains: "-S.jpg" } },
-        { thumbnailUrl: { startsWith: "http://" } },
-      ],
-    },
+    where: lowResWhere as never,
     select: { id: true, isbn13: true },
     take: batchSize,
     orderBy: { createdAt: "asc" },
@@ -96,20 +100,7 @@ export async function refreshLowResCovers(batchSize: number): Promise<BackfillRe
     }
   }
 
-  const remaining = await prisma.book.count({
-    where: {
-      isbn13: { not: null },
-      thumbnailUrl: { not: null },
-      source: { not: "manual" },
-      OR: [
-        { thumbnailUrl: { contains: "zoom=1" } },
-        { thumbnailUrl: { contains: "edge=curl" } },
-        { thumbnailUrl: { contains: "-M.jpg" } },
-        { thumbnailUrl: { contains: "-S.jpg" } },
-        { thumbnailUrl: { startsWith: "http://" } },
-      ],
-    },
-  });
+  const remaining = await prisma.book.count({ where: lowResWhere as never });
 
   return { processed: candidates.length, updated, remaining };
 }

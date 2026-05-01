@@ -122,9 +122,10 @@ export async function statsRoutes(app: FastifyInstance) {
         _sum: { priceCents: true },
         _count: { priceCents: true },
       }),
-      // Count of books with low-res covers (Google Books zoom=1, OL -M.jpg,
-      // any http:// URL). Used to show the Refresh covers button only when
-      // there's something to fix.
+      // Count of books with low-res covers (Google Books zoom=1 default,
+      // zoom=0 which often returns the "image not available" placeholder,
+      // OL -M.jpg, http URLs). Used to show the Refresh covers button only
+      // when there's something to fix.
       prisma.book.count({
         where: {
           isbn13: { not: null },
@@ -132,6 +133,7 @@ export async function statsRoutes(app: FastifyInstance) {
           source: { not: "manual" },
           OR: [
             { thumbnailUrl: { contains: "zoom=1" } },
+            { thumbnailUrl: { contains: "zoom=0" } },
             { thumbnailUrl: { contains: "edge=curl" } },
             { thumbnailUrl: { contains: "-M.jpg" } },
             { thumbnailUrl: { contains: "-S.jpg" } },
