@@ -1,7 +1,12 @@
 // Paper Hoard service worker — offline shell, with extra coverage for the
 // scan flow so the camera UI works on a totally dead cellular signal in
 // a basement bookstore.
-const CACHE = "ph-shell-v2";
+//
+// IMPORTANT: bump the CACHE name every release that touches /static/
+// assets. Combined with the stale-while-revalidate fetch handler below,
+// existing clients pick up the new bundle on their next page load — no
+// hard-refresh / "clear site data" required.
+const CACHE = "ph-shell-v3";
 const PRECACHE = [
   "/",
   "/scan",
@@ -79,14 +84,27 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-  // Cache-first for static + uploads — they're addressed by content hash anyway.
+  // Stale-while-revalidate for /static/ + /uploads/ — serve the cached
+  // copy immediately for snappiness, but refresh in the background so
+  // the next visit gets the latest CSS/JS. Old strategy was cache-first
+  // with no revalidation, which left users stuck on stale style.css and
+  // ui.js for as long as the cache name held — the v3.5.22 hamburger
+  // menu hit this: HTML updated to reference a new ☰ button but cached
+  // ui.js had no handler for it, so taps did nothing.
   if (url.pathname.startsWith("/static/") || url.pathname.startsWith("/uploads/")) {
     event.respondWith(
-      caches.match(req).then((cached) => cached || fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => undefined);
-        return res;
-      }))
+      caches.match(req).then((cached) => {
+        const fetched = fetch(req)
+          .then((res) => {
+            if (res.ok) {
+              const copy = res.clone();
+              caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => undefined);
+            }
+            return res;
+          })
+          .catch(() => cached);
+        return cached || fetched;
+      })
     );
   }
 });
