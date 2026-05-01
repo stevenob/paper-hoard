@@ -42,46 +42,48 @@
       const deferred = t.status === 'deferred';
       const cover = t.book.thumbnailUrl;
     %>
-      <a class="trophy-card<%= deferred ? ' deferred' : '' %>" href="/books/<%= t.bookId %>">
-        <div class="trophy-cover">
-          <% if (cover) { %>
-            <img src="<%= cover %>" alt="" loading="lazy" />
-          <% } else { %>
-            <span class="trophy-cover-fallback"><%= fallbackTitleArt(t.book.title) %></span>
-          <% } %>
-          <span class="trophy-badge<%= deferred ? ' deferred' : '' %>"><%= deferred ? '⏸ DEFERRED' : '⭐ TROPHY' %></span>
-          <% if (aged) { %><span class="trophy-aged-flag" title="On the list <%= days %> days">aged <%= days %>d</span><% } %>
-          <div class="trophy-bottom">
-            <span><%= t.maxPriceCents ? 'max ' + fmtPrice(t.maxPriceCents) : '' %></span>
-            <span><%= t.book.publishedAt ? (String(t.book.publishedAt).match(/\d{4}/) || [''])[0] : '' %></span>
-          </div>
-        </div>
-        <div class="trophy-meta">
-          <div class="title"><%= t.book.title %></div>
-          <% if (t.book.primaryAuthor || (t.book.authors && t.book.authors.length)) { %>
-            <div class="author"><%= t.book.primaryAuthor || t.book.authors.join(', ') %></div>
-          <% } %>
-          <% if (t.editionNotes) { %><div class="edition"><%= t.editionNotes %></div><% } %>
-          <div class="by">by <%= t.requestedBy.displayName %> · <%= days %>d</div>
-          <% if (t.reason) { %><div class="reason">"<%= t.reason %>"</div><% } %>
-          <% if (activeUser) { %>
-            <div class="trophy-actions" onclick="event.stopPropagation();event.preventDefault();">
-              <% if (t.status === 'active') { %>
-                <form method="post" action="/trophies/<%= t.id %>/defer" style="display:inline">
-                  <button type="submit" class="link" title="Move to deferred — drops out of the offline scan cache">defer</button>
-                </form>
-              <% } else { %>
-                <form method="post" action="/trophies/<%= t.id %>/activate" style="display:inline">
-                  <button type="submit" class="link">re-activate</button>
-                </form>
-              <% } %>
-              <form method="post" action="/trophies/<%= t.id %>/delete" style="display:inline" onsubmit="return confirm('Remove this trophy?')">
-                <button type="submit" class="link link-danger">remove</button>
-              </form>
+      <article class="trophy-card<%= deferred ? ' deferred' : '' %>">
+        <a class="trophy-card-link" href="/books/<%= t.bookId %>">
+          <div class="trophy-cover">
+            <% if (cover) { %>
+              <img src="<%= cover %>" alt="" loading="lazy" />
+            <% } else { %>
+              <span class="trophy-cover-fallback"><%= fallbackTitleArt(t.book.title) %></span>
+            <% } %>
+            <span class="trophy-badge<%= deferred ? ' deferred' : '' %>"><%= deferred ? '⏸ DEFERRED' : '⭐ TROPHY' %></span>
+            <% if (aged) { %><span class="trophy-aged-flag" title="On the list <%= days %> days">aged <%= days %>d</span><% } %>
+            <div class="trophy-bottom">
+              <span><%= t.maxPriceCents ? 'max ' + fmtPrice(t.maxPriceCents) : '' %></span>
+              <span><%= t.book.publishedAt ? (String(t.book.publishedAt).match(/\d{4}/) || [''])[0] : '' %></span>
             </div>
-          <% } %>
-        </div>
-      </a>
+          </div>
+          <div class="trophy-meta">
+            <div class="title"><%= t.book.title %></div>
+            <% if (t.book.primaryAuthor || (t.book.authors && t.book.authors.length)) { %>
+              <div class="author"><%= t.book.primaryAuthor || t.book.authors.join(', ') %></div>
+            <% } %>
+            <% if (t.editionNotes) { %><div class="edition"><%= t.editionNotes %></div><% } %>
+            <div class="by">by <%= t.requestedBy.displayName %> · <%= days %>d</div>
+            <% if (t.reason) { %><div class="reason">"<%= t.reason %>"</div><% } %>
+          </div>
+        </a>
+        <% if (activeUser) { %>
+          <div class="trophy-actions">
+            <% if (t.status === 'active') { %>
+              <form method="post" action="/trophies/<%= t.id %>/defer">
+                <button type="submit" class="link" title="Move to deferred — drops out of the offline scan cache">defer</button>
+              </form>
+            <% } else { %>
+              <form method="post" action="/trophies/<%= t.id %>/activate">
+                <button type="submit" class="link">re-activate</button>
+              </form>
+            <% } %>
+            <form method="post" action="/trophies/<%= t.id %>/delete" onsubmit="return confirm('Remove this trophy?')">
+              <button type="submit" class="link link-danger">remove</button>
+            </form>
+          </div>
+        <% } %>
+      </article>
     <% }) %>
   </div>
 <% } %>

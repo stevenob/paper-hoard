@@ -6,46 +6,55 @@
    * Locals (all optional except title):
    *   - icon       : emoji rendered inside the h1 (e.g. "📚"). Default: none.
    *   - title      : main heading. Required.
-   *   - modifier   : italic muted suffix shown next to the title (e.g.
-   *                  "ordered ▦"). Default: none.
+   *   - modifier   : italic muted suffix shown next to the title.
    *   - blurb      : muted descriptive sentence below the title.
    *   - back       : { href, label } back link rendered above the title.
    *   - stats      : array of { value, label } shown as a stat row.
-   *   - actions    : raw HTML to render in the right-aligned actions column
-   *                  (buttons, links). Caller is responsible for safe escaping.
-   *   - tint       : 'gold' | 'green' | undefined. Selects the radial-glow
-   *                  color and the stat-strong color so each section reads
-   *                  with its own visual identity.
+   *   - actions    : raw HTML to render in the right-aligned actions column.
+   *   - tint       : 'gold' | 'green' | 'red' | 'steel' | undefined.
    */
-  const _ph_tint = typeof tint === 'string' ? tint : '';
+  // Defensive locals access. Some EJS configurations don't merge parent
+  // scope into includes — referencing an undeclared variable directly
+  // throws at render time. Reading via `locals` always works because the
+  // include receives this object, even when empty.
+  const _l = (typeof locals !== 'undefined' && locals) ? locals : {};
+  const _icon = _l.icon || (typeof icon !== 'undefined' ? icon : '');
+  const _title = _l.title || (typeof title !== 'undefined' ? title : '');
+  const _modifier = _l.modifier || (typeof modifier !== 'undefined' ? modifier : '');
+  const _blurb = _l.blurb || (typeof blurb !== 'undefined' ? blurb : '');
+  const _back = _l.back || (typeof back !== 'undefined' ? back : null);
+  const _stats = _l.stats || (typeof stats !== 'undefined' ? stats : null);
+  const _actions = _l.actions || (typeof actions !== 'undefined' ? actions : '');
+  const _tint = _l.tint || (typeof tint !== 'undefined' ? tint : '');
   const _ph_classes = ['page-hero'];
-  if (_ph_tint === 'gold') _ph_classes.push('gold');
-  else if (_ph_tint === 'green') _ph_classes.push('green');
+  if (_tint === 'gold' || _tint === 'green' || _tint === 'red' || _tint === 'steel') {
+    _ph_classes.push(_tint);
+  }
 %>
 <section class="<%= _ph_classes.join(' ') %>">
   <div class="page-hero-text">
-    <% if (typeof back !== 'undefined' && back && back.href) { %>
-      <a class="page-hero-back" href="<%= back.href %>"><%= back.label || '← back' %></a>
+    <% if (_back && _back.href) { %>
+      <a class="page-hero-back" href="<%= _back.href %>"><%= _back.label || '← back' %></a>
     <% } %>
     <h1>
-      <% if (typeof icon !== 'undefined' && icon) { %><span class="icon"><%= icon %></span><% } %>
-      <%= title %>
-      <% if (typeof modifier !== 'undefined' && modifier) { %><span class="modifier"><%= modifier %></span><% } %>
+      <% if (_icon) { %><span class="icon"><%= _icon %></span><% } %>
+      <%= _title %>
+      <% if (_modifier) { %><span class="modifier"><%= _modifier %></span><% } %>
     </h1>
-    <% if (typeof blurb !== 'undefined' && blurb) { %>
-      <p class="page-hero-blurb"><%= blurb %></p>
+    <% if (_blurb) { %>
+      <p class="page-hero-blurb"><%= _blurb %></p>
     <% } %>
-    <% if (typeof stats !== 'undefined' && stats && stats.length) { %>
+    <% if (Array.isArray(_stats) && _stats.length) { %>
       <div class="page-hero-stats">
-        <% stats.forEach(function(s) { if (s == null) return; %>
+        <% _stats.forEach(function(s) { if (s == null) return; %>
           <div class="page-hero-stat"><strong><%- s.value %></strong> <%= s.label %></div>
         <% }) %>
       </div>
     <% } %>
   </div>
-  <% if (typeof actions !== 'undefined' && actions) { %>
+  <% if (_actions) { %>
     <div class="page-hero-actions">
-      <%- actions %>
+      <%- _actions %>
     </div>
   <% } %>
 </section>
