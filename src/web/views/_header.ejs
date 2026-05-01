@@ -21,8 +21,9 @@
   </head>
   <body>
     <header class="topbar">
+      <button type="button" class="topbar-menu-btn" aria-label="Open menu" aria-controls="topbar-drawer" aria-expanded="false">☰</button>
       <a class="brand" href="/">📚 Paper Hoard</a>
-      <nav>
+      <nav class="topbar-nav">
         <a href="/scan">Scan</a>
         <a href="/library">Library</a>
         <a href="/shelves">Shelves</a>
@@ -33,11 +34,12 @@
         <a href="/search" class="search-link" aria-label="Search">🔍</a>
       </nav>
       <div class="active-user">
+        <a href="/search" class="topbar-search-mobile" aria-label="Search">🔍</a>
         <form method="post" action="/theme/toggle" style="display:inline">
           <button type="submit" class="theme-toggle" aria-label="Toggle theme" title="Toggle light/dark"><%= theme === 'dark' ? '☀︎' : '☾' %></button>
         </form>
         <% if (activeUser) { %>
-          <span><strong><%= activeUser.displayName %></strong></span>
+          <span class="active-user-name"><strong><%= activeUser.displayName %></strong></span>
           <form method="post" action="/auth/logout" style="display:inline">
             <button type="submit" class="link">logout</button>
           </form>
@@ -45,6 +47,25 @@
           <a href="/auth/login" class="login-link">Login with Discord</a>
         <% } else { %>
           <span class="hint">login disabled</span>
+        <% } %>
+      </div>
+      <!-- Mobile drawer; populated from .topbar-nav links by ui.js. -->
+      <div id="topbar-drawer" class="topbar-drawer" hidden>
+        <a href="/scan"><span class="ico">📷</span>Scan</a>
+        <a href="/library"><span class="ico">📚</span>Library</a>
+        <a href="/shelves"><span class="ico">📚</span>Shelves</a>
+        <a href="/trophies"><span class="ico">🏆</span>Trophies</a>
+        <a href="/library/labels"><span class="ico">🏷</span>Labels</a>
+        <a href="/import"><span class="ico">📥</span>Import</a>
+        <a href="/about"><span class="ico">📊</span>About</a>
+        <% if (activeUser) { %>
+          <div class="topbar-drawer-divider" aria-hidden="true"></div>
+          <div class="topbar-drawer-user">
+            <span><strong><%= activeUser.displayName %></strong></span>
+            <form method="post" action="/auth/logout" style="display:inline">
+              <button type="submit" class="link">logout →</button>
+            </form>
+          </div>
         <% } %>
       </div>
     </header>

@@ -1987,3 +1987,246 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
   .trash-row, .user-row { grid-template-columns: 40px 1fr; }
   .trash-row .actions, .user-row .right { grid-column: 1 / -1; justify-content: flex-end; }
 }
+
+/* =========================================================
+   v3.5.22 — Mobile pass: hamburger nav, table → cards,
+   tab scroll-snap, sticky form bar, hero stat tiles,
+   touch-target normalisation. The desktop layout is
+   unchanged; everything below is wrapped in @media queries
+   so behaviour <= the breakpoint widens without affecting
+   the wider viewport.
+   ========================================================= */
+
+/* Hamburger button + drawer (desktop: hidden) */
+.topbar-menu-btn { display: none; }
+.topbar-search-mobile { display: none; }
+.topbar-drawer { display: none; }
+
+@media (max-width: 720px) {
+  .topbar {
+    padding: .65rem 1rem;
+    gap: .55rem;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .topbar .brand { flex: 1; font-size: 1.05rem; text-align: left; }
+  .topbar-nav { display: none !important; }
+  .topbar .active-user { margin-left: 0; gap: .35rem; }
+  /* Hide desktop user details on mobile — moved into the drawer. */
+  .topbar .active-user .active-user-name,
+  .topbar .active-user > form[action="/auth/logout"],
+  .topbar .active-user .login-link,
+  .topbar .active-user .hint { display: none; }
+  .topbar-search-mobile {
+    display: grid; place-items: center;
+    width: 38px; height: 38px;
+    border-radius: 8px; border: 1px solid var(--border);
+    color: var(--topbar-fg); font-size: 1rem;
+    text-decoration: none;
+  }
+  .topbar .theme-toggle {
+    width: 38px; height: 38px;
+    padding: 0; display: grid; place-items: center;
+    border-radius: 8px;
+    font-size: 1rem;
+  }
+  .topbar-menu-btn {
+    display: grid; place-items: center;
+    width: 38px; height: 38px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--topbar-fg);
+    font-size: 1.1rem; cursor: pointer;
+    flex: 0 0 auto;
+  }
+  .topbar-menu-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .topbar-drawer {
+    display: block;
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--card); color: var(--fg);
+    border-bottom: 1px solid var(--rule);
+    padding: .55rem;
+    z-index: 90;
+    box-shadow: 0 14px 32px rgba(0, 0, 0, .55);
+  }
+  .topbar-drawer[hidden] { display: none; }
+  .topbar-drawer a {
+    display: flex; align-items: center; gap: .65rem;
+    padding: .8rem .85rem;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--fg);
+    font-size: .95rem;
+    min-height: 44px;
+  }
+  .topbar-drawer a:hover, .topbar-drawer a.active {
+    background: var(--accent-glow);
+    color: var(--accent);
+  }
+  .topbar-drawer .ico {
+    width: 1.4em; text-align: center; font-size: 1rem;
+  }
+  .topbar-drawer-divider { height: 1px; background: var(--rule); margin: .4rem 0; }
+  .topbar-drawer-user {
+    padding: .55rem .85rem;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: .85rem; color: var(--muted);
+  }
+  .topbar-drawer-user strong { color: var(--fg); font-style: italic; }
+}
+
+/* Lending table → vertical cards on mobile. */
+@media (max-width: 640px) {
+  .lending-table thead { display: none; }
+  .lending-table, .lending-table tbody, .lending-table tr { display: block; width: 100%; }
+  .lending-table tr {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+    margin-bottom: .55rem; padding: .7rem .85rem;
+    display: grid; grid-template-columns: 36px 1fr auto; gap: .65rem .65rem;
+    align-items: center;
+  }
+  .lending-table tr.overdue {
+    background: rgba(239, 83, 80, .05);
+    box-shadow: inset 3px 0 0 var(--danger);
+  }
+  .lending-table td { display: contents; }
+  .lending-table td:nth-child(1) { /* Book */ }
+  .lending-table td:nth-child(2),
+  .lending-table td:nth-child(3),
+  .lending-table td:nth-child(4) { display: none; }
+  .lending-table td:nth-child(5) { /* action */ }
+  /* Recompose the merged book + lent + due metadata into the info column. */
+  .lending-table .lending-book .cover { grid-column: 1; grid-row: 1; }
+  .lending-table .lending-book .info { grid-column: 2; grid-row: 1; min-width: 0; }
+  .lending-table .lending-book .info em { display: block; }
+  .lending-table .lending-book .info .author::after {
+    content: ""; display: block; height: .25rem;
+  }
+  .lending-table .lending-action-btn {
+    min-height: 44px; min-width: 44px;
+    padding: .55rem .65rem;
+  }
+}
+
+/* Copy-detail tabs: scroll-snap horizontal strip on mobile. */
+@media (max-width: 720px) {
+  .copy-tabs {
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap !important;
+    padding-bottom: .25rem;
+    /* Add right padding so the last tab's underline isn't flush to edge. */
+    padding-right: 1rem;
+  }
+  .copy-tabs::-webkit-scrollbar { height: 3px; }
+  .copy-tabs::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 2px; }
+  .copy-tabs > * {
+    flex: 0 0 auto !important;
+    scroll-snap-align: start;
+    min-height: 44px;
+  }
+}
+
+/* Audit row already stacks at <=600px (v3.5.14 rule). Just bump touch target. */
+@media (max-width: 600px) {
+  .audit-pager a, .audit-pager span { padding: .65rem .35rem; }
+}
+
+/* Sticky form-action bar on long forms. The .form-card .form-actions
+   row floats to the bottom of the viewport on mobile so submit is
+   always one tap away. Adds bottom padding to the card itself so
+   content isn't hidden behind the bar. */
+@media (max-width: 600px) {
+  .form-card { padding-bottom: 5rem; position: relative; }
+  .form-card .form-actions {
+    position: sticky;
+    bottom: 0;
+    margin: 1rem -1.5rem -1.5rem;
+    padding: .85rem 1.5rem max(.85rem, env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, transparent, var(--card) 30%);
+    z-index: 5;
+    flex-wrap: nowrap;
+  }
+  .form-card .form-actions button.primary {
+    flex: 1; min-height: 48px; font-size: 1rem;
+  }
+  .form-card .form-actions a.cancel {
+    padding: .85rem .5rem;
+    min-height: 48px; display: inline-flex; align-items: center;
+  }
+  /* Bigger inputs to clear iOS auto-zoom (16px font). */
+  .form-card input[type=text],
+  .form-card input[type=number],
+  .form-card input[type=file],
+  .form-card select,
+  .form-card textarea {
+    font-size: 16px;
+    padding: .8rem .9rem;
+    min-height: 44px;
+  }
+}
+
+/* Hero stat row → 2-up tile grid on mobile.
+   The desktop inline strong+label flow is hard to scan at narrow widths;
+   tiles read like the /about KPI row. */
+@media (max-width: 600px) {
+  .page-hero { padding: .65rem 0 1rem; gap: .85rem; }
+  .page-hero h1 { font-size: 1.45rem; }
+  .page-hero h1 .icon { margin-right: .3rem; }
+  .page-hero-blurb { font-size: .87rem; line-height: 1.4; }
+  .page-hero-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: .5rem;
+    width: 100%;
+  }
+  .page-hero-stat {
+    padding: .45rem .55rem;
+    background: rgba(255, 255, 255, .03);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .page-hero-stat strong {
+    font-size: 1.05rem; margin-right: 0;
+  }
+  .page-hero-actions {
+    flex-direction: row; flex-wrap: wrap; gap: .4rem;
+    align-items: stretch;
+  }
+  .page-hero-actions button, .page-hero-actions a.button,
+  .trophies-add-btn {
+    min-height: 44px; padding: .65rem 1rem;
+  }
+}
+
+/* /scan polish: bigger camera CTAs and recent-list rows on phone. */
+@media (max-width: 720px) {
+  .scan-hero .scanner-launch-buttons button,
+  .scan-hero .scanner-launch-buttons label.button {
+    min-height: 56px;
+    font-size: 1.05rem;
+    padding: .85rem 1.2rem;
+  }
+  .scan-card { padding: 1.1rem; }
+  .scan-recent li { padding: .85rem 0; min-height: 44px; }
+  .scan-recent li a { font-size: 1rem; }
+}
+
+/* Universal touch-target floor on mobile. Most buttons inherit this.
+   Button-shaped <a>s also catch up. */
+@media (max-width: 720px) {
+  button, .button,
+  .scan-close,
+  .lending-action-btn,
+  .menu-btn {
+    min-height: 44px;
+  }
+  /* Trophy tile actions and other inline link-buttons should stay
+     compact (they're tertiary actions inside cards) but get a hint of
+     padding for fat-finger forgiveness. */
+  .trophy-actions .link, .trophy-actions .link-danger {
+    padding: .35rem .25rem; min-height: 36px;
+  }
+}

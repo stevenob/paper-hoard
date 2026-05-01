@@ -76,3 +76,37 @@
     init();
   }
 })();
+
+// v3.5.22 Mobile nav drawer.
+(function () {
+  function setupDrawer() {
+    var btn = document.querySelector('.topbar-menu-btn');
+    var drawer = document.getElementById('topbar-drawer');
+    if (!btn || !drawer) return;
+    function close() {
+      drawer.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+    function open() {
+      drawer.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      drawer.hidden ? open() : close();
+    });
+    document.addEventListener('click', function (e) {
+      if (drawer.hidden) return;
+      if (drawer.contains(e.target) || btn.contains(e.target)) return;
+      close();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !drawer.hidden) close();
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupDrawer);
+  } else {
+    setupDrawer();
+  }
+})();
