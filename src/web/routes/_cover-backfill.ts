@@ -22,6 +22,20 @@ export interface BackfillResult {
   results: RepairResultRow[];
 }
 
+export interface RepairScope {
+  /** Restrict candidates to books with at least one non-deleted copy
+   *  in this library. When null, accepts any book with a non-deleted
+   *  copy in any library. Mirrors the filter used on /about so the
+   *  in-panel progress total matches the displayed candidate count. */
+  libraryId: string | null;
+}
+
+function copyScopeFilter(scope: RepairScope) {
+  return scope.libraryId
+    ? { physicalCopies: { some: { libraryId: scope.libraryId, deletedAt: null } } }
+    : { physicalCopies: { some: { deletedAt: null } } };
+}
+
 /**
  * Walk a list of candidate cover URLs, returning the first that validates
  * along with a human-friendly source label ("Google", "OL-L", "OL-M").
@@ -49,16 +63,17 @@ async function pickValidCoverWithSource(
  * Each candidate's URL is validated; falls through to OL by ISBN when
  * Google's URL is a placeholder.
  */
-export async function refetchMissingCovers(batchSize: number): Promise<BackfillResult> {
+export async function refetchMissingCovers(batchSize: number, scope: RepairScope): Promise<BackfillResult> {
+  const where = { thumbnailUrl: null, isbn13: { not: null }, ...copyScopeFilter(scope) };
   const candidates = await prisma.book.findMany({
-    where: { thumbnailUrl: null, isbn13: { not: null } },
+    where,
     select: {
       id: true,
       isbn13: true,
       title: true,
       primaryAuthor: true,
       physicalCopies: {
-        where: { deletedAt: null },
+        where: { deletedAt: null, ...(scope.libraryId ? { libraryId: scope.libraryId } : {}) },
         select: { id: true },
         take: 1,
         orderBy: { addedAt: "asc" },
@@ -128,9 +143,7 @@ export async function refetchMissingCovers(batchSize: number): Promise<BackfillR
     }
   }
 
-  const remaining = await prisma.book.count({
-    where: { thumbnailUrl: null, isbn13: { not: null } },
-  });
+  const remaining = await prisma.book.count({ where });
 
   return { processed: candidates.length, updated, remaining, results };
 }
@@ -151,7 +164,7 @@ export async function refetchMissingCovers(batchSize: number): Promise<BackfillR
  * can. Books with valid zoom=2 covers no-op cheaply (one HEAD request);
  * books with broken zoom=2 placeholders fall through to OL.
  */
-export async function refreshLowResCovers(batchSize: number): Promise<BackfillResult> {
+export async function refreshLowResCovers(batchSize: number, scope: RepairScope): Promise<BackfillResult> {
   const lowResWhere = {
     isbn13: { not: null },
     thumbnailUrl: { not: null },
@@ -163,6 +176,7 @@ export async function refreshLowResCovers(batchSize: number): Promise<BackfillRe
       { thumbnailUrl: { contains: "-S.jpg" } },
       { thumbnailUrl: { startsWith: "http://" } },
     ],
+    ...copyScopeFilter(scope),
   };
 
   const candidates = await prisma.book.findMany({
@@ -174,7 +188,7 @@ export async function refreshLowResCovers(batchSize: number): Promise<BackfillRe
       primaryAuthor: true,
       thumbnailUrl: true,
       physicalCopies: {
-        where: { deletedAt: null },
+        where: { deletedAt: null, ...(scope.libraryId ? { libraryId: scope.libraryId } : {}) },
         select: { id: true },
         take: 1,
         orderBy: { addedAt: "asc" },

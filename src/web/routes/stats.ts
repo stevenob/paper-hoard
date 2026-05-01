@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { requireUser } from "./_helpers.js";
+import { getCurrentLibrary, requireUser } from "./_helpers.js";
 import { refetchMissingCovers, refreshLowResCovers } from "./_cover-backfill.js";
 import { fillMissingAuthors } from "./_author-backfill.js";
 
@@ -8,38 +8,39 @@ import { fillMissingAuthors } from "./_author-backfill.js";
  * as a redirect so old bookmarks and external links still resolve. The
  * cover-backfill POST endpoints stay where they are because the merged
  * /about view still POSTs to them.
+ *
+ * As of v3.5.10, repair helpers are scoped to the caller's library so
+ * the in-panel progress total matches the count surfaced on /about.
+ * (Without scoping, they swept across every Book row in the DB —
+ * including books with copies in other libraries — and the progress
+ * total wildly outran the "books missing covers: N" count.)
  */
 export async function statsRoutes(app: FastifyInstance) {
   app.get("/stats", async (_req, reply) => {
     return reply.redirect("/about", 301);
   });
 
-  // Web-triggered cover backfill. Processes up to N books per call so the
-  // client can render progress and the request never hangs for minutes.
   app.post("/stats/backfill-covers", async (req, reply) => {
     const user = await requireUser(req, reply);
     if (!user) return;
-    const result = await refetchMissingCovers(50);
+    const library = await getCurrentLibrary(req);
+    const result = await refetchMissingCovers(50, { libraryId: library?.id ?? null });
     return reply.send({ ok: true, ...result });
   });
 
-  // Refresh low-resolution covers (Google Books zoom=1, OL -M.jpg, http://)
-  // to the higher-quality versions. Same batch + progress contract as the
-  // missing-cover endpoint above.
   app.post("/stats/refresh-low-res-covers", async (req, reply) => {
     const user = await requireUser(req, reply);
     if (!user) return;
-    const result = await refreshLowResCovers(50);
+    const library = await getCurrentLibrary(req);
+    const result = await refreshLowResCovers(50, { libraryId: library?.id ?? null });
     return reply.send({ ok: true, ...result });
   });
 
-  // Fill missing primaryAuthor values. Same batch contract — cheap rows
-  // (authors[] non-empty) come first; network-bound rows trickle in after.
-  // Smaller batch size here because lookupByIsbn is ~500ms-1s per book.
   app.post("/stats/fill-missing-authors", async (req, reply) => {
     const user = await requireUser(req, reply);
     if (!user) return;
-    const result = await fillMissingAuthors(25);
+    const library = await getCurrentLibrary(req);
+    const result = await fillMissingAuthors(25, { libraryId: library?.id ?? null });
     return reply.send({ ok: true, ...result });
   });
 }

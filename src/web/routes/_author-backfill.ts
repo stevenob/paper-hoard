@@ -1,7 +1,7 @@
 import { prisma } from "../../shared/db.js";
 import { lookupByIsbn } from "../../shared/metadata.js";
 import { logger } from "../../shared/logger.js";
-import type { BackfillResult, RepairResultRow } from "./_cover-backfill.js";
+import type { BackfillResult, RepairResultRow, RepairScope } from "./_cover-backfill.js";
 
 /**
  * Fill in Book.primaryAuthor for rows where it's null.
@@ -21,10 +21,19 @@ import type { BackfillResult, RepairResultRow } from "./_cover-backfill.js";
  *
  * Same return contract as the cover repair helpers — the front-end
  * activity log is shared across all repair runs.
+ *
+ * Scoped to the caller's library since v3.5.10 so the in-panel progress
+ * total matches the count surfaced on /about.
  */
-export async function fillMissingAuthors(batchSize: number): Promise<BackfillResult> {
+export async function fillMissingAuthors(batchSize: number, scope: RepairScope): Promise<BackfillResult> {
+  const where = {
+    primaryAuthor: null,
+    ...(scope.libraryId
+      ? { physicalCopies: { some: { libraryId: scope.libraryId, deletedAt: null } } }
+      : { physicalCopies: { some: { deletedAt: null } } }),
+  };
   const candidates = await prisma.book.findMany({
-    where: { primaryAuthor: null },
+    where,
     select: {
       id: true,
       isbn13: true,
@@ -32,7 +41,7 @@ export async function fillMissingAuthors(batchSize: number): Promise<BackfillRes
       authors: true,
       thumbnailUrl: true,
       physicalCopies: {
-        where: { deletedAt: null },
+        where: { deletedAt: null, ...(scope.libraryId ? { libraryId: scope.libraryId } : {}) },
         select: { id: true },
         take: 1,
         orderBy: { addedAt: "asc" },
@@ -139,9 +148,7 @@ export async function fillMissingAuthors(batchSize: number): Promise<BackfillRes
     }
   }
 
-  const remaining = await prisma.book.count({
-    where: { primaryAuthor: null },
-  });
+  const remaining = await prisma.book.count({ where });
 
   return { processed: toProcess.length, updated, remaining, results };
 }
