@@ -67,9 +67,26 @@ function volumeToMetadata(v: GoogleVolume): BookMetadata {
     authors: v.volumeInfo.authors ?? [],
     publisher: v.volumeInfo.publisher,
     publishedAt: v.volumeInfo.publishedDate,
-    thumbnailUrl: v.volumeInfo.imageLinks?.thumbnail,
+    thumbnailUrl: upgradeGoogleBooksImageUrl(v.volumeInfo.imageLinks?.thumbnail),
     source: "google_books",
   };
+}
+
+/**
+ * Google Books returns thumbnails at ~128px width by default and over
+ * plain HTTP. Both are fixable via URL surgery — the same content URL
+ * accepts a different `zoom` value (0 = largest available, often 1500px+)
+ * and supports https. Apply both here so callers always get a usable URL.
+ */
+function upgradeGoogleBooksImageUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  let url = raw.replace(/^http:\/\//, "https://");
+  // `zoom=1` is the small ~128px default. Replacing with `zoom=0` returns
+  // the largest size Google has on file. The `&edge=curl` artifact is the
+  // visual page-fold which looks bad on bigger renders, drop it.
+  url = url.replace(/([?&])zoom=\d+/g, "$1zoom=0");
+  url = url.replace(/[?&]edge=curl/g, "");
+  return url;
 }
 
 async function fetchOpenLibraryEdition(isbn: string): Promise<OpenLibraryEdition | null> {
@@ -118,7 +135,7 @@ async function lookupOpenLibraryByIsbn(isbn: string): Promise<BookMetadata | nul
     authors: (entry?.authors ?? []).map((a) => a.name),
     publisher: entry?.publishers?.[0]?.name ?? detail?.publishers?.[0],
     publishedAt: entry?.publish_date ?? detail?.publish_date,
-    thumbnailUrl: entry?.cover?.medium ?? entry?.cover?.small,
+    thumbnailUrl: entry?.cover?.large ?? entry?.cover?.medium ?? entry?.cover?.small,
     edition: mapPhysicalFormat(detail?.physical_format),
     source: "open_library",
   };
@@ -201,7 +218,7 @@ function searchDocToMetadata(d: OpenLibrarySearchDoc): BookMetadata {
     authors: d.author_name ?? [],
     publisher: d.publisher?.[0],
     publishedAt: d.first_publish_year ? String(d.first_publish_year) : undefined,
-    thumbnailUrl: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : undefined,
+    thumbnailUrl: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : undefined,
     source: "open_library",
   };
 }

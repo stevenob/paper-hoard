@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../../shared/db.js";
 import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
-import { refetchMissingCovers } from "./_cover-backfill.js";
+import { refetchMissingCovers, refreshLowResCovers } from "./_cover-backfill.js";
 
 interface AuthorCount {
   primaryAuthor: string;
@@ -33,6 +33,7 @@ export async function statsRoutes(app: FastifyInstance) {
       editionGroups,
       authorRows,
       valueAggregate,
+      lowResCovers,
     ] = await Promise.all([
       prisma.physicalCopy.count({ where: activeCopyFilter }),
       prisma.physicalCopy.count({ where: { ...libraryFilter, deletedAt: { not: null } } }),
@@ -117,6 +118,23 @@ export async function statsRoutes(app: FastifyInstance) {
         _sum: { priceCents: true },
         _count: { priceCents: true },
       }),
+      // Count of books with low-res covers (Google Books zoom=1, OL -M.jpg,
+      // any http:// URL). Used to show the Refresh covers button only when
+      // there's something to fix.
+      prisma.book.count({
+        where: {
+          isbn13: { not: null },
+          thumbnailUrl: { not: null },
+          source: { not: "manual" },
+          OR: [
+            { thumbnailUrl: { contains: "zoom=1" } },
+            { thumbnailUrl: { contains: "edge=curl" } },
+            { thumbnailUrl: { contains: "-M.jpg" } },
+            { thumbnailUrl: { contains: "-S.jpg" } },
+            { thumbnailUrl: { startsWith: "http://" } },
+          ],
+        },
+      }),
     ]);
 
     function pct(part: number, whole: number): number {
@@ -168,6 +186,7 @@ export async function statsRoutes(app: FastifyInstance) {
         adds: { last7: addsLast7, last30: addsLast30, last90: addsLast90 },
         backfillCandidates: booksWithoutCover,
         booksMissingIsbn: booksWithoutIsbn,
+        lowResCovers,
         value: {
           totalCents: valueAggregate._sum.priceCents ?? 0,
           recordedCount: valueAggregate._count.priceCents ?? 0,
@@ -182,6 +201,16 @@ export async function statsRoutes(app: FastifyInstance) {
     const user = await requireUser(req, reply);
     if (!user) return;
     const result = await refetchMissingCovers(50);
+    return reply.send({ ok: true, ...result });
+  });
+
+  // Refresh low-resolution covers (Google Books zoom=1, OL -M.jpg, http://)
+  // to the higher-quality versions. Same batch + progress contract as the
+  // missing-cover endpoint above.
+  app.post("/stats/refresh-low-res-covers", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const result = await refreshLowResCovers(50);
     return reply.send({ ok: true, ...result });
   });
 }
