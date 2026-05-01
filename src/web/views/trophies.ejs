@@ -1,68 +1,360 @@
 <% const pageTitle = 'Trophies' %>
 <%- include('_header') %>
+<%
+  function fmtPrice(cents) { return cents == null ? '' : '$' + (cents / 100).toFixed(2); }
+  function ageDays(d) { return Math.floor((Date.now() - new Date(d).getTime()) / 86400000); }
+  function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fallbackTitleArt(t) { return (t || '?').slice(0, 28); }
+%>
 
-<h1>🏆 Trophy List</h1>
-
-<% if (library && library.publicSlug) { %>
-  <p class="hint">📤 Shareable wishlist: <a href="/share/<%= library.publicSlug %>/wishlist" target="_blank" rel="noopener">/share/<%= library.publicSlug %>/wishlist</a></p>
-<% } %>
+<section class="trophies-hero">
+  <div class="trophies-hero-text">
+    <h1>🏆 Trophy List</h1>
+    <p class="trophies-hero-blurb">A wishlist of editions and titles you're hunting. Tap a tile to see the full record.</p>
+    <div class="trophies-stats">
+      <div class="trophies-stat"><strong><%= stats.activeCount %></strong> active</div>
+      <% if (stats.deferredCount > 0) { %><div class="trophies-stat"><strong><%= stats.deferredCount %></strong> deferred</div><% } %>
+      <% if (stats.agedCount > 0) { %><div class="trophies-stat"><strong><%= stats.agedCount %></strong> aged · <span class="hint">≥<%= stats.agedThresholdDays %>d</span></div><% } %>
+      <% if (stats.oldestDays > 0) { %><div class="trophies-stat"><strong><%= stats.oldestDays %>&thinsp;d</strong> oldest</div><% } %>
+      <% if (stats.totalMaxBudgetCents > 0) { %><div class="trophies-stat"><strong><%= fmtPrice(stats.totalMaxBudgetCents) %></strong> budget envelope</div><% } %>
+    </div>
+  </div>
+  <div class="trophies-hero-actions">
+    <% if (activeUser) { %>
+      <button type="button" id="btn-add-trophy" class="trophies-add-btn">＋ Add to wishlist</button>
+    <% } %>
+    <% if (library && library.publicSlug) { %>
+      <a class="trophies-share-link" href="/share/<%= library.publicSlug %>/wishlist" target="_blank" rel="noopener">📤 share /share/<%= library.publicSlug %>/wishlist →</a>
+    <% } %>
+  </div>
+</section>
 
 <% if (trophies.length === 0) { %>
-  <p>No Trophy items yet. Scan a book and tap 🏆 in the field, or import via <a href="/import">CSV</a>.</p>
+  <div class="trophies-empty">
+    <p>No Trophy items yet.</p>
+    <p class="hint">Tap <strong>＋ Add to wishlist</strong> above, scan a book and tap 🏆 in the confirm sheet, or import via <a href="/import">CSV</a>.</p>
+  </div>
 <% } else { %>
-  <% function fmtPrice(cents) { return cents == null ? '' : '$' + (cents / 100).toFixed(2); } %>
-  <% function ageDays(d) { return Math.floor((Date.now() - new Date(d).getTime()) / 86400000); } %>
-  <table class="data">
-    <thead>
-      <tr><th>Title</th><th>Authors</th><th>Requested</th><th>Edition / max</th><th>Reason</th><th>Status</th><th></th></tr>
-    </thead>
-    <tbody>
-      <% trophies.forEach(function(t) {
-        const days = ageDays(t.createdAt);
-        const stale = days >= 180;
-      %>
-        <tr<%= stale ? ' class="trophy-aged"' : '' %>>
-          <td data-label="Title">
-            <a href="/books/<%= t.bookId %>"><%= t.book.title %></a>
-            <% if (stale) { %><span class="hint" title="On the list for <%= days %> days"> · aged</span><% } %>
-          </td>
-          <td data-label="Authors"><%= t.book.authors.join(', ') %></td>
-          <td data-label="Requested by"><strong><%= t.requestedBy.displayName %></strong>
-            <span class="hint">· <%= days %>d ago</span>
-          </td>
-          <td data-label="Edition / max">
-            <% if (t.editionNotes) { %><div><%= t.editionNotes %></div><% } %>
-            <% if (t.maxPriceCents) { %><div class="hint">max <%= fmtPrice(t.maxPriceCents) %></div><% } %>
-            <% if (!t.editionNotes && !t.maxPriceCents) { %><span class="hint">—</span><% } %>
-          </td>
-          <td data-label="Reason"><%= t.reason || '—' %></td>
-          <td data-label="Status">
-            <% if (t.status === 'deferred') { %>
-              <span class="pill pill-tag">Deferred</span>
-            <% } else { %>
-              <span class="pill pill-trophy">Active</span>
-            <% } %>
-          </td>
-          <td data-label="">
-            <% if (activeUser) { %>
+  <div class="trophy-grid">
+    <% trophies.forEach(function(t) {
+      const days = ageDays(t.createdAt);
+      const aged = days >= stats.agedThresholdDays && t.status !== 'deferred';
+      const deferred = t.status === 'deferred';
+      const cover = t.book.thumbnailUrl;
+    %>
+      <a class="trophy-card<%= deferred ? ' deferred' : '' %>" href="/books/<%= t.bookId %>">
+        <div class="trophy-cover">
+          <% if (cover) { %>
+            <img src="<%= cover %>" alt="" loading="lazy" />
+          <% } else { %>
+            <span class="trophy-cover-fallback"><%= fallbackTitleArt(t.book.title) %></span>
+          <% } %>
+          <span class="trophy-badge<%= deferred ? ' deferred' : '' %>"><%= deferred ? '⏸ DEFERRED' : '⭐ TROPHY' %></span>
+          <% if (aged) { %><span class="trophy-aged-flag" title="On the list <%= days %> days">aged <%= days %>d</span><% } %>
+          <div class="trophy-bottom">
+            <span><%= t.maxPriceCents ? 'max ' + fmtPrice(t.maxPriceCents) : '' %></span>
+            <span><%= t.book.publishedAt ? (String(t.book.publishedAt).match(/\d{4}/) || [''])[0] : '' %></span>
+          </div>
+        </div>
+        <div class="trophy-meta">
+          <div class="title"><%= t.book.title %></div>
+          <% if (t.book.primaryAuthor || (t.book.authors && t.book.authors.length)) { %>
+            <div class="author"><%= t.book.primaryAuthor || t.book.authors.join(', ') %></div>
+          <% } %>
+          <% if (t.editionNotes) { %><div class="edition"><%= t.editionNotes %></div><% } %>
+          <div class="by">by <%= t.requestedBy.displayName %> · <%= days %>d</div>
+          <% if (t.reason) { %><div class="reason">"<%= t.reason %>"</div><% } %>
+          <% if (activeUser) { %>
+            <div class="trophy-actions" onclick="event.stopPropagation();event.preventDefault();">
               <% if (t.status === 'active') { %>
                 <form method="post" action="/trophies/<%= t.id %>/defer" style="display:inline">
-                  <button type="submit" class="link" title="Move to deferred — drops out of the offline scan cache">Defer</button>
+                  <button type="submit" class="link" title="Move to deferred — drops out of the offline scan cache">defer</button>
                 </form>
               <% } else { %>
                 <form method="post" action="/trophies/<%= t.id %>/activate" style="display:inline">
-                  <button type="submit" class="link">Re-activate</button>
+                  <button type="submit" class="link">re-activate</button>
                 </form>
               <% } %>
               <form method="post" action="/trophies/<%= t.id %>/delete" style="display:inline" onsubmit="return confirm('Remove this trophy?')">
-                <button type="submit" class="danger">Remove</button>
+                <button type="submit" class="link link-danger">remove</button>
               </form>
-            <% } %>
-          </td>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
+            </div>
+          <% } %>
+        </div>
+      </a>
+    <% }) %>
+  </div>
+<% } %>
+
+<% if (activeUser) { %>
+<!-- +Add Trophy modal -->
+<div id="add-trophy-modal" class="add-trophy-modal" hidden role="dialog" aria-modal="true" aria-labelledby="add-trophy-title">
+  <div class="add-trophy-backdrop" data-close></div>
+  <div class="add-trophy-panel">
+    <div class="add-trophy-head">
+      <div>
+        <h2 id="add-trophy-title">＋ Add to wishlist</h2>
+        <p class="add-trophy-sub" id="add-trophy-sub">Start typing a title or paste an ISBN. We'll search Google Books and Open Library.</p>
+      </div>
+      <button type="button" class="add-trophy-close" data-close aria-label="Close">✕</button>
+    </div>
+
+    <!-- Step 1 — search -->
+    <div class="add-trophy-step" id="add-trophy-step1">
+      <div class="add-trophy-search">
+        <span class="add-trophy-search-icon">🔍</span>
+        <input id="add-trophy-q" type="text" placeholder="Title, author, or ISBN…" autocomplete="off" />
+      </div>
+      <p class="add-trophy-results-label" id="add-trophy-results-label" hidden></p>
+      <div class="add-trophy-results" id="add-trophy-results"></div>
+      <p class="add-trophy-fallback">
+        Can't find it? <a href="#" id="add-trophy-manual-link">Add manually →</a>
+      </p>
+    </div>
+
+    <!-- Step 2 — trophy details -->
+    <div class="add-trophy-step" id="add-trophy-step2" hidden>
+      <div class="add-trophy-pick" id="add-trophy-pick"></div>
+      <label class="add-trophy-label">Edition notes <span class="hint">(optional)</span></label>
+      <input id="add-trophy-edition" type="text" placeholder="e.g. 1st ed Gnome Press · DJ" maxlength="500" />
+      <div class="add-trophy-row">
+        <div>
+          <label class="add-trophy-label">Max price</label>
+          <div class="add-trophy-price">
+            <span>$</span>
+            <input id="add-trophy-max-price" type="number" min="0" step="1" placeholder="0" />
+          </div>
+        </div>
+        <div>
+          <label class="add-trophy-label">Priority</label>
+          <select id="add-trophy-priority">
+            <option value="3">normal</option>
+            <option value="2">high</option>
+            <option value="1">holy grail</option>
+          </select>
+        </div>
+      </div>
+      <label class="add-trophy-label">Reason <span class="hint">(optional)</span></label>
+      <textarea id="add-trophy-reason" rows="2" placeholder="Why's this on your wishlist?" maxlength="2000"></textarea>
+      <p id="add-trophy-error" class="add-trophy-error" hidden></p>
+      <div class="add-trophy-actions">
+        <button type="button" id="add-trophy-back" class="ghost">← Back</button>
+        <button type="button" id="add-trophy-submit" class="primary">🏆 Add to wishlist</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const modal = document.getElementById('add-trophy-modal');
+    const openBtn = document.getElementById('btn-add-trophy');
+    const step1 = document.getElementById('add-trophy-step1');
+    const step2 = document.getElementById('add-trophy-step2');
+    const sub = document.getElementById('add-trophy-sub');
+    const qInput = document.getElementById('add-trophy-q');
+    const resultsEl = document.getElementById('add-trophy-results');
+    const resultsLabel = document.getElementById('add-trophy-results-label');
+    const pickEl = document.getElementById('add-trophy-pick');
+    const editionEl = document.getElementById('add-trophy-edition');
+    const maxPriceEl = document.getElementById('add-trophy-max-price');
+    const priorityEl = document.getElementById('add-trophy-priority');
+    const reasonEl = document.getElementById('add-trophy-reason');
+    const errorEl = document.getElementById('add-trophy-error');
+    const submitBtn = document.getElementById('add-trophy-submit');
+    const backBtn = document.getElementById('add-trophy-back');
+    const manualLink = document.getElementById('add-trophy-manual-link');
+    let pickedBook = null;
+    let searchTimer = null;
+    let searchSeq = 0;
+    let searchAbort = null;
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+      });
+    }
+
+    function open() {
+      modal.hidden = false;
+      pickedBook = null;
+      qInput.value = '';
+      resultsEl.innerHTML = '';
+      resultsLabel.hidden = true;
+      step1.hidden = false;
+      step2.hidden = true;
+      sub.textContent = 'Start typing a title or paste an ISBN. We\u2019ll search Google Books and Open Library.';
+      setTimeout(function() { qInput.focus(); }, 30);
+    }
+    function close() {
+      modal.hidden = true;
+      if (searchAbort) { searchAbort.abort(); searchAbort = null; }
+    }
+
+    if (openBtn) openBtn.addEventListener('click', open);
+    modal.addEventListener('click', function(e) {
+      if (e.target.dataset && e.target.dataset.close !== undefined) close();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (modal.hidden) return;
+      if (e.key === 'Escape') close();
+    });
+
+    qInput.addEventListener('input', function() {
+      if (searchTimer) clearTimeout(searchTimer);
+      const v = qInput.value.trim();
+      if (v.length < 2) {
+        resultsEl.innerHTML = '';
+        resultsLabel.hidden = true;
+        return;
+      }
+      searchTimer = setTimeout(function() { runSearch(v); }, 250);
+    });
+    qInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const first = resultsEl.querySelector('.add-trophy-result');
+        if (first) first.click();
+      }
+    });
+
+    async function runSearch(q) {
+      const seq = ++searchSeq;
+      if (searchAbort) searchAbort.abort();
+      searchAbort = new AbortController();
+      resultsLabel.hidden = false;
+      resultsLabel.textContent = 'SEARCHING\u2026';
+      try {
+        const res = await fetch('/trophies/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q: q }),
+          signal: searchAbort.signal,
+        });
+        if (seq !== searchSeq) return;
+        const json = await res.json();
+        if (!json.ok) {
+          resultsLabel.textContent = json.error || 'Search failed';
+          resultsEl.innerHTML = '';
+          return;
+        }
+        renderResults(json.results || []);
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        resultsLabel.textContent = 'Network error';
+        resultsEl.innerHTML = '';
+      }
+    }
+
+    function renderResults(items) {
+      if (items.length === 0) {
+        resultsLabel.textContent = 'NO MATCHES';
+        resultsEl.innerHTML = '';
+        return;
+      }
+      resultsLabel.textContent = items.length + ' RESULT' + (items.length === 1 ? '' : 'S');
+      resultsEl.innerHTML = items.map(function(b, i) {
+        const author = (b.authors || []).join(', ') || 'Unknown';
+        const year = b.publishedAt ? (String(b.publishedAt).match(/\d{4}/) || [''])[0] : '';
+        const pub = b.publisher || '';
+        const sub = [author, year, pub].filter(Boolean).join(' · ');
+        const cover = b.thumbnailUrl
+          ? '<img src="' + escapeHtml(b.thumbnailUrl) + '" alt="" loading="lazy" />'
+          : '<span class="add-trophy-result-fallback">' + escapeHtml((b.title || '?').slice(0, 18)) + '</span>';
+        return '<button type="button" class="add-trophy-result" data-i="' + i + '">' +
+          '<span class="add-trophy-result-cover">' + cover + '</span>' +
+          '<span class="add-trophy-result-text">' +
+            '<span class="add-trophy-result-title">' + escapeHtml(b.title || 'Unknown') + '</span>' +
+            '<span class="add-trophy-result-sub">' + escapeHtml(sub) + '</span>' +
+          '</span>' +
+          '<span class="add-trophy-result-pick">\u21b5 pick</span>' +
+        '</button>';
+      }).join('');
+      const buttons = resultsEl.querySelectorAll('.add-trophy-result');
+      for (let i = 0; i < buttons.length; i++) {
+        buttons[i].addEventListener('click', function() { advance(items[+this.dataset.i]); });
+      }
+    }
+
+    function advance(book) {
+      pickedBook = book;
+      sub.textContent = 'Step 2 of 2 \u2014 what makes this a trophy?';
+      const author = (book.authors || []).join(', ') || 'Unknown';
+      const year = book.publishedAt ? (String(book.publishedAt).match(/\d{4}/) || [''])[0] : '';
+      const cover = book.thumbnailUrl
+        ? '<img src="' + escapeHtml(book.thumbnailUrl) + '" alt="" loading="lazy" />'
+        : '<span class="add-trophy-pick-fallback">' + escapeHtml((book.title || '?').slice(0, 18)) + '</span>';
+      pickEl.innerHTML =
+        '<div class="add-trophy-pick-cover">' + cover + '</div>' +
+        '<div class="add-trophy-pick-info">' +
+          '<div class="add-trophy-pick-title">' + escapeHtml(book.title || 'Unknown') + '</div>' +
+          '<div class="add-trophy-pick-author">' + escapeHtml(author) + (year ? ' · ' + escapeHtml(year) : '') + '</div>' +
+          (book.isbn13 ? '<div class="add-trophy-pick-meta">ISBN ' + escapeHtml(book.isbn13) + (book.publisher ? ' · ' + escapeHtml(book.publisher) : '') + '</div>' : '') +
+        '</div>';
+      step1.hidden = true;
+      step2.hidden = false;
+      errorEl.hidden = true;
+      // Reset form fields each time so a fresh add is fresh.
+      editionEl.value = '';
+      maxPriceEl.value = '';
+      priorityEl.value = '3';
+      reasonEl.value = '';
+      setTimeout(function() { editionEl.focus(); }, 30);
+    }
+
+    backBtn.addEventListener('click', function() {
+      step2.hidden = true;
+      step1.hidden = false;
+      sub.textContent = 'Start typing a title or paste an ISBN. We\u2019ll search Google Books and Open Library.';
+      setTimeout(function() { qInput.focus(); }, 30);
+    });
+
+    submitBtn.addEventListener('click', async function() {
+      if (!pickedBook) return;
+      submitBtn.disabled = true;
+      errorEl.hidden = true;
+      const maxPrice = maxPriceEl.value ? Math.round(parseFloat(maxPriceEl.value) * 100) : null;
+      const body = {
+        isbn: pickedBook.isbn13 || pickedBook.isbn10 || undefined,
+        title: pickedBook.title,
+        author: (pickedBook.authors || [])[0],
+        editionNotes: editionEl.value.trim() || undefined,
+        maxPriceCents: maxPrice == null ? undefined : maxPrice,
+        priority: Number(priorityEl.value) || 3,
+        reason: reasonEl.value.trim() || undefined,
+      };
+      try {
+        const res = await fetch('/trophies/new', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const json = await res.json().catch(function() { return { ok: false, error: 'Bad response' }; });
+        if (!res.ok || !json.ok) {
+          errorEl.textContent = json.error || 'Failed to add';
+          errorEl.hidden = false;
+          submitBtn.disabled = false;
+          return;
+        }
+        // Reload so the grid + stats refresh.
+        window.location.reload();
+      } catch (err) {
+        errorEl.textContent = 'Network error: ' + (err.message || err);
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+      }
+    });
+
+    manualLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      const q = qInput.value.trim();
+      const params = new URLSearchParams();
+      params.set('as', 'trophy');
+      if (q) params.set('title', q);
+      window.location.href = '/books/new?' + params.toString();
+    });
+  })();
+</script>
 <% } %>
 
 <%- include('_footer') %>
