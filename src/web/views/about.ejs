@@ -1,70 +1,389 @@
-<% const pageTitle = 'About' %>
+<% const pageTitle = 'About this library' %>
 <%- include('_header') %>
 
-<h1>About this Paper Hoard</h1>
+<%
+  function fmtPrice(cents) { return cents == null ? '—' : '$' + (cents / 100).toFixed(2); }
+  function pctOf(part, whole) { return whole === 0 ? 0 : Math.round((part / whole) * 100); }
+  function donutSlices(items, total) {
+    let offset = 0;
+    return items.map(function(it) {
+      const pct = total === 0 ? 0 : Math.round((it.count / total) * 100);
+      const dash = pct + ' ' + (100 - pct);
+      const slice = { label: it.label, count: it.count, pct: pct, dash: dash, offset: -offset };
+      offset += pct;
+      return slice;
+    });
+  }
+%>
 
-<table class="data">
-  <tbody>
-    <tr><td data-label="Image tag"><strong>Image tag</strong></td><td data-label=""><code><%= imageTag %></code></td></tr>
-    <tr><td data-label="Git SHA"><strong>Git SHA</strong></td><td data-label=""><code><%= gitSha %></code> <% if (gitSha && gitSha !== 'dev') { %>(<a href="<%= repoUrl %>/commit/<%= gitSha %>">view</a>)<% } %></td></tr>
-    <tr><td data-label="Node.js"><strong>Node.js</strong></td><td data-label=""><%= nodeVersion %></td></tr>
-    <tr><td data-label="Process uptime"><strong>Uptime</strong></td><td data-label=""><%= uptimeSec %> s</td></tr>
-    <tr><td data-label="DB"><strong>Database</strong></td><td data-label=""><%= dbOk ? '✅ ok' : '❌ unreachable' %></td></tr>
-  </tbody>
-</table>
+<h1 class="about-page-title">📊 About this library</h1>
 
-<h2>Counts</h2>
-<table class="data">
-  <tbody>
-    <tr><td data-label=""><strong>Libraries</strong></td><td data-label=""><%= counts.libraries %></td></tr>
-    <tr><td data-label=""><strong>Users</strong></td><td data-label=""><%= counts.users %></td></tr>
-    <tr><td data-label=""><strong>Books</strong></td><td data-label=""><%= counts.books %></td></tr>
-    <tr><td data-label=""><strong>Physical copies</strong></td><td data-label=""><%= counts.copies %></td></tr>
-    <tr><td data-label=""><strong>Trophies</strong></td><td data-label=""><%= counts.trophies %></td></tr>
-    <tr><td data-label=""><strong>Completions</strong></td><td data-label=""><%= counts.completions %></td></tr>
-    <tr><td data-label=""><strong>Audit log entries</strong></td><td data-label=""><a href="/audit"><%= counts.auditLog %></a></td></tr>
-  </tbody>
-</table>
-
-<h2>Discord channel posts</h2>
-<% if (!library) { %>
-  <p class="hint">No library exists yet.</p>
-<% } else if (!activeUser) { %>
-  <p class="hint">Log in to manage Discord posts.</p>
-<% } else { %>
-  <p>When set, every book add (web or Discord) optionally posts a rich embed to this channel — cover, rating, ISBN, and links to Goodreads / StoryGraph / Amazon / Bookshop / Open Library.</p>
-  <form method="post" action="/libraries/<%= library.id %>/notify-channel" class="stacked">
-    <label>Discord channel ID
-      <input name="channelId" value="<%= library.notifyChannelId || '' %>" placeholder="e.g. 1489048099606364212" inputmode="numeric" maxlength="30" />
-    </label>
-    <p class="hint">In Discord: Settings → Advanced → Developer Mode on, then right-click the channel → Copy Channel ID. Leave blank to disable. Smaug must be in the server and have permission to post in the channel.</p>
-    <button type="submit"><%= library.notifyChannelId ? 'Update' : 'Save' %></button>
-  </form>
+<% if (!dbOk) { %>
+  <div class="error" style="margin-bottom:1.5rem;">
+    Database connection failed. Catalog stats are unavailable. Live system info is below.
+  </div>
 <% } %>
 
-<h2>Backup &amp; export</h2>
-<p class="hint">A daily JSON backup of every library is written to the <code>BACKUPS_DIR</code> volume (30-day retention). For one-off downloads, use the buttons below.</p>
-<p>
-  <a class="button" href="/library/export.csv">📊 Download CSV</a>
-  <a class="button" href="/library/export.json">📦 Download JSON</a>
-  <% if (activeUser) { %>
-    <button type="button" id="btn-backup-now">💾 Run backup now</button>
+<% if (totals) { %>
+  <div class="dashboard-grid">
+    <a class="widget w-kpi" href="/library">
+      <h2>Active copies</h2>
+      <div class="value"><%= totals.copies %></div>
+      <% if (adds && adds.last7 > 0) { %><div class="delta">+<%= adds.last7 %> this week</div><% } %>
+    </a>
+    <a class="widget w-kpi" href="/library">
+      <h2>Distinct books</h2>
+      <div class="value"><%= totals.books %></div>
+    </a>
+    <a class="widget w-kpi" href="/trophies">
+      <h2>On trophy list</h2>
+      <div class="value"><%= totals.trophies %></div>
+    </a>
+    <a class="widget w-kpi" href="/shelves">
+      <h2>Shelves</h2>
+      <div class="value"><%= totals.shelves %></div>
+    </a>
+
+    <% if (completeness) { %>
+      <div class="widget w-completeness">
+        <h2>Catalog completeness</h2>
+        <ul class="completeness-list">
+          <% [
+            ['Has a cover', completeness.cover],
+            ['Has an ISBN', completeness.isbn],
+            ['Condition recorded', completeness.condition],
+            ['Edition recorded', completeness.edition],
+            ['Assigned to a shelf', completeness.shelf],
+          ].forEach(function(row) { var label = row[0], data = row[1]; %>
+            <li>
+              <div class="completeness-row">
+                <span><%= label %></span>
+                <span class="completeness-value"><strong><%= data.pct %>%</strong> <span class="hint">(<%= data.value %>/<%= data.of %>)</span></span>
+              </div>
+              <div class="completeness-bar"><span style="width:<%= data.pct %>%"></span></div>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+
+    <% if (editions && editions.length > 0) {
+      const slices = donutSlices(editions, totals.copies);
+      const palette = ['var(--accent)', 'var(--accent-soft)', '#999', '#666', '#444'];
+    %>
+      <div class="widget w-editions">
+        <h2>Editions</h2>
+        <div class="editions-row">
+          <div class="donut" aria-hidden="true">
+            <svg viewBox="0 0 36 36" width="160" height="160">
+              <% slices.forEach(function(s, i) { %>
+                <circle cx="18" cy="18" r="15.9" fill="none"
+                        stroke="<%= s.label === '(unspecified)' ? '#444' : palette[i % palette.length] %>"
+                        stroke-opacity="<%= s.label === '(unspecified)' ? '.5' : '1' %>"
+                        stroke-width="3.5"
+                        stroke-dasharray="<%= s.dash %>"
+                        stroke-dashoffset="<%= s.offset %>"></circle>
+              <% }) %>
+            </svg>
+            <div class="donut-center"><div><div class="big"><%= totals.copies %></div><div class="small">copies</div></div></div>
+          </div>
+          <ul class="donut-legend">
+            <% slices.forEach(function(s, i) { %>
+              <li>
+                <span class="swatch" style="background: <%= s.label === '(unspecified)' ? '#666' : palette[i % palette.length] %>; opacity: <%= s.label === '(unspecified)' ? '.5' : '1' %>;"></span>
+                <%= s.label %>
+                <span class="count"><%= s.count %> (<%= s.pct %>%)</span>
+              </li>
+            <% }) %>
+          </ul>
+        </div>
+      </div>
+    <% } %>
+
+    <% if (topAuthors && topAuthors.length > 0) { %>
+      <div class="widget w-authors">
+        <h2>Top authors</h2>
+        <ol class="ranked">
+          <% topAuthors.forEach(function(a) {
+            const slug = authorSlug(a.primaryAuthor);
+          %>
+            <li>
+              <% if (slug) { %><a href="/authors/<%= slug %>"><%= a.primaryAuthor %></a><% } else { %><span><%= a.primaryAuthor %></span><% } %>
+              <span class="count"><%= a.bookCount %></span>
+            </li>
+          <% }) %>
+        </ol>
+      </div>
+    <% } %>
+
+    <% if (adds) { %>
+      <div class="widget w-growth">
+        <h2>Catalog growth</h2>
+        <% if (adds.last7 === adds.last30 && adds.last30 === adds.last90) { %>
+          <p style="margin:0;font-size:.95rem;"><strong style="color:var(--accent);font-family:'Fraunces',serif;font-size:1.5rem;"><%= adds.last7 %></strong> added in the last <strong>7 days</strong>.</p>
+          <p class="hint" style="font-size:.82rem;margin:.5rem 0 0;">All additions are recent — older windows will diverge as the catalog ages.</p>
+        <% } else { %>
+          <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.5rem;font-size:.92rem;">
+            <li><strong style="color:var(--accent);font-family:'Fraunces',serif;font-size:1.15rem;"><%= adds.last7 %></strong> in the last <strong>7 days</strong></li>
+            <li><strong style="color:var(--accent);font-family:'Fraunces',serif;font-size:1.15rem;"><%= adds.last30 %></strong> in the last <strong>30 days</strong></li>
+            <li><strong style="color:var(--accent);font-family:'Fraunces',serif;font-size:1.15rem;"><%= adds.last90 %></strong> in the last <strong>90 days</strong></li>
+          </ul>
+        <% } %>
+      </div>
+    <% } %>
+
+    <% if (activeUser && (backfillCandidates > 0 || lowResCovers > 0 || totals.trash > 0)) { %>
+      <div class="widget w-tools">
+        <h2>Catalog tools</h2>
+        <ul class="tools-list">
+          <% if (backfillCandidates > 0) { %>
+            <li>
+              <div>
+                <strong><%= backfillCandidates %></strong> book<%= backfillCandidates === 1 ? '' : 's' %> missing covers
+                <div class="sub">Re-runs Google Books + Open Library</div>
+                <div id="backfill-status" class="sub" style="margin-top:.25rem;"></div>
+                <div class="completeness-bar" id="backfill-bar" hidden style="margin-top:.25rem;"><span></span></div>
+              </div>
+              <button type="button" id="btn-backfill">🔄 Run</button>
+            </li>
+          <% } %>
+          <% if (lowResCovers > 0) { %>
+            <li>
+              <div>
+                <strong><%= lowResCovers %></strong> low-res cover<%= lowResCovers === 1 ? '' : 's' %>
+                <div class="sub">Upgrades zoom=1 / -M.jpg / http URLs</div>
+                <div id="refresh-status" class="sub" style="margin-top:.25rem;"></div>
+                <div class="completeness-bar" id="refresh-bar" hidden style="margin-top:.25rem;"><span></span></div>
+              </div>
+              <button type="button" id="btn-refresh-covers">📐 Run</button>
+            </li>
+          <% } %>
+          <% if (totals.trash > 0) { %>
+            <li>
+              <div>
+                <strong><%= totals.trash %></strong> in trash
+                <div class="sub">Auto-purged after 30 days</div>
+              </div>
+              <a href="/trash">Open →</a>
+            </li>
+          <% } %>
+        </ul>
+      </div>
+    <% } %>
+
+    <% if (oldestCopies && oldestCopies.length > 0) { %>
+      <div class="widget w-oldest">
+        <h2>Oldest in the collection</h2>
+        <ul class="cover-list">
+          <% oldestCopies.forEach(function(c) {
+            const cover = c.coverPath ? '/uploads/' + c.coverPath : c.book.thumbnailUrl;
+          %>
+            <li>
+              <% if (cover) { %><img class="cover-thumb" src="<%= cover %>" alt="" loading="lazy" /><% } else { %><span class="cover-thumb cover-thumb-placeholder"></span><% } %>
+              <div>
+                <a href="/library/copy/<%= c.id %>" class="title"><%= c.book.title %></a>
+                <span class="meta"><%= c.book.publishedAt || '?' %><% if (c.book.primaryAuthor) { %> · <%= c.book.primaryAuthor %><% } %></span>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+
+    <% if (newestCopies && newestCopies.length > 0) { %>
+      <div class="widget w-newest">
+        <h2>Newest in the collection</h2>
+        <ul class="cover-list">
+          <% newestCopies.forEach(function(c) {
+            const cover = c.coverPath ? '/uploads/' + c.coverPath : c.book.thumbnailUrl;
+          %>
+            <li>
+              <% if (cover) { %><img class="cover-thumb" src="<%= cover %>" alt="" loading="lazy" /><% } else { %><span class="cover-thumb cover-thumb-placeholder"></span><% } %>
+              <div>
+                <a href="/library/copy/<%= c.id %>" class="title"><%= c.book.title %></a>
+                <span class="meta"><%= c.book.publishedAt || '?' %><% if (c.book.primaryAuthor) { %> · <%= c.book.primaryAuthor %><% } %></span>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+
+    <% if (mostExpensiveCopies && mostExpensiveCopies.length > 0) { %>
+      <div class="widget w-pricey">
+        <h2>Most expensive</h2>
+        <ul class="cover-list">
+          <% mostExpensiveCopies.slice(0, 5).forEach(function(c) {
+            const cover = c.coverPath ? '/uploads/' + c.coverPath : c.book.thumbnailUrl;
+          %>
+            <li>
+              <% if (cover) { %><img class="cover-thumb" src="<%= cover %>" alt="" loading="lazy" /><% } else { %><span class="cover-thumb cover-thumb-placeholder"></span><% } %>
+              <div>
+                <a href="/library/copy/<%= c.id %>" class="title"><%= c.book.title %></a>
+                <span class="meta"><%= fmtPrice(c.priceCents) %><% if (c.book.primaryAuthor) { %> · <%= c.book.primaryAuthor %><% } %></span>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+
+    <% if (value && value.recordedCount > 0) { %>
+      <div class="widget w-value">
+        <h2>Catalog value</h2>
+        <div class="value" style="font-family:'Fraunces',serif;font-size:2.25rem;line-height:1;">$<%= (value.totalCents / 100).toFixed(2) %></div>
+        <p class="hint" style="margin:.5rem 0 0;font-size:.85rem;">across <%= value.recordedCount %> copy<%= value.recordedCount === 1 ? '' : 'ies' %> with a recorded price (<%= pctOf(value.recordedCount, totals.copies) %>% of catalog)</p>
+      </div>
+    <% } %>
+
+    <% if (activeLending > 0) { %>
+      <div class="widget w-lending">
+        <h2>Currently lent out</h2>
+        <div class="value" style="font-family:'Fraunces',serif;font-size:2.25rem;line-height:1;"><%= activeLending %></div>
+        <p style="margin:.5rem 0 0;font-size:.9rem;"><a href="/lending" style="color:var(--accent);text-decoration:none;">See who has what →</a></p>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+
+<div class="ops-divider">
+  <p>Library administration — backups, sharing, Discord channel, and system info.</p>
+</div>
+
+<div class="dashboard-grid">
+
+  <div class="widget w-backup">
+    <h2>Backup &amp; export</h2>
+    <p class="hint" style="margin:0 0 .65rem;">Daily JSON dump per library to <code>BACKUPS_DIR</code> (30-day retention). One-off downloads below.</p>
+    <div class="backup-actions">
+      <a href="/library/export.csv">📊 Download CSV</a>
+      <a href="/library/export.json">📦 Download JSON</a>
+      <% if (activeUser) { %><button type="button" id="btn-backup-now" class="ghost">💾 Run backup now</button><% } %>
+    </div>
+    <div id="backup-status" class="hint" style="font-size:.78rem;"></div>
+    <ul id="backup-list" class="backup-list"></ul>
+  </div>
+
+  <% if (library) { %>
+    <div class="widget w-share">
+      <h2>Public share link</h2>
+      <% if (!activeUser) { %>
+        <p class="hint">Log in to manage the share link.</p>
+      <% } else if (!library.publicSlug) { %>
+        <span class="share-status">● Private</span>
+        <p class="hint" style="margin:0 0 .65rem;font-size:.85rem;">Read-only library URL — share with friends without giving them edit access.</p>
+        <form method="post" action="/libraries/<%= library.id %>/share/enable">
+          <button type="submit" class="primary">Enable public share link</button>
+        </form>
+      <% } else {
+        const shareUrl = (webBaseUrl ? webBaseUrl.replace(/\/$/, '') : '') + '/share/' + library.publicSlug;
+      %>
+        <span class="share-status public">● Public</span>
+        <div class="share-url"><%= shareUrl %></div>
+        <div class="share-actions">
+          <a href="/share/<%= library.publicSlug %>" target="_blank" rel="noopener" class="primary">Open ↗</a>
+          <form method="post" action="/libraries/<%= library.id %>/share/regenerate" style="display:inline" onsubmit="return confirm('Regenerate the link? The old URL will stop working.')">
+            <button type="submit" class="ghost">Regenerate</button>
+          </form>
+          <form method="post" action="/libraries/<%= library.id %>/share/disable" style="display:inline" onsubmit="return confirm('Disable public sharing?')">
+            <button type="submit" class="danger">Disable</button>
+          </form>
+        </div>
+        <p class="hint" style="margin-top:.85rem;font-size:.8rem;">Wishlist-only share: <code>/share/<%= library.publicSlug %>/wishlist</code></p>
+      <% } %>
+    </div>
+
+    <div class="widget w-discord">
+      <h2>Discord channel posts</h2>
+      <p class="hint" style="margin:0 0 .85rem;font-size:.85rem;">When set, every book add posts a rich embed to this channel — cover, rating, ISBN, links to Goodreads / StoryGraph / Bookshop / Open Library.</p>
+      <% if (!activeUser) { %>
+        <p class="hint">Log in to configure.</p>
+      <% } else { %>
+        <form class="discord-form" method="post" action="/libraries/<%= library.id %>/notify-channel">
+          <label>Discord channel ID
+            <input name="channelId" value="<%= library.notifyChannelId || '' %>" placeholder="123456789012345678" pattern="\d{0,30}" />
+          </label>
+          <p class="hint">Settings → Advanced → Developer Mode on, then right-click the channel → Copy Channel ID. Smaug must be in the server with permission to post. Leave blank to disable.</p>
+          <button type="submit">Update</button>
+        </form>
+      <% } %>
+    </div>
   <% } %>
-</p>
-<p class="hint">CSV is one row per active copy with shelves joined by <code>;</code>. JSON is a full snapshot suitable for restore (books + copies + shelves + trophies + completions).</p>
-<div id="backup-status" class="hint"></div>
-<ul id="backup-list" class="hint" style="margin-top:.25rem;"></ul>
+
+  <div class="widget w-system">
+    <h2>System info</h2>
+    <dl class="system-info">
+      <dt>Image tag</dt><dd><%= imageTag || 'dev' %></dd>
+      <dt>Git SHA</dt><dd><%= gitSha ? gitSha.slice(0, 12) : 'dev' %></dd>
+      <dt>Node.js</dt><dd><%= nodeVersion %></dd>
+      <dt>Uptime</dt><dd><%= uptimeSec %> s</dd>
+      <dt>Database</dt><dd class="<%= dbOk ? 'ok' : '' %>"><%= dbOk ? '✓ ok' : '✗ down' %></dd>
+      <% if (counts && counts.auditLog > 0) { %>
+        <dt>Audit log</dt><dd><a href="/audit" style="color:var(--accent);"><%= counts.auditLog %> entries</a></dd>
+      <% } %>
+      <% if (counts && counts.libraries > 0) { %>
+        <dt>Library</dt><dd><%= counts.libraries %> (<%= counts.users %> user<%= counts.users === 1 ? '' : 's' %>)</dd>
+      <% } %>
+    </dl>
+    <div class="system-links">
+      <a href="<%= repoUrl %>" target="_blank" rel="noopener">Source on GitHub ↗</a>
+      <a href="<%= ghcrUrl %>" target="_blank" rel="noopener">Container image on GHCR ↗</a>
+      <% if (gitSha) { %>
+        <a href="<%= repoUrl %>/commit/<%= gitSha %>" target="_blank" rel="noopener">View commit ↗</a>
+      <% } %>
+    </div>
+  </div>
+
+</div>
+
 <script>
   (function() {
+    function makeBatchRunner(opts) {
+      const btn = document.getElementById(opts.btnId);
+      if (!btn) return;
+      const status = document.getElementById(opts.statusId);
+      const bar = document.getElementById(opts.barId);
+      const barInner = bar ? bar.querySelector('span') : null;
+      let totalProcessed = 0;
+      let totalUpdated = 0;
+      async function step() {
+        btn.disabled = true;
+        status.textContent = 'Processing…';
+        if (bar) bar.hidden = false;
+        try {
+          const res = await fetch(opts.url, { method: 'POST' });
+          const json = await res.json();
+          if (!res.ok || !json.ok) {
+            status.textContent = (json && json.error) || 'Failed';
+            btn.disabled = false;
+            return;
+          }
+          totalProcessed += json.processed;
+          totalUpdated += json.updated;
+          const total = totalProcessed + json.remaining;
+          const pct = total === 0 ? 100 : Math.round((totalProcessed / total) * 100);
+          if (barInner) barInner.style.width = pct + '%';
+          status.textContent = 'Processed ' + totalProcessed + ' · updated ' + totalUpdated + ' · ' + json.remaining + ' remaining';
+          if (json.remaining > 0 && json.processed > 0) {
+            setTimeout(step, 250);
+          } else {
+            status.textContent = '✓ Done — ' + totalUpdated + ' covers ' + opts.verb + ' of ' + totalProcessed + ' attempted.';
+            btn.disabled = false;
+          }
+        } catch (err) {
+          status.textContent = 'Network error: ' + (err.message || err);
+          btn.disabled = false;
+        }
+      }
+      btn.addEventListener('click', function() { totalProcessed = 0; totalUpdated = 0; step(); });
+    }
+    makeBatchRunner({ btnId: 'btn-backfill', statusId: 'backfill-status', barId: 'backfill-bar', url: '/stats/backfill-covers', verb: 'refreshed' });
+    makeBatchRunner({ btnId: 'btn-refresh-covers', statusId: 'refresh-status', barId: 'refresh-bar', url: '/stats/refresh-low-res-covers', verb: 'upgraded' });
+
     const list = document.getElementById('backup-list');
     const status = document.getElementById('backup-status');
     const btn = document.getElementById('btn-backup-now');
-
-    function fmtBytes(b) {
-      if (b < 1024) return b + ' B';
-      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
-      return (b / 1024 / 1024).toFixed(2) + ' MB';
-    }
+    function fmtBytes(b) { if (b < 1024) return b + ' B'; if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB'; return (b/1024/1024).toFixed(2) + ' MB'; }
     async function refresh() {
       try {
         const res = await fetch('/library/backups.json');
@@ -72,59 +391,25 @@
         list.innerHTML = '';
         if (!json.backups || json.backups.length === 0) {
           status.textContent = json.dirMissing
-            ? 'BACKUPS_DIR doesn\u2019t exist yet — first scheduled backup will create it ~60s after server start.'
+            ? 'BACKUPS_DIR doesn\u2019t exist yet — first scheduled backup will create it.'
             : 'No backup files yet.';
           return;
         }
-        status.textContent = json.backups.length + ' backup(s) on disk · ' + (json.dir || '');
-        json.backups.slice(0, 10).forEach(function(b) {
+        status.textContent = json.backups.length + ' backup' + (json.backups.length === 1 ? '' : 's') + ' on disk · ' + (json.dir || '');
+        json.backups.slice(0, 8).forEach(function(b) {
           const li = document.createElement('li');
-          li.textContent = b.name + ' · ' + fmtBytes(b.size) + ' · ' + b.mtime.replace('T', ' ').slice(0, 16);
+          li.innerHTML = '<span class="fname">' + b.name + '</span><span>' + fmtBytes(b.size) + '</span>';
           list.appendChild(li);
         });
       } catch (err) { /* ignore */ }
     }
     if (btn) btn.addEventListener('click', async function() {
-      btn.disabled = true;
-      btn.textContent = 'Running…';
-      try {
-        await fetch('/library/backup-now', { method: 'POST' });
-        await refresh();
-      } finally {
-        btn.disabled = false;
-        btn.textContent = '💾 Run backup now';
-      }
+      btn.disabled = true; btn.textContent = 'Running…';
+      try { await fetch('/library/backup-now', { method: 'POST' }); await refresh(); }
+      finally { btn.disabled = false; btn.textContent = '💾 Run backup now'; }
     });
     refresh();
   })();
 </script>
-
-<h2>Public share link</h2>
-<% if (!library) { %>
-  <p class="hint">No library exists yet.</p>
-<% } else if (!activeUser) { %>
-  <p class="hint">Log in to manage the share link.</p>
-<% } else if (!library.publicSlug) { %>
-  <p>The library is currently <strong>private</strong>. Enable a public read-only link to share with friends without giving them edit access.</p>
-  <form method="post" action="/libraries/<%= library.id %>/share/enable">
-    <button type="submit">Enable public share link</button>
-  </form>
-<% } else { %>
-  <% const shareUrl = (webBaseUrl ? webBaseUrl.replace(/\/$/, '') : '') + '/share/' + library.publicSlug %>
-  <p>The library is <strong>public</strong> at:</p>
-  <p><code><%= shareUrl %></code> · <a href="/share/<%= library.publicSlug %>" target="_blank" rel="noopener">open</a></p>
-  <form method="post" action="/libraries/<%= library.id %>/share/regenerate" style="display:inline" onsubmit="return confirm('Regenerate the link? The old URL will stop working.')">
-    <button type="submit">Regenerate</button>
-  </form>
-  <form method="post" action="/libraries/<%= library.id %>/share/disable" style="display:inline" onsubmit="return confirm('Disable public sharing?')">
-    <button type="submit" class="danger">Disable</button>
-  </form>
-<% } %>
-
-<h2>Links</h2>
-<ul>
-  <li><a href="<%= repoUrl %>">Source on GitHub</a></li>
-  <li><a href="<%= ghcrUrl %>">Container image on GHCR</a></li>
-</ul>
 
 <%- include('_footer') %>

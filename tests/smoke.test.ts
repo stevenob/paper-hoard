@@ -46,7 +46,8 @@ describe("GET smoke tests", () => {
     ["/library/labels", [200]],
     ["/scan", [200]],
     ["/scan/cache.json", [200]],
-    ["/stats", [200]],
+    // /stats now 301-redirects to /about (merged in v3.5.5).
+    ["/stats", [301]],
     ["/trophies", [200]],
     ["/completions", [200]],
     ["/users", [200]],
