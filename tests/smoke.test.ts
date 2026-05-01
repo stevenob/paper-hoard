@@ -59,6 +59,8 @@ describe("GET smoke tests", () => {
     ["/library/export.csv", [200]],
     ["/library/export.json", [200]],
     ["/library/backups.json", [200]],
+    ["/library/authors/dupes", [200]],
+    ["/lending", [200]],
     // Unknown author slug returns a well-formed 404, not a crash.
     ["/authors/nobody-with-this-slug", [404]],
   ];

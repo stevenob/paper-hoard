@@ -96,12 +96,16 @@ model PhysicalCopy {
   inscribed         Boolean?
   dustJacketPresent Boolean?
   printLine         String?
+  lentTo            String?
+  lentAt            DateTime?
+  dueBack           DateTime?
 
   shelves       ShelfCopy[]
   photos        CopyPhoto[]
 
   @@index([deletedAt])
   @@index([priceCents])
+  @@index([lentTo])
 }
 
 model CopyPhoto {

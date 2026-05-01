@@ -106,6 +106,49 @@
   <p class="hint">Add prices on each copy's edit page under "Provenance".</p>
 <% } %>
 
+<% if (activeLending > 0) { %>
+  <h2>Currently lent out</h2>
+  <p><strong><%= activeLending %></strong> book<%= activeLending === 1 ? '' : 's' %> checked out. <a href="/lending">See who has what →</a></p>
+<% } %>
+
+<% function fmtPrice(cents) { return cents == null ? '—' : '$' + (cents / 100).toFixed(2); } %>
+
+<% if (oldestCopies && oldestCopies.length > 0) { %>
+  <h2>Oldest in the collection</h2>
+  <ol class="top-authors">
+    <% oldestCopies.forEach(function(c) { %>
+      <li>
+        <a href="/library/copy/<%= c.id %>"><em><%= c.book.title %></em></a>
+        <span class="hint">— <%= c.book.publishedAt || '?' %><% if (c.book.primaryAuthor) { %> · <%= c.book.primaryAuthor %><% } %></span>
+      </li>
+    <% }) %>
+  </ol>
+<% } %>
+
+<% if (newestCopies && newestCopies.length > 0) { %>
+  <h2>Newest in the collection</h2>
+  <ol class="top-authors">
+    <% newestCopies.forEach(function(c) { %>
+      <li>
+        <a href="/library/copy/<%= c.id %>"><em><%= c.book.title %></em></a>
+        <span class="hint">— <%= c.book.publishedAt || '?' %><% if (c.book.primaryAuthor) { %> · <%= c.book.primaryAuthor %><% } %></span>
+      </li>
+    <% }) %>
+  </ol>
+<% } %>
+
+<% if (mostExpensiveCopies && mostExpensiveCopies.length > 0) { %>
+  <h2>Most expensive</h2>
+  <ol class="top-authors">
+    <% mostExpensiveCopies.forEach(function(c) { %>
+      <li>
+        <a href="/library/copy/<%= c.id %>"><em><%= c.book.title %></em></a>
+        <span class="hint">— <%= fmtPrice(c.priceCents) %><% if (c.book.primaryAuthor) { %> · <%= c.book.primaryAuthor %><% } %></span>
+      </li>
+    <% }) %>
+  </ol>
+<% } %>
+
 <script>
   (function() {
     function makeBatchRunner(opts) {

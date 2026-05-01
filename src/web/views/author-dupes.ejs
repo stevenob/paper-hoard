@@ -1,0 +1,48 @@
+<% const pageTitle = 'Duplicate authors' %>
+<%- include('_header') %>
+
+<h1>👥 Duplicate authors</h1>
+<p class="hint">Author names that look like the same person but are stored differently — usually "Andy Weir" vs "Weir, Andy" from a CSV import. Merging rewrites every Book row to use the canonical name.</p>
+
+<% if (dupes.length === 0) { %>
+  <p>✨ No author duplicates found.</p>
+<% } else { %>
+  <% dupes.forEach(function(g) { %>
+    <section class="dupe-group">
+      <h2><%= g[0].name %></h2>
+      <table class="data dupe-table">
+        <thead>
+          <tr><th>Variant</th><th>Books</th><th></th></tr>
+        </thead>
+        <tbody>
+          <% g.forEach(function(v) { %>
+            <tr>
+              <td><strong><%= v.name %></strong></td>
+              <td><%= v.bookCount %></td>
+              <td>
+                <% if (activeUser) { %>
+                  <details class="merge-picker">
+                    <summary class="link">Merge…</summary>
+                    <form method="post" action="/library/authors/merge" class="merge-form" onsubmit="return confirm('Rename every Book row from \'<%= v.name %>\' to the selected canonical?')">
+                      <input type="hidden" name="fromName" value="<%= v.name %>" />
+                      <p class="hint">Rename "<strong><%= v.name %></strong>" to:</p>
+                      <% g.filter(function(x) { return x.name !== v.name; }).forEach(function(other) { %>
+                        <label class="merge-target">
+                          <input type="radio" name="intoName" value="<%= other.name %>" required />
+                          <span><%= other.name %> (<%= other.bookCount %> book<%= other.bookCount === 1 ? '' : 's' %>)</span>
+                        </label>
+                      <% }) %>
+                      <button type="submit" class="danger">Rename</button>
+                    </form>
+                  </details>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </section>
+  <% }) %>
+<% } %>
+
+<%- include('_footer') %>

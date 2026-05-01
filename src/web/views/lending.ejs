@@ -1,0 +1,49 @@
+<% const pageTitle = 'Currently lent out' %>
+<%- include('_header') %>
+
+<h1>📤 Currently lent out</h1>
+
+<% if (copies.length === 0) { %>
+  <p class="hint">Nothing is checked out right now.</p>
+<% } else { %>
+  <% function days(d) { return Math.floor((Date.now() - new Date(d).getTime()) / 86400000); } %>
+  <% function isOverdue(due) { return due && new Date(due).getTime() < Date.now(); } %>
+  <table class="data">
+    <thead>
+      <tr><th>Book</th><th>Lent to</th><th>Out for</th><th>Due back</th><th></th></tr>
+    </thead>
+    <tbody>
+      <% copies.forEach(function(c) { %>
+        <tr<%= isOverdue(c.dueBack) ? ' class="overdue"' : '' %>>
+          <td data-label="Book">
+            <a href="/library/copy/<%= c.id %>"><em><%= c.book.title %></em></a>
+            <div class="hint"><%= c.book.authors.join(', ') %></div>
+          </td>
+          <td data-label="Lent to"><strong><%= c.lentTo %></strong></td>
+          <td data-label="Out for"><%= days(c.lentAt) %> day<%= days(c.lentAt) === 1 ? '' : 's' %></td>
+          <td data-label="Due back">
+            <% if (c.dueBack) { %>
+              <%= new Date(c.dueBack).toISOString().slice(0, 10) %>
+              <% if (isOverdue(c.dueBack)) { %><span class="pill" style="background:var(--error-bg);color:var(--danger);">overdue</span><% } %>
+            <% } else { %>
+              <span class="hint">no date set</span>
+            <% } %>
+          </td>
+          <td>
+            <% if (activeUser) { %>
+              <form method="post" action="/library/copy/<%= c.id %>/return" style="display:inline">
+                <button type="submit">Mark returned</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<style>
+  tr.overdue td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+</style>
+
+<%- include('_footer') %>

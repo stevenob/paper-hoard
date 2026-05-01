@@ -34,6 +34,10 @@ export async function statsRoutes(app: FastifyInstance) {
       authorRows,
       valueAggregate,
       lowResCovers,
+      oldestCopies,
+      newestCopies,
+      mostExpensiveCopies,
+      activeLending,
     ] = await Promise.all([
       prisma.physicalCopy.count({ where: activeCopyFilter }),
       prisma.physicalCopy.count({ where: { ...libraryFilter, deletedAt: { not: null } } }),
@@ -135,6 +139,32 @@ export async function statsRoutes(app: FastifyInstance) {
           ],
         },
       }),
+      // Top-10 lists for the "scrolling-through-the-collection" interest:
+      // oldest publication year, newest publication year, most expensive.
+      // Publication-date sort is best-effort since the field is freeform
+      // (e.g. "1973", "2021-05-04", "May 2018"). Sort lexically — works
+      // for ISO and bare-year formats which is most of the data.
+      prisma.physicalCopy.findMany({
+        where: { ...activeCopyFilter, book: { publishedAt: { not: null } } },
+        include: { book: true },
+        orderBy: { book: { publishedAt: "asc" } },
+        take: 10,
+      }),
+      prisma.physicalCopy.findMany({
+        where: { ...activeCopyFilter, book: { publishedAt: { not: null } } },
+        include: { book: true },
+        orderBy: { book: { publishedAt: "desc" } },
+        take: 10,
+      }),
+      prisma.physicalCopy.findMany({
+        where: { ...activeCopyFilter, priceCents: { not: null } },
+        include: { book: true },
+        orderBy: { priceCents: "desc" },
+        take: 10,
+      }),
+      prisma.physicalCopy.count({
+        where: { ...activeCopyFilter, lentTo: { not: null } },
+      }),
     ]);
 
     function pct(part: number, whole: number): number {
@@ -187,6 +217,10 @@ export async function statsRoutes(app: FastifyInstance) {
         backfillCandidates: booksWithoutCover,
         booksMissingIsbn: booksWithoutIsbn,
         lowResCovers,
+        oldestCopies,
+        newestCopies,
+        mostExpensiveCopies,
+        activeLending,
         value: {
           totalCents: valueAggregate._sum.priceCents ?? 0,
           recordedCount: valueAggregate._count.priceCents ?? 0,

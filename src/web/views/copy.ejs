@@ -116,6 +116,35 @@
   </fieldset>
 </form>
 
+<h2>Lending</h2>
+<% if (copy.lentTo) { %>
+  <% const days = Math.floor((Date.now() - new Date(copy.lentAt).getTime()) / 86400000); %>
+  <% const overdue = copy.dueBack && new Date(copy.dueBack).getTime() < Date.now(); %>
+  <p class="<%= overdue ? 'error' : 'notice' %>" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+    <span>📤 Lent to <strong><%= copy.lentTo %></strong>
+      · out for <%= days %> day<%= days === 1 ? '' : 's' %>
+      <% if (copy.dueBack) { %> · due back <%= new Date(copy.dueBack).toISOString().slice(0, 10) %><% if (overdue) { %> <span class="pill" style="background:var(--danger);color:#fff;">overdue</span><% } %><% } %>
+    </span>
+    <% if (activeUser) { %>
+      <form method="post" action="/library/copy/<%= copy.id %>/return" style="display:inline">
+        <button type="submit">Mark returned</button>
+      </form>
+    <% } %>
+  </p>
+<% } else if (activeUser && !copy.deletedAt) { %>
+  <form method="post" action="/library/copy/<%= copy.id %>/lend" class="stacked" style="max-width:480px;">
+    <fieldset>
+      <label>Lent to <span class="hint">(name or person — free text)</span>
+        <input name="lentTo" maxlength="200" placeholder="Sarah · Mom · Bookclub" required />
+      </label>
+      <label>Due back <span class="hint">(optional)</span>
+        <input name="dueBack" type="date" />
+      </label>
+      <button type="submit">📤 Mark as lent out</button>
+    </fieldset>
+  </form>
+<% } %>
+
 <h2 id="photos">Photos</h2>
 <% if (!copy.photos || copy.photos.length === 0) { %>
   <p class="hint">No supplementary photos. Use these for the dust jacket, signed pages, damage, or anything else worth recording beyond the front cover.</p>
