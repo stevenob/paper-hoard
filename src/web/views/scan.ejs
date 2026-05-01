@@ -419,6 +419,7 @@
         if (navigator.vibrate) navigator.vibrate(60);
         submitLookup(originalRequest, {
           bulkTile: true,
+          bypassBusy: true,
           tileBook: payload.book,
           tileKind: payload.trophy ? 'trophy' : 'new',
         });
@@ -920,9 +921,15 @@
     }
 
     async function submitLookup(payload, opts) {
-      if (busy) return;
-      busy = true;
       opts = opts || {};
+      // The bulk auto-commit path is fired from inside showConfirm, which
+      // is itself called from inside previewLookup's still-pending paint()
+      // — so `busy` is still true at that moment. Bulk callers pass
+      // bypassBusy:true so the actual /scan POST runs instead of silently
+      // no-opping. The single-shot guard remains via pendingConfirm /
+      // onDecoded, so this stays safe from duplicate decodes.
+      if (busy && !opts.bypassBusy) return;
+      busy = true;
       const desc = payload.isbn || payload.title || '';
       setStatus('Looking up ' + desc + '…');
       setPill('searching', 'looking up ' + (desc || 'book') + '…');
