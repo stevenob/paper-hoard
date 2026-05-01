@@ -15,13 +15,40 @@
   });
 
   // Mark cover images as loaded so the shimmer placeholder fades.
-  function attach(img) {
-    if (img.complete && img.naturalWidth > 0) {
-      img.classList.add('loaded');
+  // Also swap broken / tiny-placeholder images for a title fallback so
+  // we never show an empty gray box.
+  function replaceWithFallback(img) {
+    var link = img.closest('.poster-link');
+    var title = (link && link.getAttribute('aria-label')) || img.getAttribute('alt') || '?';
+    var fallback = document.createElement('div');
+    fallback.className = 'poster-fallback';
+    var span = document.createElement('span');
+    span.textContent = title;
+    fallback.appendChild(span);
+    img.replaceWith(fallback);
+  }
+  function checkOrFallback(img) {
+    // Treat anything <= 64px in either dimension as a placeholder. Real
+    // covers are at minimum ~100×150 (Google Books zoom=2). A 1×1 GIF
+    // from Open Library default=true or Google's image-not-available
+    // gets replaced with a clean title fallback.
+    if (img.naturalWidth > 0 && img.naturalWidth <= 64) {
+      replaceWithFallback(img);
       return;
     }
-    img.addEventListener('load', function () { img.classList.add('loaded'); });
-    img.addEventListener('error', function () { img.classList.add('loaded'); });
+    img.classList.add('loaded');
+  }
+  function attach(img) {
+    if (img.complete) {
+      if (img.naturalWidth === 0) {
+        replaceWithFallback(img);
+        return;
+      }
+      checkOrFallback(img);
+      return;
+    }
+    img.addEventListener('load', function () { checkOrFallback(img); });
+    img.addEventListener('error', function () { replaceWithFallback(img); });
   }
   function scan() {
     document.querySelectorAll('.poster-link img').forEach(attach);
