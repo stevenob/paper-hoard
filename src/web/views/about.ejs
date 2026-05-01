@@ -132,17 +132,26 @@
       </div>
     <% } %>
 
-    <% if (activeUser && (backfillCandidates > 0 || lowResCovers > 0 || missingAuthors > 0 || totals.trash > 0)) { %>
+    <% if (activeUser && (backfillCandidates > 0 || booksCoverInCooldown > 0 || lowResCovers > 0 || missingAuthors > 0 || totals.trash > 0)) { %>
       <div class="widget w-tools">
         <h2>Catalog tools</h2>
         <ul class="tools-list">
-          <% if (backfillCandidates > 0) { %>
+          <% if (backfillCandidates > 0 || booksCoverInCooldown > 0) { %>
             <li>
               <div>
-                <strong><%= backfillCandidates %></strong> book<%= backfillCandidates === 1 ? '' : 's' %> missing covers
-                <div class="sub">Re-runs Google Books + Open Library</div>
+                <% if (backfillCandidates > 0) { %>
+                  <strong><%= backfillCandidates %></strong> book<%= backfillCandidates === 1 ? '' : 's' %> missing covers
+                  <div class="sub">Re-runs Google Books, Open Library<%= process.env.LIBRARYTHING_DEVKEY ? ', LibraryThing' : '' %></div>
+                <% } else { %>
+                  <strong><%= booksCoverInCooldown %></strong> orphan cover<%= booksCoverInCooldown === 1 ? '' : 's' %>
+                  <div class="sub">Tried in last 30d with no source. Click ↻ retry to test against current sources<%= process.env.LIBRARYTHING_DEVKEY ? ' (incl. LibraryThing)' : '' %>.</div>
+                <% } %>
               </div>
-              <button type="button" id="btn-backfill">🔄 Run</button>
+              <% if (backfillCandidates > 0) { %>
+                <button type="button" id="btn-backfill">🔄 Run</button>
+              <% } else { %>
+                <button type="button" id="btn-backfill" data-retry-all="1" title="Bypass the 30-day cooldown and retry all books with no cover">↻ Retry orphans</button>
+              <% } %>
             </li>
           <% } %>
           <% if (lowResCovers > 0) { %>
@@ -173,7 +182,7 @@
             </li>
           <% } %>
         </ul>
-        <% if (backfillCandidates > 0) { %><div class="repair-panel" id="panel-backfill" hidden></div><% } %>
+        <% if (backfillCandidates > 0 || booksCoverInCooldown > 0) { %><div class="repair-panel" id="panel-backfill" hidden></div><% } %>
         <% if (lowResCovers > 0) { %><div class="repair-panel" id="panel-refresh" hidden></div><% } %>
         <% if (missingAuthors > 0) { %><div class="repair-panel" id="panel-authors" hidden></div><% } %>
       </div>
@@ -373,10 +382,21 @@
       const authorHtml = r.author
         ? '<span class="row-author">' + escapeHtml(r.author) + '</span>'
         : '<span class="row-author muted">—</span>';
+      // For failed cover lookups with a copy on hand, offer a one-tap
+      // jump to the copy's Manage tab where the cover-upload form lives.
+      // The user has the physical book in front of them — just snap a photo.
+      let detailHtml = '<span class="row-detail">' + escapeHtml(r.detail || '') + '</span>';
+      const isCoverFail = (r.action === 'failed' || r.action === 'nulled')
+        && r.copyId
+        && /no source|cover|nulled/i.test(r.detail || '');
+      if (isCoverFail) {
+        detailHtml +=
+          '<a class="row-fix" href="/library/copy/' + escapeHtml(r.copyId) + '#manage" title="Upload a cover from your phone">📷 add cover</a>';
+      }
       li.innerHTML =
         coverHtml +
         '<div class="row-text">' + titleHtml + authorHtml + '</div>' +
-        '<span class="row-detail">' + escapeHtml(r.detail || '') + '</span>';
+        detailHtml;
       return li;
     }
 
@@ -419,7 +439,11 @@
       async function step() {
         btn.disabled = true;
         try {
-          const res = await fetch(opts.url, { method: 'POST' });
+          // Forward the data-retry-all attribute as a query param so the
+          // server can bypass the 30-day cooldown on previously-failed
+          // books (used by the "↻ Retry orphans" entry).
+          const url = btn.dataset.retryAll === '1' ? opts.url + '?retry=all' : opts.url;
+          const res = await fetch(url, { method: 'POST' });
           const json = await res.json();
           if (!res.ok || !json.ok) {
             panel.querySelector('.repair-summary').hidden = false;

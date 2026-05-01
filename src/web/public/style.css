@@ -1349,7 +1349,7 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
 }
 .activity-row {
   display: grid;
-  grid-template-columns: 28px 1.25em 1fr auto;
+  grid-template-columns: 28px 1.25em 1fr auto auto;
   gap: .65rem;
   align-items: center;
   padding: .45rem .25rem;
@@ -1400,6 +1400,20 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
   color: var(--muted); font-size: .76rem;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   white-space: nowrap; padding-left: .5rem;
+}
+.activity-row .row-fix {
+  order: 5;
+  font-size: .72rem; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--accent); text-decoration: none;
+  padding: .15rem .5rem; border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap; margin-left: .35rem;
+  transition: background .15s, border-color .15s;
+}
+.activity-row .row-fix:hover {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .repair-summary {
   margin: .65rem 0 0; font-size: .85rem;

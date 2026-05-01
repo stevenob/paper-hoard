@@ -87,3 +87,21 @@ export async function pickValidCover(...candidates: Array<string | null | undefi
 export function olCoverUrlByIsbn(isbn13: string, size: "S" | "M" | "L" = "L"): string {
   return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn13)}-${size}.jpg?default=false`;
 }
+
+/**
+ * Construct a LibraryThing covers URL by ISBN. Requires LIBRARYTHING_DEVKEY
+ * (free at https://www.librarything.com/services/keys.php). Returns null
+ * when no key is configured so callers can cleanly skip this source.
+ *
+ * LibraryThing has surprisingly good coverage for niche / kids' / licensed
+ * tie-in books that Google Books and Open Library miss — adding it as a
+ * 3rd cascading source rescues a chunk of the "no source has it" pile.
+ */
+export function ltCoverUrlByIsbn(
+  isbn13: string,
+  size: "small" | "medium" | "large" = "large"
+): string | null {
+  const key = (process.env.LIBRARYTHING_DEVKEY ?? "").trim();
+  if (!key) return null;
+  return `https://covers.librarything.com/devkey/${encodeURIComponent(key)}/${size}/isbn/${encodeURIComponent(isbn13)}`;
+}

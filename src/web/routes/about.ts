@@ -48,6 +48,7 @@ export async function aboutRoutes(app: FastifyInstance) {
       copiesWithShelves: number;
       booksWithIsbn: number;
       booksWithoutCover: number;
+      booksCoverInCooldown: number;
       booksWithoutIsbn: number;
       booksTotal: number;
       addsLast7: number;
@@ -80,6 +81,7 @@ export async function aboutRoutes(app: FastifyInstance) {
         copiesWithShelves,
         booksWithIsbn,
         booksWithoutCover,
+        booksCoverInCooldown,
         booksWithoutIsbn,
         booksTotal,
         addsLast7,
@@ -127,6 +129,19 @@ export async function aboutRoutes(app: FastifyInstance) {
               { coverAttemptedAt: null },
               { coverAttemptedAt: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
             ],
+            physicalCopies: library
+              ? { some: { libraryId: library.id, deletedAt: null } }
+              : { some: { deletedAt: null } },
+          },
+        }),
+        // Books with no cover that ARE in cooldown (already attempted in
+        // the last 30d). Useful for a "↻ retry now" override after enabling
+        // a new cover source like LIBRARYTHING_DEVKEY.
+        prisma.book.count({
+          where: {
+            thumbnailUrl: null,
+            isbn13: { not: null },
+            coverAttemptedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
             physicalCopies: library
               ? { some: { libraryId: library.id, deletedAt: null } }
               : { some: { deletedAt: null } },
@@ -240,6 +255,7 @@ export async function aboutRoutes(app: FastifyInstance) {
         copiesWithShelves,
         booksWithIsbn,
         booksWithoutCover,
+        booksCoverInCooldown,
         booksWithoutIsbn,
         booksTotal,
         addsLast7,
@@ -327,6 +343,7 @@ export async function aboutRoutes(app: FastifyInstance) {
         topAuthors,
         adds: catalog ? { last7: catalog.addsLast7, last30: catalog.addsLast30, last90: catalog.addsLast90 } : null,
         backfillCandidates: catalog?.booksWithoutCover ?? 0,
+        booksCoverInCooldown: catalog?.booksCoverInCooldown ?? 0,
         booksMissingIsbn: catalog?.booksWithoutIsbn ?? 0,
         lowResCovers: catalog?.lowResCovers ?? 0,
         missingAuthors: catalog?.missingAuthors ?? 0,

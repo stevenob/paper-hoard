@@ -17,6 +17,11 @@ const schema = z.object({
   WEB_BASE_URL: optionalUrl(),
   COOKIE_SECRET: z.string().min(8).default("dev-cookie-secret-change-me"),
   GOOGLE_BOOKS_API_KEY: optionalString(),
+  // LibraryThing developer key for the covers service. Free at
+  // https://www.librarything.com/services/keys.php — only needed if you
+  // want LibraryThing to be tried as a third cover source after Google
+  // Books and Open Library. Leave blank to skip LibraryThing entirely.
+  LIBRARYTHING_DEVKEY: optionalString(),
   UPLOADS_DIR: z.string().default("./data/uploads"),
   BACKUPS_DIR: z.string().default("./data/backups"),
   GIT_SHA: z.string().default("dev"),

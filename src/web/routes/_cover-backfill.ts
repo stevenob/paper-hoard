@@ -1,7 +1,7 @@
 import { prisma } from "../../shared/db.js";
 import { lookupByIsbn } from "../../shared/metadata.js";
 import { logger } from "../../shared/logger.js";
-import { olCoverUrlByIsbn, validateCoverUrl } from "../../shared/cover-validation.js";
+import { olCoverUrlByIsbn, ltCoverUrlByIsbn, validateCoverUrl } from "../../shared/cover-validation.js";
 
 export type RepairAction = "kept" | "repaired" | "nulled" | "failed";
 
@@ -28,6 +28,10 @@ export interface RepairScope {
    *  copy in any library. Mirrors the filter used on /about so the
    *  in-panel progress total matches the displayed candidate count. */
   libraryId: string | null;
+  /** When true, ignore the recently-attempted cooldown so previously-
+   *  failed books are re-tested. Use after enabling a new metadata
+   *  source (e.g. LIBRARYTHING_DEVKEY). */
+  ignoreCooldown?: boolean;
 }
 
 function copyScopeFilter(scope: RepairScope) {
@@ -79,7 +83,9 @@ export async function refetchMissingCovers(batchSize: number, scope: RepairScope
   const where = {
     thumbnailUrl: null,
     isbn13: { not: null },
-    OR: [{ coverAttemptedAt: null }, { coverAttemptedAt: { lt: cutoff } }],
+    ...(scope.ignoreCooldown
+      ? {}
+      : { OR: [{ coverAttemptedAt: null }, { coverAttemptedAt: { lt: cutoff } }] }),
     ...copyScopeFilter(scope),
   };
   const candidates = await prisma.book.findMany({
@@ -127,6 +133,7 @@ export async function refetchMissingCovers(batchSize: number, scope: RepairScope
         { url: meta?.thumbnailUrl, source: "Google" },
         { url: olCoverUrlByIsbn(c.isbn13, "L"), source: "OL-L" },
         { url: olCoverUrlByIsbn(c.isbn13, "M"), source: "OL-M" },
+        { url: ltCoverUrlByIsbn(c.isbn13, "large"), source: "LibraryThing" },
       ]);
       const validated = picked?.url ?? null;
       // Always stamp coverAttemptedAt so this book drops out of the
@@ -242,6 +249,7 @@ export async function refreshLowResCovers(batchSize: number, scope: RepairScope)
         { url: meta?.thumbnailUrl, source: "Google" },
         { url: olCoverUrlByIsbn(c.isbn13, "L"), source: "OL-L" },
         { url: olCoverUrlByIsbn(c.isbn13, "M"), source: "OL-M" },
+        { url: ltCoverUrlByIsbn(c.isbn13, "large"), source: "LibraryThing" },
       ]);
       const validated = picked?.url ?? null;
       await prisma.book.update({

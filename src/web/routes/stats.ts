@@ -24,7 +24,14 @@ export async function statsRoutes(app: FastifyInstance) {
     const user = await requireUser(req, reply);
     if (!user) return;
     const library = await getCurrentLibrary(req);
-    const result = await refetchMissingCovers(50, { libraryId: library?.id ?? null });
+    // ?retry=all bypasses the 30-day coverAttemptedAt cooldown — useful
+    // after enabling a new cover source (e.g. LIBRARYTHING_DEVKEY) so
+    // previously-failed books can be re-tested without waiting a month.
+    const retryAll = (req.query as { retry?: string } | undefined)?.retry === "all";
+    const result = await refetchMissingCovers(50, {
+      libraryId: library?.id ?? null,
+      ignoreCooldown: retryAll,
+    });
     return reply.send({ ok: true, ...result });
   });
 
