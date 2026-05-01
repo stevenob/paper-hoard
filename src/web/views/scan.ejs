@@ -996,16 +996,28 @@
       }
 
       const now = Date.now();
-      if (text === lastSubmitted && now - lastSubmittedAt < 4000) return;
+      // Normalise the raw decode BEFORE the dedup check. Previously the
+      // gate compared the raw `text` to `lastSubmitted` (which was
+      // stored as the normalised value). ZXing returns the same barcode
+      // with subtle variations in successive frames (whitespace,
+      // direction-mark prefix, etc), so the strings often disagreed
+      // and the throttle bypassed — producing two near-simultaneous
+      // POSTs to /scan and a real duplicate copy in bulk mode.
       const cleaned = text.replace(/[^0-9Xx]/g, '');
       if (cleaned.length !== 10 && cleaned.length !== 13) {
         return;
       }
+      // Bulk mode uses a longer dedup window because network commits
+      // can take 2-3s and a held-still book otherwise re-decodes during
+      // the in-flight POST window.
+      const dedupWindow = bulkMode ? 8000 : 4000;
+      if (cleaned === lastSubmitted && now - lastSubmittedAt < dedupWindow) return;
 
       // Bulk mode: skip the two-frame confirmation gate. The user has
       // explicitly opted into rapid-fire scanning. lastSubmitted still
-      // throttles repeats of the same barcode within 4s, so a held-still
-      // book doesn't get added twice. Saves ~600ms per scan.
+      // throttles repeats of the same barcode within the dedup window
+      // above, so a held-still book doesn't get added twice. Saves
+      // ~600ms per scan.
       if (bulkMode) {
         lastSubmitted = cleaned;
         lastSubmittedAt = now;
