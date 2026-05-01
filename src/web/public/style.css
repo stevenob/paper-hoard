@@ -1348,14 +1348,14 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
   border-top: 1px solid var(--rule);
 }
 .activity-row {
-  display: grid;
-  grid-template-columns: 28px 1.25em 1fr auto auto;
-  gap: .65rem;
+  display: flex;
   align-items: center;
+  gap: .65rem;
   padding: .45rem .25rem;
   border-bottom: 1px solid var(--rule);
   font-size: .9rem;
   animation: activity-slide-in .25s ease-out;
+  min-width: 0;
 }
 .activity-row:last-child { border-bottom: 0; }
 @keyframes activity-slide-in {
@@ -1364,16 +1364,20 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
 }
 .activity-row::before {
   font-weight: 600; font-size: 1rem; line-height: 1; text-align: center;
+  flex: 0 0 1.25em;
 }
 .activity-row.kept::before     { content: '✓'; color: var(--success, #4ec27d); }
 .activity-row.repaired::before { content: '↻'; color: var(--accent); }
 .activity-row.nulled::before   { content: '✗'; color: var(--danger, #ef5350); }
 .activity-row.failed::before   { content: '!'; color: var(--muted); }
-/* Re-order so the icon ends up between cover and text. */
+/* Reorder so visual flow is: cover → icon → text → detail → fix-link.
+   ::before is the first child of the flex container by default; using
+   `order` puts it after .row-cover. */
 .activity-row::before { order: 2; }
-.activity-row .row-cover { order: 1; }
-.activity-row .row-text  { order: 3; min-width: 0; }
-.activity-row .row-detail { order: 4; }
+.activity-row .row-cover { order: 1; flex: 0 0 28px; }
+.activity-row .row-text  { order: 3; flex: 1 1 auto; min-width: 0; }
+.activity-row .row-detail { order: 4; flex: 0 0 auto; }
+.activity-row .row-fix   { order: 5; flex: 0 0 auto; }
 .row-cover {
   width: 28px; aspect-ratio: 2 / 3;
   border-radius: 3px; object-fit: cover;
@@ -1400,6 +1404,8 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
   color: var(--muted); font-size: .76rem;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   white-space: nowrap; padding-left: .5rem;
+  max-width: 40%;
+  overflow: hidden; text-overflow: ellipsis;
 }
 .activity-row .row-fix {
   order: 5;
