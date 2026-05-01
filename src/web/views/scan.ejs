@@ -28,33 +28,42 @@
 <!-- Fullscreen camera overlay; hidden until Start camera is tapped. -->
 <div id="camera-overlay" class="camera-overlay" hidden role="dialog" aria-modal="true" aria-label="Barcode scanner">
   <div class="camera-topbar">
+    <button type="button" id="btn-done" class="scan-close" aria-label="Close scanner">✕</button>
+    <!-- Visually hidden but kept in the DOM: existing JS still writes the
+         live status here, and screen readers still announce it. The new
+         on-screen pill (#scan-pill) below the reticle mirrors this text. -->
     <span id="overlay-status">Scanning… point at the barcode on the back cover.</span>
-    <button type="button" id="btn-bulk" class="ghost" aria-pressed="false" title="Bulk scan mode — auto-add new books, skip duplicates">🚀</button>
-    <button type="button" id="btn-torch" class="ghost" aria-pressed="false" hidden>🔦</button>
-    <button type="button" id="btn-done" class="primary">Done</button>
+    <div class="scan-topbar-cluster">
+      <button type="button" id="btn-torch" class="ghost" aria-pressed="false" hidden title="Flashlight">💡</button>
+      <button type="button" id="btn-bulk" class="ghost" aria-pressed="false" title="Bulk scan mode — auto-add new books, skip duplicates">📚</button>
+    </div>
   </div>
   <div class="camera-stage">
     <video id="video" playsinline muted autoplay aria-label="Camera feed"></video>
-    <div class="camera-mask" aria-hidden="true">
-      <div class="camera-mask-row top"></div>
-      <div class="camera-mask-mid">
-        <div class="camera-mask-row side"></div>
-        <div class="camera-reticle">
-          <span class="corner tl"></span>
-          <span class="corner tr"></span>
-          <span class="corner bl"></span>
-          <span class="corner br"></span>
-          <span class="scanline"></span>
-        </div>
-        <div class="camera-mask-row side"></div>
-      </div>
-      <div class="camera-mask-row bottom"></div>
+    <!-- Single absolutely-positioned reticle. The lit area inside is just
+         the box itself; the dim everywhere else is painted by a giant
+         box-shadow on this element. The faint barcode ghost guide is a
+         CSS ::before. -->
+    <div class="camera-reticle" aria-hidden="true">
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+      <span class="scanline"></span>
+    </div>
+    <!-- v3.5.9 state pill: live decode/lookup status. JS swaps the .label
+         text + class to drive the pointing/decoding/ok/dup/trophy states. -->
+    <div class="scan-pill" id="scan-pill" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="label">pointing…</span>
     </div>
   </div>
   <div class="camera-toast" id="overlay-toast" hidden role="status" aria-live="polite"></div>
 
-  <!-- Bulk-mode queue: tiny chips along the bottom of the overlay showing
-       what was just auto-added, so the user can verify at a glance. -->
+  <!-- Bulk-mode filmstrip: shown only when bulk mode is on. The runtime
+       creates .bulk-tile elements inside #filmstrip-rail when books are
+       auto-added; the scaffolding is rendered the first time bulk mode
+       toggles on (see scan.ejs JS). -->
   <div id="bulk-queue" class="bulk-queue" hidden aria-live="polite" aria-label="Recently added"></div>
 
   <!-- Confirm card shown after a successful barcode decode + lookup. -->
@@ -216,26 +225,130 @@
     const reticleEl = document.querySelector('.camera-reticle');
 
     let bulkMode = false;
+    let lastBulkCopyId = null;
+    let bulkScaffoldRendered = false;
 
     btnBulk.addEventListener('click', function() {
       bulkMode = !bulkMode;
       btnBulk.setAttribute('aria-pressed', String(bulkMode));
       btnBulk.classList.toggle('active', bulkMode);
       if (bulkMode) {
-        showToast('🚀 Bulk mode: new books auto-add, duplicates skip', true);
+        ensureBulkScaffold();
         bulkQueue.hidden = false;
+        showToast('📚 Bulk mode: new books auto-add, duplicates skip', true);
       } else {
+        // Per v3.5.9 design: filmstrip is bulk-only. Hide it when bulk
+        // turns off; tiles persist in the DOM for next time.
+        bulkQueue.hidden = true;
         showToast('Bulk mode off — back to confirm-each-scan', true);
-        // Keep queue contents for review even after disabling bulk mode.
       }
     });
 
-    function pushBulkChip(title) {
-      const chip = document.createElement('span');
-      chip.className = 'bulk-chip';
-      chip.textContent = '✓ ' + (title || '(added)');
-      bulkQueue.prepend(chip);
-      while (bulkQueue.children.length > 8) bulkQueue.removeChild(bulkQueue.lastChild);
+    function ensureBulkScaffold() {
+      if (bulkScaffoldRendered) return;
+      bulkQueue.innerHTML =
+        '<div class="filmstrip-meta">' +
+          '<span id="filmstrip-counts">📚 0 scanned</span>' +
+          '<button type="button" id="filmstrip-undo" class="undo" disabled>↶ undo last</button>' +
+        '</div>' +
+        '<div id="filmstrip-rail" class="filmstrip-rail"></div>';
+      const undoBtn = document.getElementById('filmstrip-undo');
+      undoBtn.addEventListener('click', undoLastBulk);
+      bulkScaffoldRendered = true;
+    }
+
+    let bulkCounts = { scanned: 0, new: 0, dup: 0, trophy: 0 };
+    function updateFilmstripCounts() {
+      const el = document.getElementById('filmstrip-counts');
+      if (!el) return;
+      const parts = ['📚 ' + bulkCounts.scanned + ' scanned'];
+      if (bulkCounts.new) parts.push(bulkCounts.new + ' new');
+      if (bulkCounts.dup) parts.push(bulkCounts.dup + ' dup');
+      if (bulkCounts.trophy) parts.push(bulkCounts.trophy + ' ⭐');
+      el.textContent = parts.join(' · ');
+    }
+
+    /**
+     * Push a colored cover tile onto the filmstrip. Replaces the v3.5.8
+     * .bulk-chip with a richer thumbnail-based tile so users can verify
+     * what was just added at a glance.
+     */
+    function pushBulkTile(book, kind, copyId) {
+      ensureBulkScaffold();
+      const rail = document.getElementById('filmstrip-rail');
+      if (!rail) return;
+      const tile = document.createElement(copyId ? 'a' : 'span');
+      tile.className = 'bulk-tile fresh ' + (kind || 'new');
+      if (copyId) {
+        tile.href = '/library/copy/' + copyId;
+        tile.target = '_blank';
+        tile.rel = 'noopener';
+        tile.dataset.copyId = copyId;
+      }
+      const cover = book && book.thumbnailUrl;
+      const titleSafe = (book && book.title || '?').slice(0, 60);
+      tile.title = titleSafe + (kind === 'dup' ? ' (already owned)' : kind === 'trophy' ? ' (trophy)' : '');
+      if (cover) {
+        const img = document.createElement('img');
+        img.src = cover;
+        img.alt = '';
+        img.loading = 'lazy';
+        tile.appendChild(img);
+      } else {
+        const lab = document.createElement('span');
+        lab.className = 'tile-label';
+        lab.textContent = titleSafe.slice(0, 24);
+        tile.appendChild(lab);
+      }
+      // Newest tile slides in from the right edge.
+      rail.appendChild(tile);
+      rail.scrollTo({ left: rail.scrollWidth, behavior: 'smooth' });
+      // Drop the .fresh class after the slide-in animation finishes.
+      setTimeout(function() { tile.classList.remove('fresh'); }, 400);
+      // Cap DOM at 50 tiles so very long sessions stay responsive.
+      while (rail.children.length > 50) rail.removeChild(rail.firstChild);
+      // Counts.
+      bulkCounts.scanned++;
+      if (kind === 'trophy') bulkCounts.trophy++;
+      else if (kind === 'dup') bulkCounts.dup++;
+      else bulkCounts.new++;
+      updateFilmstripCounts();
+      // Track the last addable tile for the undo button.
+      if (copyId) {
+        lastBulkCopyId = copyId;
+        const u = document.getElementById('filmstrip-undo');
+        if (u) u.disabled = false;
+      }
+    }
+
+    /**
+     * Undo the last bulk-add by trashing the most recent PhysicalCopy. Uses
+     * the existing /library/copy/:id/delete endpoint. Removes the tile
+     * from the filmstrip on success.
+     */
+    async function undoLastBulk() {
+      if (!lastBulkCopyId) return;
+      const undoBtn = document.getElementById('filmstrip-undo');
+      if (undoBtn) undoBtn.disabled = true;
+      const copyId = lastBulkCopyId;
+      try {
+        const res = await fetch('/library/copy/' + copyId + '/delete', { method: 'POST' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        // Remove tile + decrement counts.
+        const rail = document.getElementById('filmstrip-rail');
+        if (rail) {
+          const matches = rail.querySelectorAll('[data-copy-id="' + copyId + '"]');
+          for (let i = 0; i < matches.length; i++) matches[i].remove();
+        }
+        bulkCounts.scanned = Math.max(0, bulkCounts.scanned - 1);
+        bulkCounts.new = Math.max(0, bulkCounts.new - 1);
+        updateFilmstripCounts();
+        showToast('↶ Undone', true);
+        lastBulkCopyId = null;
+      } catch (err) {
+        showToast('Undo failed: ' + (err.message || err), false);
+        if (undoBtn) undoBtn.disabled = false;
+      }
     }
 
     function flashReticle(state) {
@@ -251,6 +364,27 @@
     function setStatus(msg) {
       status.textContent = msg || '';
       if (msg) overlayStatus.textContent = msg;
+    }
+
+    /**
+     * Drive the on-screen state pill below the reticle. States: idle,
+     * searching, ok, dup, trophy, err. Auto-resets to "pointing…" after
+     * 2s for transient outcome states (ok/dup/trophy/err).
+     */
+    const scanPill = document.getElementById('scan-pill');
+    let pillResetTimer = null;
+    function setPill(state, label) {
+      if (!scanPill) return;
+      if (pillResetTimer) { clearTimeout(pillResetTimer); pillResetTimer = null; }
+      scanPill.className = 'scan-pill' + (state && state !== 'idle' ? ' ' + state : '');
+      const labelEl = scanPill.querySelector('.label');
+      if (labelEl) labelEl.textContent = label || 'pointing…';
+      // Outcome states auto-revert; persistent states (idle/searching) stay.
+      if (state === 'ok' || state === 'dup' || state === 'trophy' || state === 'err') {
+        pillResetTimer = setTimeout(function() {
+          if (!pendingConfirm) setPill('idle', 'pointing…');
+        }, 2200);
+      }
     }
 
     function showToast(text, ok) {
@@ -270,24 +404,39 @@
         const dup = (payload.existingCopies || []).length > 0;
         if (dup && !payload.trophy) {
           showToast('⚠️ Skipped (already owned): ' + titleStr, false);
+          setPill('dup', '⚠ already owned: ' + titleStr.slice(0, 40));
+          // Track dup encounter on the filmstrip even though no copy was
+          // created — useful so the user sees how many they re-scanned.
+          pushBulkTile(payload.book, 'dup', null);
           if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-          // Important: don't keep the result busy / pendingConfirm set.
           pendingConfirm = null;
           overlayStatus.textContent = 'Scanning…';
           return;
         }
-        // Auto-commit. The submitLookup() call posts to /scan and records
-        // the copy. Don't await — let scanning resume immediately.
+        // Auto-commit. submitLookup posts to /scan and records the copy;
+        // pushBulkTile is called by submitLookup once the copyId is back.
         pendingConfirm = null;
-        pushBulkChip(titleStr);
         if (navigator.vibrate) navigator.vibrate(60);
-        submitLookup(originalRequest);
+        submitLookup(originalRequest, {
+          bulkTile: true,
+          tileBook: payload.book,
+          tileKind: payload.trophy ? 'trophy' : 'new',
+        });
         overlayStatus.textContent = 'Scanning…';
         return;
       }
 
       pendingConfirm = { payload: payload, request: originalRequest };
       const b = payload.book;
+      // Drive the pill: trophy > dup > ok
+      const dupCount = (payload.existingCopies || []).length;
+      if (payload.trophy) {
+        setPill('trophy', '🏆 trophy match');
+      } else if (dupCount > 0) {
+        setPill('dup', '⚠ already owned');
+      } else {
+        setPill('ok', '✓ ' + (b.title || 'found'));
+      }
       if (b.thumbnailUrl) {
         confirmCover.src = b.thumbnailUrl;
         confirmCover.hidden = false;
@@ -770,11 +919,13 @@
       });
     }
 
-    async function submitLookup(payload) {
+    async function submitLookup(payload, opts) {
       if (busy) return;
       busy = true;
+      opts = opts || {};
       const desc = payload.isbn || payload.title || '';
       setStatus('Looking up ' + desc + '…');
+      setPill('searching', 'looking up ' + (desc || 'book') + '…');
       try {
         const res = await fetch('/scan', {
           method: 'POST',
@@ -785,13 +936,17 @@
         renderResult(json, res.ok && json.ok);
         if (res.ok && json.ok) {
           setStatus('Added: ' + json.book.title);
-          showToast(
-            (json.trophyAcquired ? '🏆 ' : '✓ Added: ') + json.book.title,
-            true
-          );
-          // Keep the offline cache in sync so the next scan of the same
-          // ISBN (or a re-scan during a bulk inventory) flags as owned
-          // without a server round-trip.
+          const verb = json.trophyAcquired ? '🏆 ' : '✓ ';
+          showToast(verb + (json.trophyAcquired ? '' : 'Added: ') + json.book.title, true);
+          setPill(json.trophyAcquired ? 'trophy' : 'ok', verb + json.book.title);
+          // Push the filmstrip tile now that we have json.copyId.
+          if (opts.bulkTile) {
+            pushBulkTile(
+              opts.tileBook || json.book,
+              json.trophyAcquired ? 'trophy' : (opts.tileKind || 'new'),
+              json.copyId || null
+            );
+          }
           const newIsbn = (json.book && json.book.isbn13) || payload.isbn;
           if (newIsbn && lookupCache && lookupCache.owned.indexOf(newIsbn) === -1) {
             lookupCache.owned.push(newIsbn);
@@ -800,6 +955,7 @@
         } else {
           setStatus(json.error || 'Failed');
           showToast(json.error || 'Failed', false);
+          setPill('err', json.error || 'lookup failed');
         }
       } catch (err) {
         renderResult({ error: String(err) }, false);
@@ -1139,6 +1295,7 @@
         tryAcquireWakeLock();
         overlayStatus.textContent = 'Scanning…';
         setStatus('Camera open. Tap Done to close.');
+        setPill('idle', 'pointing…');
       } catch (err) {
         console.error(err);
         overlay.hidden = true;
