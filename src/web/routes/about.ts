@@ -119,6 +119,14 @@ export async function aboutRoutes(app: FastifyInstance) {
           where: {
             thumbnailUrl: null,
             isbn13: { not: null },
+            // Match the helper's skip-recently-attempted filter so the
+            // count next to the Run button agrees with what'll actually
+            // get processed. (Books attempted in the last 30d are
+            // excluded — see RETRY_AFTER_DAYS in _cover-backfill.ts.)
+            OR: [
+              { coverAttemptedAt: null },
+              { coverAttemptedAt: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+            ],
             physicalCopies: library
               ? { some: { libraryId: library.id, deletedAt: null } }
               : { some: { deletedAt: null } },

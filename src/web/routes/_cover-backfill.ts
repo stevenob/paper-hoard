@@ -63,8 +63,25 @@ async function pickValidCoverWithSource(
  * Each candidate's URL is validated; falls through to OL by ISBN when
  * Google's URL is a placeholder.
  */
+/**
+ * Skip-recently-attempted window. Books whose lookup failed in the last
+ * N days won't be retried — keeps the candidate pool from cycling the
+ * same unfetchable ISBNs forever. Worth retrying every so often in case
+ * Google or Open Library finally indexes them.
+ */
+const RETRY_AFTER_DAYS = 30;
+function recentlyAttemptedCutoff(): Date {
+  return new Date(Date.now() - RETRY_AFTER_DAYS * 24 * 60 * 60 * 1000);
+}
+
 export async function refetchMissingCovers(batchSize: number, scope: RepairScope): Promise<BackfillResult> {
-  const where = { thumbnailUrl: null, isbn13: { not: null }, ...copyScopeFilter(scope) };
+  const cutoff = recentlyAttemptedCutoff();
+  const where = {
+    thumbnailUrl: null,
+    isbn13: { not: null },
+    OR: [{ coverAttemptedAt: null }, { coverAttemptedAt: { lt: cutoff } }],
+    ...copyScopeFilter(scope),
+  };
   const candidates = await prisma.book.findMany({
     where,
     select: {
@@ -88,6 +105,11 @@ export async function refetchMissingCovers(batchSize: number, scope: RepairScope
   for (const c of candidates) {
     const copyId = c.physicalCopies[0]?.id ?? null;
     if (!c.isbn13) {
+      // Mark attempted so we don't keep landing on this book.
+      await prisma.book.update({
+        where: { id: c.id },
+        data: { coverAttemptedAt: new Date() },
+      });
       results.push({
         bookId: c.id,
         copyId,
@@ -107,19 +129,20 @@ export async function refetchMissingCovers(batchSize: number, scope: RepairScope
         { url: olCoverUrlByIsbn(c.isbn13, "M"), source: "OL-M" },
       ]);
       const validated = picked?.url ?? null;
-      if (validated || meta) {
-        await prisma.book.update({
-          where: { id: c.id },
-          data: {
-            thumbnailUrl: validated,
-            // Refresh other potentially-improved fields too, but don't
-            // touch source — preserve "manual" markers.
-            publisher: meta?.publisher ?? undefined,
-            publishedAt: meta?.publishedAt ?? undefined,
-          },
-        });
-        if (validated) updated++;
-      }
+      // Always stamp coverAttemptedAt so this book drops out of the
+      // candidate pool until RETRY_AFTER_DAYS, even when no cover was
+      // found — otherwise the pool cycles forever on books that no source
+      // has a real image for.
+      await prisma.book.update({
+        where: { id: c.id },
+        data: {
+          thumbnailUrl: validated,
+          coverAttemptedAt: new Date(),
+          publisher: meta?.publisher ?? undefined,
+          publishedAt: meta?.publishedAt ?? undefined,
+        },
+      });
+      if (validated) updated++;
       results.push({
         bookId: c.id,
         copyId,
@@ -131,6 +154,11 @@ export async function refetchMissingCovers(batchSize: number, scope: RepairScope
       });
     } catch (err) {
       logger.warn({ err, bookId: c.id }, "cover backfill failed for book");
+      // Network errors get a stamp too — otherwise an outage would re-stack
+      // the entire pool back into "untried" state on next batch.
+      await prisma.book
+        .update({ where: { id: c.id }, data: { coverAttemptedAt: new Date() } })
+        .catch(() => undefined);
       results.push({
         bookId: c.id,
         copyId,

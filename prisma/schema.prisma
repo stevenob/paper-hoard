@@ -61,6 +61,10 @@ model Book {
   olRatingAvg    Float?
   olRatingCount  Int?
   olFetchedAt    DateTime?
+  // When we last attempted a cover lookup. Used by the backfill helpers
+  // to skip books that failed recently — without this, books with no
+  // cover available anywhere would cycle forever in the candidate pool.
+  coverAttemptedAt DateTime?
   seriesName     String?
   seriesPosition Float?
   createdAt      DateTime       @default(now())
