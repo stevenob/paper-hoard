@@ -61,6 +61,8 @@ model Book {
   olRatingAvg    Float?
   olRatingCount  Int?
   olFetchedAt    DateTime?
+  seriesName     String?
+  seriesPosition Float?
   createdAt      DateTime       @default(now())
 
   physicalCopies PhysicalCopy[]
@@ -68,25 +70,32 @@ model Book {
   trophies       Trophy[]
 
   @@index([primaryAuthor])
+  @@index([seriesName])
 }
 
 model PhysicalCopy {
-  id            String   @id @default(cuid())
-  book          Book     @relation(fields: [bookId], references: [id])
-  bookId        String
-  library       Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
-  libraryId     String
-  addedBy       User     @relation("AddedBy", fields: [addedByUserId], references: [id])
-  addedByUserId String
-  condition     String?
-  edition       String?
-  notes         String?
-  coverPath     String?
-  addedAt       DateTime @default(now())
-  deletedAt     DateTime?
-  acquiredFrom  String?
-  acquiredOn    DateTime?
-  priceCents    Int?
+  id                String   @id @default(cuid())
+  book              Book     @relation(fields: [bookId], references: [id])
+  bookId            String
+  library           Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  libraryId         String
+  addedBy           User     @relation("AddedBy", fields: [addedByUserId], references: [id])
+  addedByUserId     String
+  condition         String?
+  edition           String?
+  notes             String?
+  coverPath         String?
+  addedAt           DateTime @default(now())
+  deletedAt         DateTime?
+  acquiredFrom      String?
+  acquiredOn        DateTime?
+  priceCents        Int?
+  firstEdition      Boolean?
+  firstPrinting     Boolean?
+  signed            Boolean?
+  inscribed         Boolean?
+  dustJacketPresent Boolean?
+  printLine         String?
 
   shelves       ShelfCopy[]
   photos        CopyPhoto[]
@@ -159,9 +168,13 @@ model Trophy {
   desiredFormat     String?
   priority          Int      @default(3)
   reason            String?
+  maxPriceCents     Int?
+  editionNotes      String?
+  status            String   @default("active")
   createdAt         DateTime @default(now())
 
   @@unique([libraryId, bookId])
+  @@index([status])
 }
 
 model AuditLog {

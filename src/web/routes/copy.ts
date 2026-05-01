@@ -18,6 +18,17 @@ const updateSchema = z.object({
   // Free-text price input — accepts "$15.99", "15.99", "15", or blank.
   // Normalized server-side to integer cents.
   price: z.string().max(20).optional(),
+  // Edition fidelity flags. Browsers send unchecked checkboxes as missing
+  // fields, so we treat absence as "no change requested" and use a special
+  // hidden marker field (firstEditionPresent) to detect "user explicitly
+  // unchecked it". Avoids accidentally clearing a flag the user didn't
+  // mean to touch.
+  firstEdition: z.literal("on").optional(),
+  firstPrinting: z.literal("on").optional(),
+  signed: z.literal("on").optional(),
+  inscribed: z.literal("on").optional(),
+  dustJacketPresent: z.literal("on").optional(),
+  printLine: z.string().max(100).optional(),
 });
 
 function blankToNull<T extends string | undefined>(v: T): string | null {
@@ -107,6 +118,13 @@ export async function copyRoutes(app: FastifyInstance) {
         acquiredFrom: data.acquiredFrom?.trim() || null,
         acquiredOn: parseAcquiredOn(data.acquiredOn),
         priceCents: parsePriceToCents(data.price),
+        // Booleans toggle by checkbox state. Absent = false (unchecked).
+        firstEdition: data.firstEdition === "on",
+        firstPrinting: data.firstPrinting === "on",
+        signed: data.signed === "on",
+        inscribed: data.inscribed === "on",
+        dustJacketPresent: data.dustJacketPresent === "on",
+        printLine: data.printLine?.trim() || null,
       },
     });
     void audit({

@@ -27,4 +27,36 @@ export async function trophiesRoutes(app: FastifyInstance) {
     }
     return reply.redirect("/trophies");
   });
+
+  app.post<{ Params: { id: string } }>("/trophies/:id/defer", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    await prisma.trophy
+      .update({ where: { id: req.params.id }, data: { status: "deferred" } })
+      .catch(() => null);
+    void audit({
+      userId: user.id,
+      action: "update",
+      entity: "trophy",
+      entityId: req.params.id,
+      details: { status: "deferred" },
+    });
+    return reply.redirect("/trophies");
+  });
+
+  app.post<{ Params: { id: string } }>("/trophies/:id/activate", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    await prisma.trophy
+      .update({ where: { id: req.params.id }, data: { status: "active" } })
+      .catch(() => null);
+    void audit({
+      userId: user.id,
+      action: "update",
+      entity: "trophy",
+      entityId: req.params.id,
+      details: { status: "active" },
+    });
+    return reply.redirect("/trophies");
+  });
 }

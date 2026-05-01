@@ -1,0 +1,37 @@
+<% const pageTitle = library.name + ' — Wishlist' %>
+<%- include('_header') %>
+
+<section class="hero">
+  <h1>
+    <small><%= library.name %></small>
+    Wishlist
+  </h1>
+  <p><%= trophies.length %> book<%= trophies.length === 1 ? '' : 's' %> we'd love to add to the library.</p>
+</section>
+
+<% if (trophies.length === 0) { %>
+  <p class="hint">The wishlist is currently empty.</p>
+<% } else { %>
+  <ul class="poster-grid">
+    <% trophies.forEach(function(t) {
+      const cover = t.book.thumbnailUrl;
+    %>
+      <li class="poster">
+        <% if (cover) { %>
+          <img src="<%= cover %>" alt="<%= t.book.title %>" loading="lazy" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:var(--radius-lg);box-shadow:var(--shadow);" />
+        <% } else { %>
+          <div class="poster-fallback"><span><%= t.book.title %></span></div>
+        <% } %>
+        <div class="poster-meta">
+          <strong class="poster-title"><%= t.book.title %></strong>
+          <span class="poster-author"><%= t.book.authors.join(', ') %></span>
+          <% if (t.editionNotes) { %>
+            <span class="hint" style="margin-top:.25rem;font-style:italic;"><%= t.editionNotes %></span>
+          <% } %>
+        </div>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<%- include('_footer') %>

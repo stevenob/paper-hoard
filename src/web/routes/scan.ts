@@ -69,6 +69,12 @@ const scanSchema = z.object({
   // ("for Sam's birthday", "anniversary trip", etc.). Stored on the
   // Trophy row by /scan/trophy. Ignored by other endpoints.
   reason: z.string().trim().max(500).optional(),
+  // Optional max purchase price — when present, the field-lookup chip
+  // can warn if the spotted price exceeds the user's ceiling.
+  maxPrice: z.string().trim().max(20).optional(),
+  // Optional edition specifics ("must be 1st UK printing", "any
+  // hardcover is fine"). Free-form, shown verbatim on the scan match.
+  editionNotes: z.string().trim().max(500).optional(),
 });
 
 function shouldShare(input: unknown): boolean {
@@ -262,7 +268,13 @@ export async function scanRoutes(app: FastifyInstance) {
       },
       rating,
       trophy: trophyMatch
-        ? { requestedBy: trophyMatch.requestedBy.displayName, reason: trophyMatch.reason }
+        ? {
+            requestedBy: trophyMatch.requestedBy.displayName,
+            reason: trophyMatch.reason,
+            editionNotes: trophyMatch.editionNotes,
+            maxPriceCents: trophyMatch.maxPriceCents,
+            status: trophyMatch.status,
+          }
         : null,
       existingCopies: existingCopies.map((c) => ({
         id: c.id,
@@ -327,7 +339,7 @@ export async function scanRoutes(app: FastifyInstance) {
         distinct: ["bookId"],
       }),
       prisma.trophy.findMany({
-        where: { libraryId: library.id, book: { isbn13: { not: null } } },
+        where: { libraryId: library.id, status: "active", book: { isbn13: { not: null } } },
         select: { book: { select: { isbn13: true } } },
       }),
     ]);
@@ -369,15 +381,26 @@ export async function scanRoutes(app: FastifyInstance) {
     // If a reason is supplied AND the existing trophy didn't have one, fill
     // it in — useful when the user re-scans to add a reason after the fact.
     const reason = parsed.data.reason?.trim() || null;
+    const editionNotes = parsed.data.editionNotes?.trim() || null;
+    const maxPriceCents = (() => {
+      const raw = parsed.data.maxPrice?.trim();
+      if (!raw) return null;
+      const cleaned = raw.replace(/[^0-9.]/g, "");
+      if (!cleaned) return null;
+      const n = Number.parseFloat(cleaned);
+      if (!Number.isFinite(n) || n < 0) return null;
+      return Math.round(n * 100);
+    })();
     const existing = await prisma.trophy.findUnique({
       where: { libraryId_bookId: { libraryId: library.id, bookId: book.id } },
     });
     if (existing) {
-      if (reason && !existing.reason) {
-        await prisma.trophy.update({
-          where: { id: existing.id },
-          data: { reason },
-        });
+      const patch: Record<string, unknown> = {};
+      if (reason && !existing.reason) patch.reason = reason;
+      if (editionNotes && !existing.editionNotes) patch.editionNotes = editionNotes;
+      if (maxPriceCents !== null && !existing.maxPriceCents) patch.maxPriceCents = maxPriceCents;
+      if (Object.keys(patch).length > 0) {
+        await prisma.trophy.update({ where: { id: existing.id }, data: patch });
       }
       return reply.send({
         ok: true,
@@ -393,6 +416,8 @@ export async function scanRoutes(app: FastifyInstance) {
         requestedByUserId: user.id,
         priority: 3,
         reason,
+        editionNotes,
+        maxPriceCents,
       },
     });
     void audit({

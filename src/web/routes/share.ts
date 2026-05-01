@@ -29,13 +29,36 @@ export async function shareRoutes(app: FastifyInstance) {
         take: 500,
       }),
       prisma.trophy.findMany({
-        where: { libraryId: library.id },
+        where: { libraryId: library.id, status: "active" },
         include: { book: true },
         orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
       }),
     ]);
     return reply.view("share.ejs", await withChrome(req, { library, copies, trophies }));
   });
+
+  // Public wishlist-only view. Useful for sharing a gift list with family
+  // around the holidays without exposing the whole library catalog.
+  // Strips reasons + max prices that the household considers private.
+  app.get<{ Params: { slug: string } }>(
+    "/share/:slug/wishlist",
+    async (req, reply) => {
+      const library = await prisma.library.findUnique({
+        where: { publicSlug: req.params.slug },
+      });
+      if (!library) return reply.status(404).send("Not found");
+
+      const trophies = await prisma.trophy.findMany({
+        where: { libraryId: library.id, status: "active" },
+        include: { book: true, requestedBy: { select: { displayName: true } } },
+        orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
+      });
+      return reply.view(
+        "share-wishlist.ejs",
+        await withChrome(req, { library, trophies })
+      );
+    }
+  );
 
   // Owner controls — toggle public sharing on the user's library.
   app.post<{ Params: { id: string } }>(

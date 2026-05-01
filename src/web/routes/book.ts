@@ -15,6 +15,8 @@ const editSchema = z.object({
   publishedAt: z.string().max(50).optional().default(""),
   isbn13: z.string().max(13).optional().default(""),
   thumbnailUrl: z.string().max(2000).optional().default(""),
+  seriesName: z.string().max(200).optional().default(""),
+  seriesPosition: z.string().max(20).optional().default(""),
 });
 
 const newSchema = editSchema.extend({
@@ -212,6 +214,10 @@ export async function bookRoutes(app: FastifyInstance) {
         publishedAt: blankToNull(d.publishedAt),
         isbn13: blankToNull(d.isbn13),
         thumbnailUrl: blankToNull(d.thumbnailUrl),
+        seriesName: blankToNull(d.seriesName),
+        seriesPosition: d.seriesPosition.trim()
+          ? Number.parseFloat(d.seriesPosition.trim()) || null
+          : null,
         source: "manual",
       },
     });

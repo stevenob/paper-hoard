@@ -3,25 +3,61 @@
 
 <h1>🏆 Trophy List</h1>
 
+<% if (library && library.publicSlug) { %>
+  <p class="hint">📤 Shareable wishlist: <a href="/share/<%= library.publicSlug %>/wishlist" target="_blank" rel="noopener">/share/<%= library.publicSlug %>/wishlist</a></p>
+<% } %>
+
 <% if (trophies.length === 0) { %>
-  <p>No Trophy items yet. Add one from <a href="/completions/new">a new completion</a>.</p>
+  <p>No Trophy items yet. Scan a book and tap 🏆 in the field, or import via <a href="/import">CSV</a>.</p>
 <% } else { %>
+  <% function fmtPrice(cents) { return cents == null ? '' : '$' + (cents / 100).toFixed(2); } %>
+  <% function ageDays(d) { return Math.floor((Date.now() - new Date(d).getTime()) / 86400000); } %>
   <table class="data">
     <thead>
-      <tr><th>Title</th><th>Authors</th><th>Requested by</th><th>Priority</th><th>Format</th><th></th></tr>
+      <tr><th>Title</th><th>Authors</th><th>Requested</th><th>Edition / max</th><th>Reason</th><th>Status</th><th></th></tr>
     </thead>
     <tbody>
-      <% trophies.forEach(function(t) { %>
-        <tr>
-          <td data-label="Title"><a href="/books/<%= t.bookId %>"><%= t.book.title %></a></td>
+      <% trophies.forEach(function(t) {
+        const days = ageDays(t.createdAt);
+        const stale = days >= 180;
+      %>
+        <tr<%= stale ? ' class="trophy-aged"' : '' %>>
+          <td data-label="Title">
+            <a href="/books/<%= t.bookId %>"><%= t.book.title %></a>
+            <% if (stale) { %><span class="hint" title="On the list for <%= days %> days"> · aged</span><% } %>
+          </td>
           <td data-label="Authors"><%= t.book.authors.join(', ') %></td>
-          <td data-label="Requested by"><%= t.requestedBy.displayName %></td>
-          <td data-label="Priority"><%= t.priority %></td>
-          <td data-label="Format"><%= t.desiredFormat || '—' %></td>
+          <td data-label="Requested by"><strong><%= t.requestedBy.displayName %></strong>
+            <span class="hint">· <%= days %>d ago</span>
+          </td>
+          <td data-label="Edition / max">
+            <% if (t.editionNotes) { %><div><%= t.editionNotes %></div><% } %>
+            <% if (t.maxPriceCents) { %><div class="hint">max <%= fmtPrice(t.maxPriceCents) %></div><% } %>
+            <% if (!t.editionNotes && !t.maxPriceCents) { %><span class="hint">—</span><% } %>
+          </td>
+          <td data-label="Reason"><%= t.reason || '—' %></td>
+          <td data-label="Status">
+            <% if (t.status === 'deferred') { %>
+              <span class="pill pill-tag">Deferred</span>
+            <% } else { %>
+              <span class="pill pill-trophy">Active</span>
+            <% } %>
+          </td>
           <td data-label="">
-            <form method="post" action="/trophies/<%= t.id %>/delete" onsubmit="return confirm('Remove this trophy?')">
-              <button type="submit" class="danger">Remove</button>
-            </form>
+            <% if (activeUser) { %>
+              <% if (t.status === 'active') { %>
+                <form method="post" action="/trophies/<%= t.id %>/defer" style="display:inline">
+                  <button type="submit" class="link" title="Move to deferred — drops out of the offline scan cache">Defer</button>
+                </form>
+              <% } else { %>
+                <form method="post" action="/trophies/<%= t.id %>/activate" style="display:inline">
+                  <button type="submit" class="link">Re-activate</button>
+                </form>
+              <% } %>
+              <form method="post" action="/trophies/<%= t.id %>/delete" style="display:inline" onsubmit="return confirm('Remove this trophy?')">
+                <button type="submit" class="danger">Remove</button>
+              </form>
+            <% } %>
           </td>
         </tr>
       <% }) %>

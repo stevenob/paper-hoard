@@ -10,7 +10,21 @@ export const EDITIONS = [
 ] as const;
 export type Edition = (typeof EDITIONS)[number];
 
-export const CONDITIONS = ["new", "like-new", "good", "fair", "poor"] as const;
+// Antiquarian / dealer-grade condition scale. Replaces the casual
+// new/like-new/good/fair/poor of v0-v3.4. Used on the copy edit form
+// and when scanning. The migration 20260430_collector_polish maps the
+// old values onto these.
+export const CONDITIONS = [
+  "Fine",
+  "Near Fine",
+  "Very Good+",
+  "Very Good",
+  "Good+",
+  "Good",
+  "Fair",
+  "Poor",
+  "Reading Copy",
+] as const;
 export type Condition = (typeof CONDITIONS)[number];
 
 export function labelEdition(value: string | null | undefined): string {

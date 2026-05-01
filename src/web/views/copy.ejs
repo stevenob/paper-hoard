@@ -86,6 +86,32 @@
       <span class="hint">USD or whatever currency you tend to think in — stored as cents.</span>
     </label>
 
+    <h3 style="margin-top:1.5rem;font-size:1em;">Edition fidelity</h3>
+    <p class="hint" style="margin-top:-.25rem;">For collectors. Determines real value: a 1st edition / 1st printing is meaningfully different from later printings.</p>
+    <label class="inline">
+      <input type="checkbox" name="firstEdition" value="on" <%= copy.firstEdition ? 'checked' : '' %> />
+      First edition
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="firstPrinting" value="on" <%= copy.firstPrinting ? 'checked' : '' %> />
+      First printing (verify via the number line on the copyright page)
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="signed" value="on" <%= copy.signed ? 'checked' : '' %> />
+      Signed
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="inscribed" value="on" <%= copy.inscribed ? 'checked' : '' %> />
+      Inscribed (signed with a personal note)
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="dustJacketPresent" value="on" <%= copy.dustJacketPresent ? 'checked' : '' %> />
+      Dust jacket present
+    </label>
+    <label>Print line <span class="hint">(verbatim from the copyright page)</span>
+      <input name="printLine" value="<%= copy.printLine || '' %>" maxlength="100" placeholder="10 9 8 7 6 5 4 3 2 1" />
+    </label>
+
     <button type="submit">Save</button>
   </fieldset>
 </form>
