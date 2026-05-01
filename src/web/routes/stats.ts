@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { requireUser } from "./_helpers.js";
 import { refetchMissingCovers, refreshLowResCovers } from "./_cover-backfill.js";
+import { fillMissingAuthors } from "./_author-backfill.js";
 
 /**
  * /stats was merged into /about as of v3.5.5. Keep the GET route alive
@@ -29,6 +30,16 @@ export async function statsRoutes(app: FastifyInstance) {
     const user = await requireUser(req, reply);
     if (!user) return;
     const result = await refreshLowResCovers(50);
+    return reply.send({ ok: true, ...result });
+  });
+
+  // Fill missing primaryAuthor values. Same batch contract — cheap rows
+  // (authors[] non-empty) come first; network-bound rows trickle in after.
+  // Smaller batch size here because lookupByIsbn is ~500ms-1s per book.
+  app.post("/stats/fill-missing-authors", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const result = await fillMissingAuthors(25);
     return reply.send({ ok: true, ...result });
   });
 }

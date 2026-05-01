@@ -1,12 +1,42 @@
 import { prisma } from "../../shared/db.js";
 import { lookupByIsbn } from "../../shared/metadata.js";
 import { logger } from "../../shared/logger.js";
-import { olCoverUrlByIsbn, pickValidCover } from "../../shared/cover-validation.js";
+import { olCoverUrlByIsbn, validateCoverUrl } from "../../shared/cover-validation.js";
 
-interface BackfillResult {
+export type RepairAction = "kept" | "repaired" | "nulled" | "failed";
+
+export interface RepairResultRow {
+  bookId: string;
+  copyId: string | null;
+  title: string;
+  author: string | null;
+  thumbnailUrl: string | null;
+  action: RepairAction;
+  detail: string;
+}
+
+export interface BackfillResult {
   processed: number;
   updated: number;
   remaining: number;
+  results: RepairResultRow[];
+}
+
+/**
+ * Walk a list of candidate cover URLs, returning the first that validates
+ * along with a human-friendly source label ("Google", "OL-L", "OL-M").
+ * Mirrors pickValidCover but also reports which source won — needed for the
+ * activity log so the user sees "Google → OL-L" rather than just a URL.
+ */
+async function pickValidCoverWithSource(
+  candidates: Array<{ url: string | null | undefined; source: string }>
+): Promise<{ url: string; source: string } | null> {
+  for (const c of candidates) {
+    if (!c.url) continue;
+    const ok = await validateCoverUrl(c.url);
+    if (ok) return { url: ok, source: c.source };
+  }
+  return null;
 }
 
 /**
@@ -22,23 +52,46 @@ interface BackfillResult {
 export async function refetchMissingCovers(batchSize: number): Promise<BackfillResult> {
   const candidates = await prisma.book.findMany({
     where: { thumbnailUrl: null, isbn13: { not: null } },
-    select: { id: true, isbn13: true },
+    select: {
+      id: true,
+      isbn13: true,
+      title: true,
+      primaryAuthor: true,
+      physicalCopies: {
+        where: { deletedAt: null },
+        select: { id: true },
+        take: 1,
+        orderBy: { addedAt: "asc" },
+      },
+    },
     take: batchSize,
     orderBy: { createdAt: "asc" },
   });
 
   let updated = 0;
+  const results: RepairResultRow[] = [];
   for (const c of candidates) {
-    if (!c.isbn13) continue;
+    const copyId = c.physicalCopies[0]?.id ?? null;
+    if (!c.isbn13) {
+      results.push({
+        bookId: c.id,
+        copyId,
+        title: c.title,
+        author: c.primaryAuthor,
+        thumbnailUrl: null,
+        action: "failed",
+        detail: "no ISBN to look up",
+      });
+      continue;
+    }
     try {
       const meta = await lookupByIsbn(c.isbn13);
-      // Validating cascade — never store a placeholder JPEG when we can
-      // fall back to OL or end up null instead.
-      const validated = await pickValidCover(
-        meta?.thumbnailUrl,
-        olCoverUrlByIsbn(c.isbn13, "L"),
-        olCoverUrlByIsbn(c.isbn13, "M")
-      );
+      const picked = await pickValidCoverWithSource([
+        { url: meta?.thumbnailUrl, source: "Google" },
+        { url: olCoverUrlByIsbn(c.isbn13, "L"), source: "OL-L" },
+        { url: olCoverUrlByIsbn(c.isbn13, "M"), source: "OL-M" },
+      ]);
+      const validated = picked?.url ?? null;
       if (validated || meta) {
         await prisma.book.update({
           where: { id: c.id },
@@ -52,8 +105,26 @@ export async function refetchMissingCovers(batchSize: number): Promise<BackfillR
         });
         if (validated) updated++;
       }
+      results.push({
+        bookId: c.id,
+        copyId,
+        title: c.title,
+        author: c.primaryAuthor,
+        thumbnailUrl: validated,
+        action: validated ? "repaired" : "failed",
+        detail: validated ? `found via ${picked!.source}` : "no source has it",
+      });
     } catch (err) {
       logger.warn({ err, bookId: c.id }, "cover backfill failed for book");
+      results.push({
+        bookId: c.id,
+        copyId,
+        title: c.title,
+        author: c.primaryAuthor,
+        thumbnailUrl: null,
+        action: "failed",
+        detail: "lookup error",
+      });
     }
   }
 
@@ -61,7 +132,7 @@ export async function refetchMissingCovers(batchSize: number): Promise<BackfillR
     where: { thumbnailUrl: null, isbn13: { not: null } },
   });
 
-  return { processed: candidates.length, updated, remaining };
+  return { processed: candidates.length, updated, remaining, results };
 }
 
 /**
@@ -96,41 +167,85 @@ export async function refreshLowResCovers(batchSize: number): Promise<BackfillRe
 
   const candidates = await prisma.book.findMany({
     where: lowResWhere as never,
-    select: { id: true, isbn13: true },
+    select: {
+      id: true,
+      isbn13: true,
+      title: true,
+      primaryAuthor: true,
+      thumbnailUrl: true,
+      physicalCopies: {
+        where: { deletedAt: null },
+        select: { id: true },
+        take: 1,
+        orderBy: { addedAt: "asc" },
+      },
+    },
     take: batchSize,
     orderBy: { createdAt: "asc" },
   });
 
   let updated = 0;
+  const results: RepairResultRow[] = [];
   for (const c of candidates) {
+    const copyId = c.physicalCopies[0]?.id ?? null;
     if (!c.isbn13) continue;
     try {
       // Step 1: refresh metadata. Picks up the v3.5.2 zoom=2 URL plus any
       // other recently-improved fields.
       const meta = await lookupByIsbn(c.isbn13);
-      // Step 2: validate the candidate URLs in order. Google's zoom=2 URL
-      // sometimes returns the "image not available" placeholder for niche
-      // books — fall through to OL by ISBN at -L then -M when that
-      // happens. ?default=false makes OL 404 rather than serve a blank gif.
-      const validated = await pickValidCover(
-        meta?.thumbnailUrl,
-        olCoverUrlByIsbn(c.isbn13, "L"),
-        olCoverUrlByIsbn(c.isbn13, "M")
-      );
-      // Whatever we found (or null) is what gets saved. Null is the right
-      // value when no source has a real cover — the UI's fallback poster
-      // is better than a Google placeholder JPEG.
+      // Step 2: validate the candidate URLs in order. Tracks which source
+      // produced the winning URL so the activity log can show "Google"
+      // vs "OL-L" rather than just a URL diff.
+      const picked = await pickValidCoverWithSource([
+        { url: meta?.thumbnailUrl, source: "Google" },
+        { url: olCoverUrlByIsbn(c.isbn13, "L"), source: "OL-L" },
+        { url: olCoverUrlByIsbn(c.isbn13, "M"), source: "OL-M" },
+      ]);
+      const validated = picked?.url ?? null;
       await prisma.book.update({
         where: { id: c.id },
         data: { thumbnailUrl: validated },
       });
       if (validated) updated++;
+      // Action is "kept" only when the URL didn't change — same source,
+      // same value. "repaired" covers both "swapped sources" and "Google
+      // returned a fresh URL we hadn't seen before".
+      let action: RepairAction;
+      let detail: string;
+      if (!validated) {
+        action = "nulled";
+        detail = "no source has it";
+      } else if (validated === c.thumbnailUrl) {
+        action = "kept";
+        detail = `kept (${picked!.source})`;
+      } else {
+        action = "repaired";
+        detail = `→ ${picked!.source}`;
+      }
+      results.push({
+        bookId: c.id,
+        copyId,
+        title: c.title,
+        author: c.primaryAuthor,
+        thumbnailUrl: validated,
+        action,
+        detail,
+      });
     } catch (err) {
       logger.warn({ err, bookId: c.id }, "cover refresh failed for book");
+      results.push({
+        bookId: c.id,
+        copyId,
+        title: c.title,
+        author: c.primaryAuthor,
+        thumbnailUrl: c.thumbnailUrl,
+        action: "failed",
+        detail: "lookup error",
+      });
     }
   }
 
   const remaining = await prisma.book.count({ where: lowResWhere as never });
 
-  return { processed: candidates.length, updated, remaining };
+  return { processed: candidates.length, updated, remaining, results };
 }

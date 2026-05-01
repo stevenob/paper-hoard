@@ -132,7 +132,7 @@
       </div>
     <% } %>
 
-    <% if (activeUser && (backfillCandidates > 0 || lowResCovers > 0 || totals.trash > 0)) { %>
+    <% if (activeUser && (backfillCandidates > 0 || lowResCovers > 0 || missingAuthors > 0 || totals.trash > 0)) { %>
       <div class="widget w-tools">
         <h2>Catalog tools</h2>
         <ul class="tools-list">
@@ -141,8 +141,6 @@
               <div>
                 <strong><%= backfillCandidates %></strong> book<%= backfillCandidates === 1 ? '' : 's' %> missing covers
                 <div class="sub">Re-runs Google Books + Open Library</div>
-                <div id="backfill-status" class="sub" style="margin-top:.25rem;"></div>
-                <div class="completeness-bar" id="backfill-bar" hidden style="margin-top:.25rem;"><span></span></div>
               </div>
               <button type="button" id="btn-backfill">🔄 Run</button>
             </li>
@@ -152,10 +150,17 @@
               <div>
                 <strong><%= lowResCovers %></strong> cover<%= lowResCovers === 1 ? '' : 's' %> to verify
                 <div class="sub">HEAD-checks each Google URL; falls back to Open Library if broken</div>
-                <div id="refresh-status" class="sub" style="margin-top:.25rem;"></div>
-                <div class="completeness-bar" id="refresh-bar" hidden style="margin-top:.25rem;"><span></span></div>
               </div>
               <button type="button" id="btn-refresh-covers">📐 Run</button>
+            </li>
+          <% } %>
+          <% if (missingAuthors > 0) { %>
+            <li>
+              <div>
+                <strong><%= missingAuthors %></strong> book<%= missingAuthors === 1 ? '' : 's' %> missing author
+                <div class="sub">Fills from existing authors[] or looks up by ISBN</div>
+              </div>
+              <button type="button" id="btn-fill-authors">🧑 Run</button>
             </li>
           <% } %>
           <% if (totals.trash > 0) { %>
@@ -168,6 +173,9 @@
             </li>
           <% } %>
         </ul>
+        <% if (backfillCandidates > 0) { %><div class="repair-panel" id="panel-backfill" hidden></div><% } %>
+        <% if (lowResCovers > 0) { %><div class="repair-panel" id="panel-refresh" hidden></div><% } %>
+        <% if (missingAuthors > 0) { %><div class="repair-panel" id="panel-authors" hidden></div><% } %>
       </div>
     <% } %>
 
@@ -338,47 +346,136 @@
 
 <script>
   (function() {
-    function makeBatchRunner(opts) {
+    // v3.5.8 batch repair runner — renders an activity log of per-book
+    // outcomes streaming from the server. Each chunk's results[] is
+    // appended (or rather prepended, newest-on-top) to the panel.
+    function fmtCoverSrc(url) {
+      // Inline thumbnail in the activity log. If the cover is null,
+      // return null so the caller can render a placeholder square.
+      return url || null;
+    }
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function renderRow(r) {
+      const li = document.createElement('li');
+      li.className = 'activity-row ' + r.action;
+      const titleHref = r.copyId ? '/library/copy/' + r.copyId : null;
+      const cover = fmtCoverSrc(r.thumbnailUrl);
+      const coverHtml = cover
+        ? '<img class="row-cover" src="' + escapeHtml(cover) + '" alt="" loading="lazy" />'
+        : '<span class="row-cover row-cover-placeholder"></span>';
+      const titleHtml = titleHref
+        ? '<a class="row-title" href="' + escapeHtml(titleHref) + '">' + escapeHtml(r.title) + '</a>'
+        : '<span class="row-title">' + escapeHtml(r.title) + '</span>';
+      const authorHtml = r.author
+        ? '<span class="row-author">' + escapeHtml(r.author) + '</span>'
+        : '<span class="row-author muted">—</span>';
+      li.innerHTML =
+        coverHtml +
+        '<div class="row-text">' + titleHtml + authorHtml + '</div>' +
+        '<span class="row-detail">' + escapeHtml(r.detail || '') + '</span>';
+      return li;
+    }
+
+    function makeRepairRunner(opts) {
       const btn = document.getElementById(opts.btnId);
       if (!btn) return;
-      const status = document.getElementById(opts.statusId);
-      const bar = document.getElementById(opts.barId);
-      const barInner = bar ? bar.querySelector('span') : null;
+      const panel = document.getElementById(opts.panelId);
+      if (!panel) return;
+      const verb = opts.verb;
+      const titleLabel = opts.title;
       let totalProcessed = 0;
       let totalUpdated = 0;
+      let totalKept = 0;
+      let totalNulled = 0;
+      let totalFailed = 0;
+      let logEl = null;
+      let barEl = null;
+      let summaryEl = null;
+
+      function ensureScaffold() {
+        panel.hidden = false;
+        if (panel.dataset.ready === '1') return;
+        panel.innerHTML =
+          '<div class="repair-head">' +
+            '<strong>' + escapeHtml(titleLabel) + '</strong>' +
+            '<span class="repair-meta">' +
+              '<span class="m-progress">0</span> / <span class="m-total">?</span>' +
+              ' · <span class="m-updated">0</span> ' + escapeHtml(verb) +
+            '</span>' +
+          '</div>' +
+          '<div class="repair-bar"><span></span></div>' +
+          '<ul class="activity-log"></ul>' +
+          '<p class="repair-summary" hidden></p>';
+        logEl = panel.querySelector('.activity-log');
+        barEl = panel.querySelector('.repair-bar > span');
+        summaryEl = panel.querySelector('.repair-summary');
+        panel.dataset.ready = '1';
+      }
+
       async function step() {
         btn.disabled = true;
-        status.textContent = 'Processing…';
-        if (bar) bar.hidden = false;
         try {
           const res = await fetch(opts.url, { method: 'POST' });
           const json = await res.json();
           if (!res.ok || !json.ok) {
-            status.textContent = (json && json.error) || 'Failed';
+            panel.querySelector('.repair-summary').hidden = false;
+            panel.querySelector('.repair-summary').textContent = (json && json.error) || 'Failed';
             btn.disabled = false;
             return;
           }
           totalProcessed += json.processed;
           totalUpdated += json.updated;
+          // Render rows newest-first.
+          const rows = json.results || [];
+          for (let i = 0; i < rows.length; i++) {
+            const r = rows[i];
+            if (r.action === 'kept') totalKept++;
+            else if (r.action === 'nulled') totalNulled++;
+            else if (r.action === 'failed') totalFailed++;
+            logEl.insertBefore(renderRow(r), logEl.firstChild);
+          }
+          // Cap DOM at 200 rows so very long runs don't bog the page down.
+          while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
           const total = totalProcessed + json.remaining;
           const pct = total === 0 ? 100 : Math.round((totalProcessed / total) * 100);
-          if (barInner) barInner.style.width = pct + '%';
-          status.textContent = 'Processed ' + totalProcessed + ' · updated ' + totalUpdated + ' · ' + json.remaining + ' remaining';
+          barEl.style.width = pct + '%';
+          panel.querySelector('.m-progress').textContent = totalProcessed;
+          panel.querySelector('.m-total').textContent = total;
+          panel.querySelector('.m-updated').textContent = totalUpdated;
           if (json.remaining > 0 && json.processed > 0) {
             setTimeout(step, 250);
           } else {
-            status.textContent = '✓ Done — ' + totalUpdated + ' covers ' + opts.verb + ' of ' + totalProcessed + ' attempted.';
+            summaryEl.hidden = false;
+            const parts = ['✓ Done — ' + totalUpdated + ' ' + verb + ' of ' + totalProcessed + ' attempted'];
+            if (totalKept) parts.push(totalKept + ' kept');
+            if (totalNulled) parts.push(totalNulled + ' nulled');
+            if (totalFailed) parts.push(totalFailed + ' failed');
+            summaryEl.textContent = parts.join(' · ');
             btn.disabled = false;
           }
         } catch (err) {
-          status.textContent = 'Network error: ' + (err.message || err);
+          summaryEl.hidden = false;
+          summaryEl.textContent = 'Network error: ' + (err.message || err);
           btn.disabled = false;
         }
       }
-      btn.addEventListener('click', function() { totalProcessed = 0; totalUpdated = 0; step(); });
+
+      btn.addEventListener('click', function() {
+        totalProcessed = 0; totalUpdated = 0;
+        totalKept = 0; totalNulled = 0; totalFailed = 0;
+        panel.dataset.ready = '0';
+        ensureScaffold();
+        step();
+      });
     }
-    makeBatchRunner({ btnId: 'btn-backfill', statusId: 'backfill-status', barId: 'backfill-bar', url: '/stats/backfill-covers', verb: 'refreshed' });
-    makeBatchRunner({ btnId: 'btn-refresh-covers', statusId: 'refresh-status', barId: 'refresh-bar', url: '/stats/refresh-low-res-covers', verb: 'upgraded' });
+
+    makeRepairRunner({ btnId: 'btn-backfill', panelId: 'panel-backfill', url: '/stats/backfill-covers', verb: 'repaired', title: '🔄 Backfilling missing covers' });
+    makeRepairRunner({ btnId: 'btn-refresh-covers', panelId: 'panel-refresh', url: '/stats/refresh-low-res-covers', verb: 'repaired', title: '📐 Verifying covers' });
+    makeRepairRunner({ btnId: 'btn-fill-authors', panelId: 'panel-authors', url: '/stats/fill-missing-authors', verb: 'filled', title: '🧑 Filling missing authors' });
 
     const list = document.getElementById('backup-list');
     const status = document.getElementById('backup-status');

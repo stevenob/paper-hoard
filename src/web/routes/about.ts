@@ -57,6 +57,7 @@ export async function aboutRoutes(app: FastifyInstance) {
       authorRows: { primaryAuthor: string | null; _count: { _all: number } }[];
       valueAggregate: { _sum: { priceCents: number | null }; _count: { priceCents: number } };
       lowResCovers: number;
+      missingAuthors: number;
       datedCopies: { id: string; book: { id: string; title: string; primaryAuthor: string | null; publishedAt: string | null; thumbnailUrl: string | null; coverPath?: string | null } & Record<string, unknown> }[];
       mostExpensiveCopies: Awaited<ReturnType<typeof prisma.physicalCopy.findMany>>;
       activeLending: number;
@@ -88,6 +89,7 @@ export async function aboutRoutes(app: FastifyInstance) {
         authorRows,
         valueAggregate,
         lowResCovers,
+        missingAuthors,
         datedCopies,
         mostExpensiveCopies,
         activeLending,
@@ -192,6 +194,14 @@ export async function aboutRoutes(app: FastifyInstance) {
             ],
           },
         }),
+        prisma.book.count({
+          where: {
+            primaryAuthor: null,
+            physicalCopies: library
+              ? { some: { libraryId: library.id, deletedAt: null } }
+              : { some: { deletedAt: null } },
+          },
+        }),
         // For oldest/newest: pull all dated copies, sort in JS by parsed
         // year so we can ignore the freeform 'May 2018' / 'Oct 01, 1994'
         // strings that lex-sort puts in the wrong place.
@@ -231,6 +241,7 @@ export async function aboutRoutes(app: FastifyInstance) {
         authorRows,
         valueAggregate,
         lowResCovers,
+        missingAuthors,
         datedCopies,
         mostExpensiveCopies,
         activeLending,
@@ -310,6 +321,7 @@ export async function aboutRoutes(app: FastifyInstance) {
         backfillCandidates: catalog?.booksWithoutCover ?? 0,
         booksMissingIsbn: catalog?.booksWithoutIsbn ?? 0,
         lowResCovers: catalog?.lowResCovers ?? 0,
+        missingAuthors: catalog?.missingAuthors ?? 0,
         oldestCopies,
         newestCopies,
         mostExpensiveCopies: catalog?.mostExpensiveCopies ?? [],

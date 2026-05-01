@@ -100,4 +100,12 @@ describe("POST guards", () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  it("/stats/fill-missing-authors requires auth", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/stats/fill-missing-authors",
+    });
+    expect(res.statusCode).toBe(401);
+  });
 });
