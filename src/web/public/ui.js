@@ -84,24 +84,26 @@
     var drawer = document.getElementById('topbar-drawer');
     if (!btn || !drawer) return;
     function close() {
-      drawer.hidden = true;
+      drawer.classList.remove('open');
       btn.setAttribute('aria-expanded', 'false');
     }
     function open() {
-      drawer.hidden = false;
+      drawer.classList.add('open');
       btn.setAttribute('aria-expanded', 'true');
     }
     btn.addEventListener('click', function (e) {
+      e.preventDefault();
       e.stopPropagation();
-      drawer.hidden ? open() : close();
+      if (drawer.classList.contains('open')) close();
+      else open();
     });
     document.addEventListener('click', function (e) {
-      if (drawer.hidden) return;
+      if (!drawer.classList.contains('open')) return;
       if (drawer.contains(e.target) || btn.contains(e.target)) return;
       close();
     });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !drawer.hidden) close();
+      if (e.key === 'Escape' && drawer.classList.contains('open')) close();
     });
   }
   if (document.readyState === 'loading') {

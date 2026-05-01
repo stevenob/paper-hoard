@@ -2040,7 +2040,7 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
   }
   .topbar-menu-btn:hover { border-color: var(--accent); color: var(--accent); }
   .topbar-drawer {
-    display: block;
+    display: none;
     position: absolute; top: 100%; left: 0; right: 0;
     background: var(--card); color: var(--fg);
     border-bottom: 1px solid var(--rule);
@@ -2048,7 +2048,7 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
     z-index: 90;
     box-shadow: 0 14px 32px rgba(0, 0, 0, .55);
   }
-  .topbar-drawer[hidden] { display: none; }
+  .topbar-drawer.open { display: block !important; }
   .topbar-drawer a {
     display: flex; align-items: center; gap: .65rem;
     padding: .8rem .85rem;
