@@ -111,13 +111,19 @@ function recentlyAttemptedCutoff(): Date {
 }
 
 export async function refetchMissingCovers(batchSize: number, scope: RepairScope): Promise<BackfillResult> {
-  const cutoff = recentlyAttemptedCutoff();
+  // In normal mode, skip books attempted in the last RETRY_AFTER_DAYS so
+  // unfetchable orphans drop out of the candidate pool. In ignoreCooldown
+  // mode (the "↻ Retry orphans" button), use a much shorter 60-second
+  // window — long enough that books just stamped by the current run's
+  // earlier batches don't re-appear in later batches, short enough that
+  // a deliberate human click later still picks them up.
+  const cutoff = scope.ignoreCooldown
+    ? new Date(Date.now() - 60 * 1000)
+    : recentlyAttemptedCutoff();
   const where = {
     thumbnailUrl: null,
     isbn13: { not: null },
-    ...(scope.ignoreCooldown
-      ? {}
-      : { OR: [{ coverAttemptedAt: null }, { coverAttemptedAt: { lt: cutoff } }] }),
+    OR: [{ coverAttemptedAt: null }, { coverAttemptedAt: { lt: cutoff } }],
     ...copyScopeFilter(scope),
   };
   const candidates = await prisma.book.findMany({
