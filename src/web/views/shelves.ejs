@@ -1,21 +1,25 @@
 <% const pageTitle = 'Shelves' %>
 <%- include('_header') %>
 
-<h1>Shelves</h1>
-
-<p class="hint">A shelf is any named collection of physical copies — a real bookcase ("Living room shelf 2"), a series ("Mistborn"), a theme ("To re-read"). Add a copy to a shelf from its detail page.</p>
+<%- include('_page_hero', {
+  icon: '📚',
+  title: 'Shelves',
+  blurb: 'Named collections of physical copies — bookcases, series, themed lists. Add a copy to a shelf from its detail page.',
+  stats: shelves.length > 0 ? [
+    { value: shelves.length, label: 'shelves' },
+    { value: totalOrganised, label: 'cop' + (totalOrganised === 1 ? 'y' : 'ies') + ' organised' },
+    orderedCount > 0 ? { value: orderedCount, label: 'ordered (▦)' } : null
+  ] : null
+}) %>
 
 <% if (shelves.length === 0) { %>
   <p>No shelves yet. They appear here as soon as you add a copy to one.</p>
 <% } else { %>
-  <ul class="shelf-list">
+  <div class="shelves-cloud">
     <% shelves.forEach(function(s) { %>
-      <li>
-        <a href="/shelves/<%= s.slug %>" class="pill pill-tag"><%= s.name %><% if (s.isOrdered) { %> ▦<% } %></a>
-        <span class="hint"><%= s._count.copies %> book<%= s._count.copies === 1 ? '' : 's' %></span>
-      </li>
+      <a href="/shelves/<%= s.slug %>" class="shelf-chip<%= s.isOrdered ? ' is-ordered' : '' %>"><%= s.name %><span class="count"><%= s._count.copies %></span></a>
     <% }) %>
-  </ul>
+  </div>
 <% } %>
 
 <%- include('_footer') %>

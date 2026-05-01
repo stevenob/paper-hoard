@@ -1,0 +1,51 @@
+<%
+  /**
+   * Shared page hero used across /shelves, /shelves/:slug, /authors/:slug,
+   * /lending, /trophies. Render with `<%- include('_page_hero', locals) %>`.
+   *
+   * Locals (all optional except title):
+   *   - icon       : emoji rendered inside the h1 (e.g. "📚"). Default: none.
+   *   - title      : main heading. Required.
+   *   - modifier   : italic muted suffix shown next to the title (e.g.
+   *                  "ordered ▦"). Default: none.
+   *   - blurb      : muted descriptive sentence below the title.
+   *   - back       : { href, label } back link rendered above the title.
+   *   - stats      : array of { value, label } shown as a stat row.
+   *   - actions    : raw HTML to render in the right-aligned actions column
+   *                  (buttons, links). Caller is responsible for safe escaping.
+   *   - tint       : 'gold' | 'green' | undefined. Selects the radial-glow
+   *                  color and the stat-strong color so each section reads
+   *                  with its own visual identity.
+   */
+  const _ph_tint = typeof tint === 'string' ? tint : '';
+  const _ph_classes = ['page-hero'];
+  if (_ph_tint === 'gold') _ph_classes.push('gold');
+  else if (_ph_tint === 'green') _ph_classes.push('green');
+%>
+<section class="<%= _ph_classes.join(' ') %>">
+  <div class="page-hero-text">
+    <% if (typeof back !== 'undefined' && back && back.href) { %>
+      <a class="page-hero-back" href="<%= back.href %>"><%= back.label || '← back' %></a>
+    <% } %>
+    <h1>
+      <% if (typeof icon !== 'undefined' && icon) { %><span class="icon"><%= icon %></span><% } %>
+      <%= title %>
+      <% if (typeof modifier !== 'undefined' && modifier) { %><span class="modifier"><%= modifier %></span><% } %>
+    </h1>
+    <% if (typeof blurb !== 'undefined' && blurb) { %>
+      <p class="page-hero-blurb"><%= blurb %></p>
+    <% } %>
+    <% if (typeof stats !== 'undefined' && stats && stats.length) { %>
+      <div class="page-hero-stats">
+        <% stats.forEach(function(s) { if (s == null) return; %>
+          <div class="page-hero-stat"><strong><%- s.value %></strong> <%= s.label %></div>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+  <% if (typeof actions !== 'undefined' && actions) { %>
+    <div class="page-hero-actions">
+      <%- actions %>
+    </div>
+  <% } %>
+</section>

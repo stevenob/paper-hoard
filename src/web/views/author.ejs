@@ -1,10 +1,20 @@
 <% const pageTitle = author %>
 <%- include('_header') %>
 
-<p><a href="/library">← back to library</a></p>
-
-<h1><%= author %></h1>
-<p class="hint"><%= copies.length %> copy<%= copies.length === 1 ? '' : 'ies' %> in <%= library ? library.name : 'the library' %></p>
+<%
+  const heroStats = [];
+  if (copies.length > 0) heroStats.push({ value: copies.length, label: 'cop' + (copies.length === 1 ? 'y' : 'ies') });
+  if (completions.length > 0) heroStats.push({ value: completions.length, label: 'completion' + (completions.length === 1 ? '' : 's') });
+  if (trophies.length > 0) heroStats.push({ value: trophies.length, label: 'on wishlist' });
+%>
+<%- include('_page_hero', {
+  icon: '✒️',
+  title: author,
+  blurb: copies.length + ' cop' + (copies.length === 1 ? 'y' : 'ies') + ' in ' + (library ? library.name : 'the library') + '.',
+  back: { href: '/library', label: '← back to library' },
+  stats: heroStats.length ? heroStats : null,
+  tint: trophies.length > 0 ? 'gold' : ''
+}) %>
 
 <% if (copies.length === 0) { %>
   <p>No copies by this author.</p>
@@ -31,21 +41,31 @@
 <% } %>
 
 <% if (completions.length > 0) { %>
-  <h2>Completions (<%= completions.length %>)</h2>
-  <ul>
-    <% completions.forEach(function(c) { %>
-      <li><strong><%= c.user.displayName %></strong> finished <a href="/books/<%= c.bookId %>"><em><%= c.book.title %></em></a><%= c.completedOn ? ' on ' + c.completedOn.toISOString().slice(0,10) : '' %><%= c.rating ? ' • ' + c.rating + '★' : '' %></li>
-    <% }) %>
-  </ul>
+  <div class="author-section">
+    <h2>Completions <span class="count"><%= completions.length %></span></h2>
+    <ul class="author-list">
+      <% completions.forEach(function(c) { %>
+        <li>
+          <span><strong><%= c.user.displayName %></strong> finished <a href="/books/<%= c.bookId %>"><em><%= c.book.title %></em></a></span>
+          <span class="meta"><%= c.completedOn ? c.completedOn.toISOString().slice(0,10) : '' %><%= c.rating ? ' · ' + '★'.repeat(c.rating) : '' %></span>
+        </li>
+      <% }) %>
+    </ul>
+  </div>
 <% } %>
 
 <% if (trophies.length > 0) { %>
-  <h2>On the Trophy List (<%= trophies.length %>)</h2>
-  <ul>
-    <% trophies.forEach(function(t) { %>
-      <li>🏆 <a href="/books/<%= t.bookId %>"><em><%= t.book.title %></em></a> — requested by <%= t.requestedBy.displayName %></li>
-    <% }) %>
-  </ul>
+  <div class="author-section">
+    <h2>On the Trophy List <span class="count"><%= trophies.length %></span></h2>
+    <ul class="author-list">
+      <% trophies.forEach(function(t) { %>
+        <li>
+          <span>🏆 <a href="/books/<%= t.bookId %>"><em><%= t.book.title %></em></a><% if (t.editionNotes) { %> — <%= t.editionNotes %><% } %></span>
+          <span class="meta">requested by <%= t.requestedBy.displayName %></span>
+        </li>
+      <% }) %>
+    </ul>
+  </div>
 <% } %>
 
 <%- include('_footer') %>

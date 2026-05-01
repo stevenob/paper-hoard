@@ -82,6 +82,22 @@ export async function lendingRoutes(app: FastifyInstance) {
       include: { book: true, addedBy: true },
       orderBy: [{ dueBack: { sort: "asc", nulls: "last" } }, { lentAt: "desc" }],
     });
-    return reply.view("lending.ejs", await withChrome(req, { copies }));
+    // v3.5.13 stats: out, overdue, mean days out.
+    const now = Date.now();
+    let overdueCount = 0;
+    let totalOutMs = 0;
+    let outWithLentAt = 0;
+    for (const c of copies) {
+      if (c.dueBack && new Date(c.dueBack).getTime() < now) overdueCount++;
+      if (c.lentAt) {
+        totalOutMs += now - new Date(c.lentAt).getTime();
+        outWithLentAt++;
+      }
+    }
+    const avgOutDays = outWithLentAt > 0 ? Math.round(totalOutMs / outWithLentAt / 86400000) : 0;
+    return reply.view(
+      "lending.ejs",
+      await withChrome(req, { copies, overdueCount, avgOutDays })
+    );
   });
 }

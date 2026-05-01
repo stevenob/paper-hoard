@@ -1,13 +1,26 @@
 <% const pageTitle = shelf.name %>
 <%- include('_header') %>
 
-<p><a href="/shelves">← all shelves</a></p>
-
-<h1><%= shelf.name %><% if (shelf.isOrdered) { %> <span class="hint">(ordered)</span><% } %></h1>
+<%- include('_page_hero', {
+  icon: '📚',
+  title: shelf.name,
+  modifier: shelf.isOrdered ? 'ordered ▦' : '',
+  blurb: items.length === 0 ? 'No copies on this shelf yet.' : (
+    items.length + ' cop' + (items.length === 1 ? 'y' : 'ies') +
+    (shelf.isOrdered ? ', kept in series order so they line up the way you would read them.' : '.')
+  ),
+  back: { href: '/shelves', label: '← all shelves' },
+  stats: items.length > 0 ? [
+    { value: items.length, label: 'cop' + (items.length === 1 ? 'y' : 'ies') },
+    { value: readCount, label: 'read' },
+    { value: unreadCount, label: 'unread' }
+  ] : null,
+  actions: activeUser ? '<a class="button" href="/library?shelf=' + shelf.slug + '">in library →</a>' : null
+}) %>
 
 <% if (activeUser) { %>
 <details class="shelf-edit">
-  <summary>Edit shelf</summary>
+  <summary>✏️ Edit shelf</summary>
   <form method="post" action="/shelves/<%= shelf.id %>/edit" class="stacked">
     <label>Name <input name="name" value="<%= shelf.name %>" required maxlength="100" /></label>
     <label class="inline"><input type="checkbox" name="isOrdered" <%= shelf.isOrdered ? 'checked' : '' %> /> Ordered (preserve position when listing)</label>
@@ -19,9 +32,7 @@
 </details>
 <% } %>
 
-<% if (items.length === 0) { %>
-  <p>No copies on this shelf yet.</p>
-<% } else { %>
+<% if (items.length > 0) { %>
   <ul class="poster-grid poster-grid-compact">
     <% items.forEach(function(it) {
       const c = it.copy;
@@ -43,7 +54,5 @@
     <% }) %>
   </ul>
 <% } %>
-
-<p class="hint"><a href="/library?shelf=<%= shelf.slug %>">View in library list →</a></p>
 
 <%- include('_footer') %>

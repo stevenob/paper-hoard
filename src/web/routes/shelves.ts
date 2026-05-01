@@ -17,10 +17,21 @@ export async function shelvesRoutes(app: FastifyInstance) {
       ? await prisma.shelf.findMany({
           where: { libraryId: library.id },
           include: { _count: { select: { copies: true } } },
-          orderBy: [{ isOrdered: "desc" }, { name: "asc" }],
+          orderBy: [{ name: "asc" }],
         })
       : [];
-    return reply.view("shelves.ejs", await withChrome(req, { shelves }));
+    // v3.5.13: sort by member count desc so the biggest collections lead.
+    shelves.sort((a, b) => b._count.copies - a._count.copies);
+    const totalOrganised = shelves.reduce((acc, s) => acc + s._count.copies, 0);
+    const orderedCount = shelves.filter((s) => s.isOrdered).length;
+    return reply.view(
+      "shelves.ejs",
+      await withChrome(req, {
+        shelves,
+        totalOrganised,
+        orderedCount,
+      })
+    );
   });
 
   app.get<{ Params: { slug: string } }>("/shelves/:slug", async (req, reply) => {
@@ -36,15 +47,31 @@ export async function shelvesRoutes(app: FastifyInstance) {
       },
     });
     if (!shelf) return reply.status(404).send("Shelf not found");
-    // Re-fetch ordered properly based on shelf.isOrdered (orderBy can't depend
-    // on outer row in one query). Sort in JS.
     const items = [...shelf.copies];
     if (shelf.isOrdered) {
       items.sort((a, b) => (a.position ?? Number.POSITIVE_INFINITY) - (b.position ?? Number.POSITIVE_INFINITY));
     } else {
       items.sort((a, b) => a.copy.book.title.localeCompare(b.copy.book.title));
     }
-    return reply.view("shelf.ejs", await withChrome(req, { shelf, items }));
+    // v3.5.13: read/unread split. A copy counts as read when any user has
+    // marked it as completed.
+    const bookIds = items.map((it) => it.copy.bookId);
+    const readBookIds = bookIds.length
+      ? new Set(
+          (
+            await prisma.completion.findMany({
+              where: { libraryId: library.id, bookId: { in: bookIds } },
+              select: { bookId: true },
+            })
+          ).map((c) => c.bookId)
+        )
+      : new Set<string>();
+    const readCount = items.filter((it) => readBookIds.has(it.copy.bookId)).length;
+    const unreadCount = items.length - readCount;
+    return reply.view(
+      "shelf.ejs",
+      await withChrome(req, { shelf, items, readCount, unreadCount })
+    );
   });
 
   app.post<{ Params: { id: string } }>("/shelves/:id/edit", async (req, reply) => {
