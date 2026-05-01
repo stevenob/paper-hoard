@@ -1,226 +1,288 @@
 <% const pageTitle = copy.book.title %>
 <%- include('_header') %>
 
-<p><a href="/library">← back to library</a> · <a href="/books/<%= copy.bookId %>">all about this book →</a></p>
+<%
+  const cover = copy.coverPath ? '/uploads/' + copy.coverPath : copy.book.thumbnailUrl;
+  function priceDisplay(cents) { return cents == null ? '' : (cents / 100).toFixed(2); }
+  const lentDays = copy.lentTo
+    ? Math.floor((Date.now() - new Date(copy.lentAt).getTime()) / 86400000)
+    : 0;
+  const overdue = copy.lentTo && copy.dueBack && new Date(copy.dueBack).getTime() < Date.now();
+  const photoCount = (copy.photos || []).length;
+  const shelfCount = (copy.shelves || []).length;
+%>
 
-<article class="book-detail">
-  <% const cover = copy.coverPath ? '/uploads/' + copy.coverPath : copy.book.thumbnailUrl %>
-  <% if (cover) { %>
-    <img class="cover" src="<%= cover %>" alt="">
-  <% } %>
-  <div class="book-meta">
-    <h1><%= copy.book.title %></h1>
-    <p class="hint"><% if (copy.book.authors && copy.book.authors.length > 0) { %><% copy.book.authors.forEach(function(a, i) { %><% if (i > 0) { %>, <% } %><% const slug = authorSlug(a); %><% if (slug) { %><a href="/authors/<%= slug %>"><%= a %></a><% } else { %><%= a %><% } %><% }) %><% } else { %>Unknown author<% } %></p>
-    <% if (copy.book.publisher || copy.book.publishedAt) { %>
-      <p class="hint"><%= [copy.book.publisher, copy.book.publishedAt].filter(Boolean).join(' • ') %></p>
-    <% } %>
-    <% if (copy.book.isbn13) { %><p class="hint">ISBN <%= copy.book.isbn13 %></p><% } %>
-    <p class="hint">Added <%= copy.addedAt.toISOString().slice(0,10) %></p>
-    <% if (copy.deletedAt) { %>
-      <p class="notice">This copy is in the Trash (deleted <%= new Date(copy.deletedAt).toISOString().slice(0,10) %>).
-        <% if (activeUser) { %>
-          <form method="post" action="/library/copy/<%= copy.id %>/restore" style="display:inline">
-            <button type="submit">Restore</button>
-          </form>
-        <% } %>
+<p class="copy-crumb"><a href="/library">← back to library</a> · <a href="/books/<%= copy.bookId %>">all about this book →</a></p>
+
+<section class="copy-hero-band">
+  <div class="copy-hero-inner">
+    <div class="copy-hero-cover">
+      <% if (cover) { %>
+        <img src="<%= cover %>" alt="<%= copy.book.title %>" />
+      <% } else { %>
+        <div class="poster-fallback"><span><%= copy.book.title %></span></div>
+      <% } %>
+    </div>
+    <div class="copy-hero-meta">
+      <h1><%= copy.book.title %></h1>
+      <p class="copy-hero-author">
+        <% if (copy.book.authors && copy.book.authors.length > 0) { %>
+          <% copy.book.authors.forEach(function(a, i) { %>
+            <% if (i > 0) { %>, <% } %>
+            <% const slug = authorSlug(a); %>
+            <% if (slug) { %><a href="/authors/<%= slug %>"><%= a %></a><% } else { %><%= a %><% } %>
+          <% }) %>
+        <% } else { %>Unknown author<% } %>
       </p>
+      <p class="hint"><%= [copy.book.publisher, copy.book.publishedAt].filter(Boolean).join(' · ') %></p>
+      <% if (copy.book.isbn13) { %><p class="hint">ISBN <%= copy.book.isbn13 %></p><% } %>
+      <% if (copy.book.seriesName) { %>
+        <p class="hint">📚 <em><%= copy.book.seriesName %></em><% if (copy.book.seriesPosition) { %>, vol. <%= copy.book.seriesPosition %><% } %></p>
+      <% } %>
+      <p class="hint">Added <%= copy.addedAt.toISOString().slice(0,10) %></p>
+
+      <div class="copy-status-row">
+        <% if (copy.edition) { %><span class="pill pill-tag">📕 <%= copy.edition %></span><% } %>
+        <% if (copy.condition) { %><span class="pill pill-tag"><%= copy.condition %></span><% } %>
+        <% if (copy.firstEdition) { %><span class="pill pill-trophy">1st edition</span><% } %>
+        <% if (copy.signed) { %><span class="pill pill-trophy">Signed</span><% } %>
+        <% if (copy.lentTo) { %>
+          <span class="pill <%= overdue ? 'pill-overdue' : 'pill-tag' %>">
+            📤 Lent to <%= copy.lentTo %><% if (overdue) { %> · overdue<% } %>
+          </span>
+        <% } %>
+        <% if (copy.deletedAt) { %><span class="pill pill-overdue">⚠️ In Trash</span><% } %>
+      </div>
+    </div>
+  </div>
+</section>
+
+<% if (copy.deletedAt) { %>
+  <div class="notice" style="margin: 1rem 0;">
+    This copy is in the Trash (deleted <%= new Date(copy.deletedAt).toISOString().slice(0,10) %>).
+    <% if (activeUser) { %>
+      <form method="post" action="/library/copy/<%= copy.id %>/restore" style="display:inline;margin-left:.5rem;">
+        <button type="submit">Restore</button>
+      </form>
     <% } %>
   </div>
-</article>
-
-<h2>Cover photo</h2>
-<% if (!activeUser) { %>
-  <p class="hint"><a href="/auth/login">Log in</a> to upload a cover.</p>
-<% } else { %>
-  <form method="post" action="/library/copy/<%= copy.id %>/cover" enctype="multipart/form-data" class="upload-form">
-    <input type="file" name="cover" accept="image/jpeg,image/png,image/webp,image/gif" required />
-    <button type="submit"><%= copy.coverPath ? 'Replace' : 'Upload' %> cover</button>
-  </form>
-  <p class="hint">JPEG, PNG, WebP, or GIF. Max 5MB. Replaces the metadata thumbnail on this and the book pages.</p>
-  <% if (copy.coverPath) { %>
-    <form method="post" action="/library/copy/<%= copy.id %>/cover/delete" onsubmit="return confirm('Remove the uploaded cover?')">
-      <button type="submit" class="danger">Remove uploaded cover</button>
-    </form>
-  <% } %>
 <% } %>
 
-<h2>Edit this copy</h2>
-
 <% if (!activeUser) { %>
-  <p class="notice">You need to <a href="/auth/login">log in</a> to edit.</p>
+  <p class="notice"><a href="/auth/login">Log in</a> to edit this copy.</p>
 <% } %>
 
-<% function priceDisplay(cents) { return cents == null ? '' : (cents / 100).toFixed(2); } %>
-<form method="post" action="/library/copy/<%= copy.id %>/edit" class="stacked">
-  <fieldset <%= activeUser ? '' : 'disabled' %>>
-    <label>Condition
-      <select name="condition">
-        <option value="">—</option>
-        <% conditions.forEach(function(c) { %>
-          <option value="<%= c %>" <%= copy.condition === c ? 'selected' : '' %>><%= c %></option>
-        <% }) %>
-      </select>
-    </label>
-    <label>Edition
-      <select name="edition">
-        <option value="">—</option>
-        <% editions.forEach(function(e) { %>
-          <option value="<%= e %>" <%= copy.edition === e ? 'selected' : '' %>><%= e %></option>
-        <% }) %>
-      </select>
-    </label>
-    <label>Notes
-      <textarea name="notes" rows="3" maxlength="2000"><%= copy.notes || '' %></textarea>
-    </label>
+<nav class="copy-tabs" role="tablist">
+  <a href="#details" class="copy-tab active" data-tab="details" role="tab">Details</a>
+  <a href="#provenance" class="copy-tab" data-tab="provenance" role="tab">Provenance</a>
+  <a href="#collector" class="copy-tab" data-tab="collector" role="tab">Collector flags</a>
+  <a href="#lending" class="copy-tab" data-tab="lending" role="tab">
+    Lending
+    <% if (copy.lentTo) { %><span class="copy-tab-dot <%= overdue ? 'overdue' : '' %>"></span><% } %>
+  </a>
+  <a href="#photos" class="copy-tab" data-tab="photos" role="tab">
+    Photos<% if (photoCount > 0) { %><span class="copy-tab-badge"><%= photoCount %></span><% } %>
+  </a>
+  <a href="#shelves" class="copy-tab" data-tab="shelves" role="tab">
+    Shelves<% if (shelfCount > 0) { %><span class="copy-tab-badge"><%= shelfCount %></span><% } %>
+  </a>
+  <a href="#manage" class="copy-tab" data-tab="manage" role="tab">Manage</a>
+</nav>
 
-    <h3 style="margin-top:1rem;font-size:1em;">Provenance</h3>
-    <p class="hint" style="margin-top:-.25rem;">Useful for insurance, resale tracking, or just remembering which trip you bought a book on. All optional.</p>
-    <label>Where bought / acquired from
-      <input name="acquiredFrom" value="<%= copy.acquiredFrom || '' %>" maxlength="200" placeholder="Powell's Books, Portland · gift from Anna · library sale 2024" />
-    </label>
-    <label>Acquired on
-      <input type="date" name="acquiredOn" value="<%= copy.acquiredOn ? new Date(copy.acquiredOn).toISOString().slice(0,10) : '' %>" />
-    </label>
-    <label>Price paid
-      <input name="price" inputmode="decimal" value="<%= priceDisplay(copy.priceCents) %>" placeholder="15.99" maxlength="20" />
-      <span class="hint">USD or whatever currency you tend to think in — stored as cents.</span>
-    </label>
+<form method="post" action="/library/copy/<%= copy.id %>/edit" class="copy-edit-form">
+  <fieldset class="copy-edit-fieldset" <%= activeUser ? '' : 'disabled' %>>
 
-    <h3 style="margin-top:1.5rem;font-size:1em;">Edition fidelity</h3>
-    <p class="hint" style="margin-top:-.25rem;">For collectors. Determines real value: a 1st edition / 1st printing is meaningfully different from later printings.</p>
-    <label class="inline">
-      <input type="checkbox" name="firstEdition" value="on" <%= copy.firstEdition ? 'checked' : '' %> />
-      First edition
-    </label>
-    <label class="inline">
-      <input type="checkbox" name="firstPrinting" value="on" <%= copy.firstPrinting ? 'checked' : '' %> />
-      First printing (verify via the number line on the copyright page)
-    </label>
-    <label class="inline">
-      <input type="checkbox" name="signed" value="on" <%= copy.signed ? 'checked' : '' %> />
-      Signed
-    </label>
-    <label class="inline">
-      <input type="checkbox" name="inscribed" value="on" <%= copy.inscribed ? 'checked' : '' %> />
-      Inscribed (signed with a personal note)
-    </label>
-    <label class="inline">
-      <input type="checkbox" name="dustJacketPresent" value="on" <%= copy.dustJacketPresent ? 'checked' : '' %> />
-      Dust jacket present
-    </label>
-    <label>Print line <span class="hint">(verbatim from the copyright page)</span>
-      <input name="printLine" value="<%= copy.printLine || '' %>" maxlength="100" placeholder="10 9 8 7 6 5 4 3 2 1" />
-    </label>
+    <section class="copy-panel active" data-panel="details" role="tabpanel">
+      <label>Condition
+        <select name="condition">
+          <option value="">—</option>
+          <% conditions.forEach(function(c) { %>
+            <option value="<%= c %>" <%= copy.condition === c ? 'selected' : '' %>><%= c %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label>Edition
+        <select name="edition">
+          <option value="">—</option>
+          <% editions.forEach(function(e) { %>
+            <option value="<%= e %>" <%= copy.edition === e ? 'selected' : '' %>><%= e %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label>Notes
+        <textarea name="notes" rows="3" maxlength="2000"><%= copy.notes || '' %></textarea>
+      </label>
+    </section>
 
-    <button type="submit">Save</button>
+    <section class="copy-panel" data-panel="provenance" role="tabpanel">
+      <p class="hint">For insurance, resale tracking, or just remembering which trip you bought a book on. All optional.</p>
+      <div class="copy-field-row">
+        <label>Where bought
+          <input name="acquiredFrom" value="<%= copy.acquiredFrom || '' %>" maxlength="200" placeholder="Powell's Books, Portland · gift from Anna · library sale 2024" />
+        </label>
+        <label>Acquired on
+          <input type="date" name="acquiredOn" value="<%= copy.acquiredOn ? new Date(copy.acquiredOn).toISOString().slice(0,10) : '' %>" />
+        </label>
+      </div>
+      <label>Price paid
+        <input name="price" inputmode="decimal" value="<%= priceDisplay(copy.priceCents) %>" placeholder="15.99" maxlength="20" />
+        <span class="hint">USD or whatever currency you tend to think in — stored as cents.</span>
+      </label>
+    </section>
+
+    <section class="copy-panel" data-panel="collector" role="tabpanel">
+      <p class="hint">For collectors. Determines real value: a 1st edition / 1st printing is meaningfully different from later printings.</p>
+      <div class="copy-field-row">
+        <div>
+          <label class="inline"><input type="checkbox" name="firstEdition" value="on" <%= copy.firstEdition ? 'checked' : '' %> /> First edition</label>
+          <label class="inline"><input type="checkbox" name="firstPrinting" value="on" <%= copy.firstPrinting ? 'checked' : '' %> /> First printing</label>
+          <label class="inline"><input type="checkbox" name="signed" value="on" <%= copy.signed ? 'checked' : '' %> /> Signed</label>
+        </div>
+        <div>
+          <label class="inline"><input type="checkbox" name="inscribed" value="on" <%= copy.inscribed ? 'checked' : '' %> /> Inscribed</label>
+          <label class="inline"><input type="checkbox" name="dustJacketPresent" value="on" <%= copy.dustJacketPresent ? 'checked' : '' %> /> Dust jacket present</label>
+        </div>
+      </div>
+      <label>Print line <span class="hint">(verbatim from the copyright page)</span>
+        <input name="printLine" value="<%= copy.printLine || '' %>" maxlength="100" placeholder="10 9 8 7 6 5 4 3 2 1" />
+      </label>
+    </section>
+
+    <% if (activeUser) { %>
+      <div class="copy-edit-savebar">
+        <button type="submit">Save details / provenance / flags</button>
+        <span class="hint">One Save persists everything in these three tabs.</span>
+      </div>
+    <% } %>
   </fieldset>
 </form>
 
-<h2>Lending</h2>
-<% if (copy.lentTo) { %>
-  <% const days = Math.floor((Date.now() - new Date(copy.lentAt).getTime()) / 86400000); %>
-  <% const overdue = copy.dueBack && new Date(copy.dueBack).getTime() < Date.now(); %>
-  <p class="<%= overdue ? 'error' : 'notice' %>" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
-    <span>📤 Lent to <strong><%= copy.lentTo %></strong>
-      · out for <%= days %> day<%= days === 1 ? '' : 's' %>
-      <% if (copy.dueBack) { %> · due back <%= new Date(copy.dueBack).toISOString().slice(0, 10) %><% if (overdue) { %> <span class="pill" style="background:var(--danger);color:#fff;">overdue</span><% } %><% } %>
-    </span>
-    <% if (activeUser) { %>
-      <form method="post" action="/library/copy/<%= copy.id %>/return" style="display:inline">
-        <button type="submit">Mark returned</button>
+<section class="copy-panel" data-panel="lending" role="tabpanel">
+  <% if (copy.lentTo) { %>
+    <p class="<%= overdue ? 'error' : 'notice' %>" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+      <span>📤 Lent to <strong><%= copy.lentTo %></strong> · out for <%= lentDays %> day<%= lentDays === 1 ? '' : 's' %>
+        <% if (copy.dueBack) { %> · due back <%= new Date(copy.dueBack).toISOString().slice(0,10) %><% if (overdue) { %> <span class="pill" style="background:var(--danger);color:#fff;">overdue</span><% } %><% } %>
+      </span>
+      <% if (activeUser) { %>
+        <form method="post" action="/library/copy/<%= copy.id %>/return" style="display:inline">
+          <button type="submit">Mark returned</button>
+        </form>
+      <% } %>
+    </p>
+  <% } else if (activeUser && !copy.deletedAt) { %>
+    <form method="post" action="/library/copy/<%= copy.id %>/lend" class="stacked" style="max-width:480px;">
+      <fieldset>
+        <label>Lent to <span class="hint">(name or person — free text)</span>
+          <input name="lentTo" maxlength="200" placeholder="Sarah · Mom · Bookclub" required />
+        </label>
+        <label>Due back <span class="hint">(optional)</span>
+          <input name="dueBack" type="date" />
+        </label>
+        <button type="submit">📤 Mark as lent out</button>
+      </fieldset>
+    </form>
+  <% } else { %>
+    <p class="hint">This copy is not currently lent out.</p>
+  <% } %>
+</section>
+
+<section class="copy-panel" data-panel="photos" role="tabpanel" id="photos">
+  <% if (photoCount === 0) { %>
+    <p class="hint">No supplementary photos yet. Use these for the dust jacket, signed pages, damage, or anything worth recording beyond the front cover.</p>
+  <% } else { %>
+    <ul class="photo-gallery">
+      <% copy.photos.forEach(function(p) { %>
+        <li class="photo-tile">
+          <a href="/uploads/<%= p.photoPath %>" target="_blank" rel="noopener">
+            <img src="/uploads/<%= p.photoPath %>" alt="<%= p.label || 'photo' %>" loading="lazy" />
+          </a>
+          <% if (activeUser) { %>
+            <form method="post" action="/library/copy/<%= copy.id %>/photos/<%= p.id %>/label" class="photo-label-form">
+              <input type="text" name="label" value="<%= p.label || '' %>" maxlength="200" placeholder="Label" />
+              <button type="submit">Save</button>
+            </form>
+            <form method="post" action="/library/copy/<%= copy.id %>/photos/<%= p.id %>/delete" onsubmit="return confirm('Delete this photo?')">
+              <button type="submit" class="link danger">remove</button>
+            </form>
+          <% } else if (p.label) { %>
+            <p class="hint"><%= p.label %></p>
+          <% } %>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+  <% if (activeUser) { %>
+    <form method="post" action="/library/copy/<%= copy.id %>/photos" enctype="multipart/form-data" class="upload-form" style="margin-top:1rem;">
+      <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/gif" required />
+      <input type="text" name="label" maxlength="200" placeholder="Label (optional)" />
+      <button type="submit">Add photo</button>
+    </form>
+  <% } %>
+</section>
+
+<section class="copy-panel" data-panel="shelves" role="tabpanel">
+  <% if (shelfCount > 0) { %>
+    <p class="tag-chips">
+      <% copy.shelves.forEach(function(sc) { %>
+        <span class="pill pill-tag">
+          <a href="/shelves/<%= sc.shelf.slug %>"><%= sc.shelf.name %></a>
+          <% if (activeUser) { %>
+            <form method="post" action="/library/copy/<%= copy.id %>/shelves/<%= sc.shelf.id %>/delete" style="display:inline">
+              <button type="submit" title="Remove from shelf" aria-label="Remove from shelf"
+                style="background:transparent;border:0;color:inherit;cursor:pointer;padding:0 0 0 .25rem;">×</button>
+            </form>
+          <% } %>
+        </span>
+      <% }) %>
+    </p>
+  <% } else { %>
+    <p class="hint">Not on any shelves yet.</p>
+  <% } %>
+  <% if (activeUser) { %>
+    <form method="post" action="/library/copy/<%= copy.id %>/shelves" class="add-tag" style="margin-top:1rem;">
+      <input list="shelf-options" name="name" placeholder="Add to shelf (existing or new)" maxlength="100" required />
+      <button type="submit">+</button>
+    </form>
+    <datalist id="shelf-options">
+      <% (libraryShelves || []).forEach(function(s) { %>
+        <option value="<%= s.name %>"></option>
+      <% }) %>
+    </datalist>
+  <% } %>
+</section>
+
+<section class="copy-panel" data-panel="manage" role="tabpanel">
+  <h3 class="copy-section-head">Cover photo</h3>
+  <% if (!activeUser) { %>
+    <p class="hint"><a href="/auth/login">Log in</a> to upload a cover.</p>
+  <% } else { %>
+    <form method="post" action="/library/copy/<%= copy.id %>/cover" enctype="multipart/form-data" class="upload-form">
+      <input type="file" name="cover" accept="image/jpeg,image/png,image/webp,image/gif" required />
+      <button type="submit"><%= copy.coverPath ? 'Replace' : 'Upload' %> cover</button>
+    </form>
+    <p class="hint">JPEG, PNG, WebP, or GIF. Max 5MB. Replaces the metadata thumbnail on this and the book pages.</p>
+    <% if (copy.coverPath) { %>
+      <form method="post" action="/library/copy/<%= copy.id %>/cover/delete" onsubmit="return confirm('Remove the uploaded cover?')" style="margin-top:.75rem;">
+        <button type="submit" class="danger">Remove uploaded cover</button>
       </form>
     <% } %>
-  </p>
-<% } else if (activeUser && !copy.deletedAt) { %>
-  <form method="post" action="/library/copy/<%= copy.id %>/lend" class="stacked" style="max-width:480px;">
-    <fieldset>
-      <label>Lent to <span class="hint">(name or person — free text)</span>
-        <input name="lentTo" maxlength="200" placeholder="Sarah · Mom · Bookclub" required />
-      </label>
-      <label>Due back <span class="hint">(optional)</span>
-        <input name="dueBack" type="date" />
-      </label>
-      <button type="submit">📤 Mark as lent out</button>
-    </fieldset>
-  </form>
-<% } %>
-
-<h2 id="photos">Photos</h2>
-<% if (!copy.photos || copy.photos.length === 0) { %>
-  <p class="hint">No supplementary photos. Use these for the dust jacket, signed pages, damage, or anything else worth recording beyond the front cover.</p>
-<% } else { %>
-  <ul class="photo-gallery">
-    <% copy.photos.forEach(function(p) { %>
-      <li class="photo-tile">
-        <a href="/uploads/<%= p.photoPath %>" target="_blank" rel="noopener">
-          <img src="/uploads/<%= p.photoPath %>" alt="<%= p.label || 'photo' %>" loading="lazy" />
-        </a>
-        <% if (activeUser) { %>
-          <form method="post" action="/library/copy/<%= copy.id %>/photos/<%= p.id %>/label" class="photo-label-form">
-            <input type="text" name="label" value="<%= p.label || '' %>" maxlength="200" placeholder="Label (e.g. signed page)" />
-            <button type="submit">Save</button>
-          </form>
-          <form method="post" action="/library/copy/<%= copy.id %>/photos/<%= p.id %>/delete" onsubmit="return confirm('Delete this photo?')">
-            <button type="submit" class="link danger">remove</button>
-          </form>
-        <% } else if (p.label) { %>
-          <p class="hint"><%= p.label %></p>
-        <% } %>
-      </li>
-    <% }) %>
-  </ul>
-<% } %>
-<% if (activeUser) { %>
-  <form method="post" action="/library/copy/<%= copy.id %>/photos" enctype="multipart/form-data" class="upload-form" style="margin-top:.65rem;">
-    <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/gif" required />
-    <input type="text" name="label" maxlength="200" placeholder="Label (optional)" />
-    <button type="submit">Add photo</button>
-  </form>
-<% } %>
-
-<h2>Shelves</h2>
-<% if (copy.shelves && copy.shelves.length > 0) { %>
-  <p class="tag-chips">
-    <% copy.shelves.forEach(function(sc) { %>
-      <span class="pill pill-tag">
-        <a href="/shelves/<%= sc.shelf.slug %>"><%= sc.shelf.name %></a>
-        <% if (activeUser) { %>
-          <form method="post" action="/library/copy/<%= copy.id %>/shelves/<%= sc.shelf.id %>/delete" style="display:inline">
-            <button type="submit" title="Remove from shelf" aria-label="Remove from shelf"
-              style="background:transparent;border:0;color:inherit;cursor:pointer;padding:0 0 0 .25rem;">×</button>
-          </form>
-        <% } %>
-      </span>
-    <% }) %>
-  </p>
-<% } else { %>
-  <p class="hint">Not on any shelves.</p>
-<% } %>
-<% if (activeUser) { %>
-  <form method="post" action="/library/copy/<%= copy.id %>/shelves" class="add-tag">
-    <input list="shelf-options" name="name" placeholder="Add to shelf (existing or new)" maxlength="100" required />
-    <button type="submit">+</button>
-  </form>
-  <datalist id="shelf-options">
-    <% (libraryShelves || []).forEach(function(s) { %>
-      <option value="<%= s.name %>"></option>
-    <% }) %>
-  </datalist>
-<% } %>
-
-<% if (activeUser) { %>
-  <h2>Danger zone</h2>
-  <% if (copy.deletedAt) { %>
-    <p class="hint">Already in Trash. Use the <a href="/trash">trash page</a> to restore or delete forever.</p>
-  <% } else { %>
-    <form method="post" action="/library/copy/<%= copy.id %>/delete" onsubmit="return confirm('Move this copy to Trash? You can restore it for the next 30 days.')">
-      <button type="submit" class="danger">Move to Trash</button>
-    </form>
-    <p class="hint">Soft-deleted. Restore from <a href="/trash">/trash</a> within 30 days.</p>
   <% } %>
-<% } %>
+
+  <% if (activeUser) { %>
+    <h3 class="copy-section-head" style="margin-top:2rem;">Danger zone</h3>
+    <% if (copy.deletedAt) { %>
+      <p class="hint">Already in Trash. Use the <a href="/trash">trash page</a> to restore or delete forever.</p>
+    <% } else { %>
+      <form method="post" action="/library/copy/<%= copy.id %>/delete" onsubmit="return confirm('Move this copy to Trash? You can restore it for the next 30 days.')">
+        <button type="submit" class="danger">Move to Trash</button>
+      </form>
+      <p class="hint" style="margin-top:.5rem;">Soft-deleted. Restore from <a href="/trash">/trash</a> within 30 days.</p>
+    <% } %>
+  <% } %>
+</section>
 
 <% if (completions.length > 0) { %>
+  <hr style="border:0;border-top:1px solid var(--rule);margin:3rem 0 1.5rem;">
   <h2>Completions of this title</h2>
   <ul>
     <% completions.forEach(function(c) { %>
@@ -229,5 +291,38 @@
   </ul>
 <% } %>
 
-<%- include('_footer') %>
+<script>
+  (function() {
+    const tabs = document.querySelectorAll('.copy-tab');
+    const panels = document.querySelectorAll('.copy-panel');
+    function activate(tabName) {
+      let matched = false;
+      tabs.forEach(function(t) {
+        const on = t.dataset.tab === tabName;
+        t.classList.toggle('active', on);
+        if (on) matched = true;
+      });
+      panels.forEach(function(p) {
+        p.classList.toggle('active', p.dataset.panel === tabName);
+      });
+      return matched;
+    }
+    function fromHash() {
+      const h = window.location.hash.replace(/^#/, '');
+      if (h && activate(h)) return;
+      activate('details');
+    }
+    tabs.forEach(function(t) {
+      t.addEventListener('click', function(e) {
+        e.preventDefault();
+        const tab = t.dataset.tab;
+        history.replaceState(null, '', '#' + tab);
+        activate(tab);
+      });
+    });
+    window.addEventListener('hashchange', fromHash);
+    fromHash();
+  })();
+</script>
 
+<%- include('_footer') %>

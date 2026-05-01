@@ -844,3 +844,156 @@ body.camera-open { overflow: hidden; }
 .saved-scan-actions button.link-skip {
   border: 0; background: transparent; color: var(--muted);
 }
+
+/* --- Copy detail (v3.5.3 tabbed redesign) -------------------------- */
+.copy-crumb { color: var(--accent); margin: 0 0 1rem; }
+.copy-crumb a { color: inherit; text-decoration: none; }
+.copy-crumb a:hover { text-decoration: underline; }
+
+.copy-hero-band {
+  position: relative;
+  margin: 0 -2rem 0;
+  padding: 3rem 2rem 2.5rem;
+  background: radial-gradient(ellipse at center -50%, var(--accent-glow), transparent 60%);
+  border-bottom: 1px solid var(--rule);
+}
+.copy-hero-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 2.5rem;
+  align-items: end;
+}
+.copy-hero-cover {
+  width: 220px;
+}
+.copy-hero-cover img,
+.copy-hero-cover .poster-fallback {
+  width: 220px;
+  aspect-ratio: 2/3;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  object-fit: cover;
+  display: block;
+}
+.copy-hero-meta h1 {
+  margin: 0 0 .35rem;
+  font-size: 2.5rem;
+  line-height: 1.05;
+}
+.copy-hero-author {
+  color: var(--accent);
+  font-size: 1.1rem;
+  margin: 0 0 .65rem;
+}
+.copy-hero-author a { color: inherit; text-decoration: none; }
+.copy-hero-author a:hover { text-decoration: underline; }
+.copy-hero-meta .hint { margin: .25rem 0; }
+.copy-status-row {
+  display: flex; flex-wrap: wrap; gap: .5rem;
+  margin-top: 1.25rem;
+}
+.pill-overdue {
+  background: rgba(239, 83, 80, .18);
+  color: var(--danger);
+}
+
+/* Tabs */
+.copy-tabs {
+  display: flex;
+  gap: 0;
+  margin: 2rem 0 0;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.copy-tabs::-webkit-scrollbar { display: none; }
+.copy-tab {
+  padding: .85rem 1.15rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: .92rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+  display: inline-flex; align-items: center; gap: .35rem;
+}
+.copy-tab:hover { color: var(--fg); text-decoration: none; }
+.copy-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.copy-tab-badge {
+  display: inline-block;
+  min-width: 1.5em; height: 1.5em; padding: 0 .4em;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: .75em;
+  line-height: 1.5em;
+  text-align: center;
+  color: var(--muted);
+  font-weight: 500;
+}
+.copy-tab.active .copy-tab-badge { color: var(--accent); border-color: var(--accent); }
+.copy-tab-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-left: .25rem;
+}
+.copy-tab-dot.overdue { background: var(--danger); }
+
+/* Panels */
+.copy-panel { display: none; padding: 1.75rem 0; }
+.copy-panel.active { display: block; }
+.copy-panel > .hint:first-child { margin-top: 0; }
+.copy-section-head {
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--muted);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  margin: 0 0 .75rem;
+}
+
+.copy-edit-form { margin: 0; }
+.copy-edit-fieldset { border: 0; padding: 0; margin: 0; }
+.copy-edit-fieldset:disabled .copy-panel input,
+.copy-edit-fieldset:disabled .copy-panel select,
+.copy-edit-fieldset:disabled .copy-panel textarea { opacity: .6; }
+.copy-edit-savebar {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+.copy-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.copy-panel label { display: grid; gap: .25rem; margin: .75rem 0; }
+.copy-panel label.inline { display: flex; align-items: center; gap: .5rem; margin: .5rem 0; }
+.copy-panel input:not([type="checkbox"]):not([type="file"]),
+.copy-panel select,
+.copy-panel textarea {
+  padding: .55rem .65rem;
+  font: inherit;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+@media (max-width: 720px) {
+  .copy-hero-band { margin: 0 -1.5rem; padding: 2rem 1.5rem 1.5rem; }
+  .copy-hero-inner { grid-template-columns: 1fr; gap: 1.5rem; text-align: left; }
+  .copy-hero-cover { width: 160px; }
+  .copy-hero-cover img,
+  .copy-hero-cover .poster-fallback { width: 160px; }
+  .copy-hero-meta h1 { font-size: 2rem; }
+  .copy-field-row { grid-template-columns: 1fr; }
+}
