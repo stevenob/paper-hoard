@@ -1,7 +1,7 @@
 <%
   /**
    * Shared page hero used across /shelves, /shelves/:slug, /authors/:slug,
-   * /lending, /trophies. Render with `<%- include('_page_hero', locals) %>`.
+   * /lending, /trophies. Render with the include syntax in your view.
    *
    * Locals (all optional except title):
    *   - icon       : emoji rendered inside the h1 (e.g. "📚"). Default: none.
@@ -12,6 +12,12 @@
    *   - stats      : array of { value, label } shown as a stat row.
    *   - actions    : raw HTML to render in the right-aligned actions column.
    *   - tint       : 'gold' | 'green' | 'red' | 'steel' | undefined.
+   *
+   * NOTE: do NOT include literal EJS tags in this comment. EJS does not
+   * skip its own tags inside JS comments — it scans the raw template
+   * source for percent-tag pairs. A literal "open-percent dash" sequence
+   * here will prematurely close the surrounding scriptlet block and
+   * break the file with "Could not find matching close tag" at boot.
    */
   // Defensive locals access. Some EJS configurations don't merge parent
   // scope into includes — referencing an undeclared variable directly
