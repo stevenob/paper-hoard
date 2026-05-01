@@ -24,6 +24,7 @@ import { exportRoutes } from "./exports.js";
 import { labelRoutes } from "./labels.js";
 import { lendingRoutes } from "./lending.js";
 import { authorMergeRoutes } from "./author-merge.js";
+import { seriesRoutes } from "./series.js";
 import { scheduleAutoBackup } from "./_auto-backup.js";
 import { logger } from "../../shared/logger.js";
 
@@ -53,6 +54,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await labelRoutes(app);
   await lendingRoutes(app);
   await authorMergeRoutes(app);
+  await seriesRoutes(app);
 
   // Sweep soft-deleted copies older than 30 days at boot, then daily.
   void sweepDeletedCopies()

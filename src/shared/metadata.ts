@@ -293,3 +293,121 @@ export async function thingIsbn(rawIsbn: string): Promise<string[]> {
     return [];
   }
 }
+
+/**
+ * Open Library series search. There's no direct "books in this series"
+ * API, but the search endpoint accepts `series:"<name>"` as a query
+ * filter. Returns up to 50 entries; we dedupe by title and filter the
+ * obvious noise (audio editions, omnibuses) before showing on the
+ * series detail page.
+ */
+export interface SeriesEntry {
+  title: string;
+  authors: string[];
+  isbn13?: string;
+  isbn10?: string;
+  thumbnailUrl?: string;
+  publishedYear?: number;
+  /** Position in the series, parsed from OL's free-text "series" field. */
+  position?: number;
+  /** OL Work key for linking to the OL page (e.g. "/works/OL12345W"). */
+  olWorkId?: string;
+}
+
+interface OLSeriesSearchDoc {
+  title?: string;
+  author_name?: string[];
+  isbn?: string[];
+  cover_i?: number;
+  first_publish_year?: number;
+  series?: string[]; // e.g. ["Mistborn, #1", "Mistborn, Book 1"]
+  key?: string; // "/works/OL12345W"
+}
+
+export async function searchOpenLibrarySeries(seriesName: string): Promise<SeriesEntry[]> {
+  const trimmed = seriesName.trim();
+  if (trimmed.length < 2) return [];
+  const url = new URL("https://openlibrary.org/search.json");
+  // Quoted phrase + series field qualifier. OL ranks exact-phrase matches first.
+  url.searchParams.set("q", `series:"${trimmed}"`);
+  url.searchParams.set("limit", "50");
+  url.searchParams.set(
+    "fields",
+    "title,author_name,isbn,cover_i,first_publish_year,series,key"
+  );
+  try {
+    const { statusCode, body } = await request(url.toString(), {
+      headersTimeout: 8000,
+      bodyTimeout: 8000,
+    });
+    if (statusCode >= 400) {
+      logger.warn({ statusCode }, "OL series search failed");
+      return [];
+    }
+    const json = (await body.json()) as { docs?: OLSeriesSearchDoc[] };
+    const docs = json.docs ?? [];
+    const target = trimmed.toLowerCase();
+    const entries: SeriesEntry[] = [];
+    for (const d of docs) {
+      const title = (d.title ?? "").trim();
+      if (!title) continue;
+      // Sanity check: OL series search returns plenty of irrelevant work
+      // when the qualifier isn't honored; skip docs whose `series` array
+      // doesn't actually mention the requested series name.
+      const seriesArr = d.series ?? [];
+      const mentioned = seriesArr.some((s) => s.toLowerCase().includes(target));
+      if (!mentioned) continue;
+      // Heuristic noise filter: audiobook editions, study guides, etc.
+      const lower = title.toLowerCase();
+      if (
+        lower.includes("audio") ||
+        lower.includes("study guide") ||
+        lower.includes("summary of") ||
+        lower.includes("analysis of")
+      ) {
+        continue;
+      }
+      entries.push({
+        title,
+        authors: d.author_name ?? [],
+        isbn13: d.isbn?.find((i) => i.length === 13),
+        isbn10: d.isbn?.find((i) => i.length === 10),
+        thumbnailUrl: d.cover_i
+          ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg`
+          : undefined,
+        publishedYear: d.first_publish_year,
+        position: extractSeriesPosition(seriesArr, target),
+        olWorkId: d.key ?? undefined,
+      });
+    }
+    // Dedup by lowercased title (drops omnibuses with same title).
+    const seen = new Set<string>();
+    const deduped: SeriesEntry[] = [];
+    for (const e of entries) {
+      const key = e.title.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(e);
+    }
+    return deduped;
+  } catch (err) {
+    logger.debug({ err, seriesName }, "OL series search error");
+    return [];
+  }
+}
+
+/**
+ * Pull a numeric position out of OL's freeform series strings.
+ * Examples: "Mistborn, #2" → 2, "Foundation; 3" → 3,
+ *           "The Expanse, Book 4" → 4. Returns undefined if nothing
+ *           plausible matches.
+ */
+function extractSeriesPosition(seriesArr: string[], targetLower: string): number | undefined {
+  for (const s of seriesArr) {
+    if (!s.toLowerCase().includes(targetLower)) continue;
+    // Match "#3", "Book 3", "Vol. 3", "Part 3", or just a trailing number.
+    const m = s.match(/(?:#|book\s+|vol\.?\s+|volume\s+|part\s+|,\s*)\s*(\d+(?:\.\d+)?)\s*$/i);
+    if (m) return Number.parseFloat(m[1]);
+  }
+  return undefined;
+}

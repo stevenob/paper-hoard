@@ -21,7 +21,7 @@
     <h1><%= book.title %></h1>
     <p class="hint"><% if (book.authors && book.authors.length > 0) { %><% book.authors.forEach(function(a, i) { %><% if (i > 0) { %>, <% } %><% const slug = authorSlug(a); %><% if (slug) { %><a href="/authors/<%= slug %>"><%= a %></a><% } else { %><%= a %><% } %><% }) %><% } else { %>Unknown author<% } %></p>
     <% if (book.seriesName) { %>
-      <p class="hint">📚 <em><%= book.seriesName %></em><% if (book.seriesPosition) { %>, vol. <%= book.seriesPosition %><% } %></p>
+      <p class="hint">📚 <a href="/series?name=<%= encodeURIComponent(book.seriesName) %>"><em><%= book.seriesName %></em></a><% if (book.seriesPosition) { %>, vol. <%= book.seriesPosition %><% } %></p>
     <% } %>
     <% if (book.publisher || book.publishedAt) { %>
       <p class="hint"><%= [book.publisher, book.publishedAt].filter(Boolean).join(' • ') %></p>

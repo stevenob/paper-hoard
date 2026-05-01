@@ -1,0 +1,115 @@
+<% const pageTitle = seriesName + ' — series' %>
+<%- include('_header') %>
+
+<%
+  function escapeAttr(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+  function fmtAuthors(a) { return (a || []).join(', '); }
+  function olWorkUrl(id) { return id && id.startsWith('/') ? 'https://openlibrary.org' + id : null; }
+%>
+
+<%- include('_page_hero', {
+  icon: '📚',
+  title: seriesName,
+  blurb: olEmpty
+    ? 'Showing only books you own — Open Library didn\u2019t return any series matches for this name.'
+    : (author ? 'A series by ' + author + '. Owned books look like normal posters; missing entries dim with a MISSING pill.' : 'Owned books look like normal posters; missing entries dim with a MISSING pill.'),
+  back: { href: '/library', label: '← back to library' },
+  stats: tiles.length > 0 ? [
+    { value: ownedCount, label: 'owned' },
+    missingCount > 0 ? { value: missingCount, label: 'missing' } : null,
+    earliestYear ? { value: earliestYear, label: 'first published' } : null
+  ] : null
+}) %>
+
+<% if (tiles.length === 0) { %>
+  <p class="hint">No books found in this series.</p>
+<% } else { %>
+  <ul class="poster-grid series-grid">
+    <% tiles.forEach(function(t) {
+      const cover = t.thumbnailUrl;
+      const ownedHref = t.copyId ? '/library/copy/' + t.copyId : (t.bookId ? '/books/' + t.bookId : null);
+      const olHref = olWorkUrl(t.olWorkId);
+      const href = t.status === 'owned' ? ownedHref : (t.trophyId ? '/trophies' : (olHref || '#'));
+      const klass = t.status === 'owned' ? '' : (t.status === 'trophy' ? 'wishlisted' : 'missing');
+    %>
+      <li class="poster <%= klass %>">
+        <a class="poster-link <%= klass %>" href="<%= href %>"<%= t.status !== 'owned' && olHref ? ' target="_blank" rel="noopener"' : '' %> aria-label="<%= escapeAttr(t.title) %>">
+          <div class="poster-cover<%= cover ? '' : ' no-cover' %>"<%= cover ? '' : '' %>>
+            <% if (cover) { %>
+              <img src="<%= cover %>" alt="" loading="lazy" />
+            <% } else { %>
+              <span class="series-cover-fallback"><%= t.title %></span>
+            <% } %>
+            <% if (t.position != null) { %>
+              <span class="series-pos-badge">#<%= Number.isInteger(t.position) ? t.position : t.position.toFixed(1) %></span>
+            <% } %>
+            <% if (t.status === 'missing') { %>
+              <span class="series-status-pill missing">MISSING</span>
+            <% } else if (t.status === 'trophy') { %>
+              <span class="series-status-pill trophy">⭐ ON LIST</span>
+            <% } %>
+          </div>
+          <div class="poster-meta">
+            <strong class="poster-title"><%= t.title %></strong>
+            <% if (t.authors && t.authors.length) { %>
+              <span class="poster-author"><%= fmtAuthors(t.authors) %></span>
+            <% } %>
+            <% if (t.publishedYear) { %>
+              <span class="series-year">
+                <%= t.publishedYear %>
+                <% if (t.status === 'missing' && activeUser && t.isbn) { %>
+                  · <button type="button" class="series-add-trophy" data-isbn="<%= t.isbn %>" data-title="<%= escapeAttr(t.title) %>" data-author="<%= escapeAttr(t.authors[0] || '') %>">＋ trophy</button>
+                <% } %>
+              </span>
+            <% } %>
+          </div>
+        </a>
+      </li>
+    <% }) %>
+  </ul>
+<% } %>
+
+<% if (activeUser) { %>
+<script>
+  // Quick-add a missing book to the trophy list. Reuses the existing
+  // /trophies/new endpoint with the pickedBook payload — same shape the
+  // search modal sends so the server treats it identically.
+  document.querySelectorAll('.series-add-trophy').forEach(function(btn) {
+    btn.addEventListener('click', async function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = '…';
+      try {
+        const isbn = btn.dataset.isbn;
+        const title = btn.dataset.title;
+        const author = btn.dataset.author;
+        const res = await fetch('/trophies/new', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pickedBook: {
+              title: title,
+              authors: author ? [author] : [],
+              isbn13: isbn && isbn.length === 13 ? isbn : undefined,
+              isbn10: isbn && isbn.length === 10 ? isbn : undefined,
+              source: 'open_library'
+            }
+          })
+        });
+        if (!res.ok) throw new Error('failed');
+        // Replace the cell with the gold ⭐ ON LIST pill in place.
+        btn.textContent = '✓ added';
+        setTimeout(function() { window.location.reload(); }, 600);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = original;
+        alert('Failed to add. ' + (err && err.message ? err.message : ''));
+      }
+    });
+  });
+</script>
+<% } %>
+
+<%- include('_footer') %>

@@ -37,7 +37,7 @@
       <p class="hint"><%= [copy.book.publisher, copy.book.publishedAt].filter(Boolean).join(' · ') %></p>
       <% if (copy.book.isbn13) { %><p class="hint">ISBN <%= copy.book.isbn13 %></p><% } %>
       <% if (copy.book.seriesName) { %>
-        <p class="hint">📚 <em><%= copy.book.seriesName %></em><% if (copy.book.seriesPosition) { %>, vol. <%= copy.book.seriesPosition %><% } %></p>
+        <p class="hint">📚 <a href="/series?name=<%= encodeURIComponent(copy.book.seriesName) %>"><em><%= copy.book.seriesName %></em></a><% if (copy.book.seriesPosition) { %>, vol. <%= copy.book.seriesPosition %><% } %></p>
       <% } %>
       <p class="hint">Added <%= copy.addedAt.toISOString().slice(0,10) %></p>
 

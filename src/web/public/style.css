@@ -2234,3 +2234,59 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
     padding: .35rem .25rem; min-height: 36px;
   }
 }
+
+/* --- v3.5.32 series detail page ----------------------------------- */
+.series-grid .poster-link.missing,
+.series-grid .poster-link.wishlisted { opacity: .72; transition: opacity .18s ease; }
+.series-grid .poster-link.missing:hover,
+.series-grid .poster-link.wishlisted:hover { opacity: 1; }
+
+.series-pos-badge {
+  position: absolute; top: .45rem; left: .45rem; z-index: 2;
+  padding: .15rem .45rem; border-radius: 999px;
+  background: rgba(0, 0, 0, .65); color: #fff;
+  font-size: .65rem; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  backdrop-filter: blur(4px);
+}
+
+.series-status-pill {
+  position: absolute; top: .45rem; right: .45rem; z-index: 2;
+  padding: .15rem .55rem; border-radius: 999px;
+  font-size: .6rem; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 600; letter-spacing: .04em;
+  backdrop-filter: blur(4px);
+}
+.series-status-pill.missing {
+  background: rgba(0, 0, 0, .6); color: rgba(255, 255, 255, .85);
+  border: 1px solid rgba(255, 255, 255, .25);
+}
+.series-status-pill.trophy {
+  background: var(--gold, #d4a843); color: #1a1815;
+}
+
+.series-cover-fallback {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: rgba(255, 255, 255, .9);
+  font-family: 'Fraunces', Georgia, serif; font-style: italic;
+  text-align: center; padding: .6rem;
+  font-size: .85rem; line-height: 1.2;
+}
+.poster-cover.no-cover {
+  background: repeating-linear-gradient(
+    45deg, #3a3530, #3a3530 10px, #2a2520 10px, #2a2520 20px
+  );
+}
+
+.series-year {
+  display: block; color: var(--muted);
+  font-size: .72rem; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  margin-top: .2rem;
+}
+.series-add-trophy {
+  background: transparent; border: 0; padding: 0;
+  color: var(--accent); cursor: pointer;
+  font: inherit; font-size: .72rem;
+}
+.series-add-trophy:hover { color: var(--accent-soft); text-decoration: underline; }
+.series-add-trophy:disabled { color: var(--muted); cursor: wait; }
