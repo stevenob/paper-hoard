@@ -1,7 +1,11 @@
 <% const pageTitle = 'Import' %>
 <%- include('_header') %>
 
-<h1>Bulk CSV import</h1>
+<%- include('_page_hero', {
+  icon: '📥',
+  title: 'Bulk CSV import',
+  blurb: "Pull in your library from Goodreads, StoryGraph, or a generic CSV. Each row triggers an ISBN/title lookup, so big exports take a few minutes — wait for the summary."
+}) %>
 
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 
@@ -9,65 +13,77 @@
   <p class="notice">You need to <a href="/auth/login">log in</a> to import.</p>
 <% } %>
 
-<form method="post" action="/import" enctype="multipart/form-data" class="stacked">
-  <fieldset <%= activeUser ? '' : 'disabled' %>>
-    <label>Format
-      <select name="format" required>
-        <option value="generic">Generic (columns: isbn, title, author, condition, edition, location, notes, mediaType, source, completedOn, rating)</option>
-        <option value="goodreads">Goodreads export (My Books → Tools → Import/Export)</option>
-        <option value="storygraph">StoryGraph export (Manage Account → Export Data)</option>
-      </select>
-    </label>
-    <label>What to import
-      <select name="type" required>
-        <option value="physical">Physical copies (adds to your library)</option>
-        <option value="trophy">Trophy list (Goodreads "to-read" shelf → wishlist)</option>
-        <option value="completion">Completions (adds to your reading log)</option>
-      </select>
-    </label>
-    <label>CSV file
+<form method="post" action="/import" enctype="multipart/form-data" class="form-card">
+  <fieldset <%= activeUser ? '' : 'disabled' %> style="border:0;padding:0;margin:0;min-width:0;">
+    <div class="form-section">
+      <h3 class="form-section-h">1. Pick your source</h3>
+      <div class="form-row">
+        <div>
+          <label>Format</label>
+          <select name="format" required>
+            <option value="generic">Generic (isbn, title, author, …)</option>
+            <option value="goodreads">Goodreads export</option>
+            <option value="storygraph">StoryGraph export</option>
+          </select>
+        </div>
+        <div>
+          <label>What to import</label>
+          <select name="type" required>
+            <option value="physical">Physical copies (adds to your library)</option>
+            <option value="trophy">Trophy list (Goodreads to-read → wishlist)</option>
+            <option value="completion">Completions (reading log)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="form-section">
+      <h3 class="form-section-h">2. Upload your CSV</h3>
       <input type="file" name="csv" accept=".csv,text/csv" required />
-    </label>
-    <button type="submit">Import</button>
-    <p class="hint">
-      Each row triggers an ISBN/title lookup against Google Books + Open Library
-      with a small delay so we stay polite. Expect ~1 second per row, so a 500-row
-      Goodreads export takes ~10 minutes. Don't navigate away — wait for the
-      summary.
-    </p>
+      <p style="margin:.7rem 0 0;color:var(--muted);font-size:.8rem">Each row triggers a lookup with a polite ~1s delay. A 500-row Goodreads export takes ~10 minutes — don't navigate away until the summary appears.</p>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="primary">📥 Import</button>
+      <a href="/library" class="cancel">cancel</a>
+    </div>
   </fieldset>
 </form>
 
 <% if (summary) { %>
-  <h2>Import summary</h2>
-  <p>
-    <strong><%= summary.imported %></strong> imported,
-    <strong><%= summary.skipped %></strong> skipped,
-    out of <strong><%= summary.total %></strong> rows.
-  </p>
+  <div class="import-summary">
+    <div class="import-stat ok"><div class="v"><%= summary.imported %></div><div class="l">imported</div></div>
+    <div class="import-stat warn"><div class="v"><%= summary.skipped %></div><div class="l">skipped</div></div>
+    <div class="import-stat<%= summary.errors.length > 0 ? ' err' : '' %>"><div class="v"><%= summary.errors.length %></div><div class="l">errors</div></div>
+    <div class="import-stat"><div class="v"><%= summary.total %></div><div class="l">total rows</div></div>
+  </div>
   <% if (summary.warnings.length > 0) { %>
-    <h3>Parser warnings</h3>
-    <ul class="hint">
-      <% summary.warnings.slice(0, 20).forEach(function(w) { %>
-        <li><%= w %></li>
-      <% }) %>
-    </ul>
+    <div class="admin-card" style="margin-bottom:1rem">
+      <h3 style="margin:0 0 .55rem;font-family:'Fraunces',serif;font-weight:500;font-size:1rem">Parser warnings</h3>
+      <ul class="hint" style="margin:0;padding-left:1.2rem">
+        <% summary.warnings.slice(0, 20).forEach(function(w) { %>
+          <li><%= w %></li>
+        <% }) %>
+      </ul>
+    </div>
   <% } %>
   <% if (summary.errors.length > 0) { %>
-    <h3>Skipped rows</h3>
-    <table class="data">
-      <thead><tr><th>Row</th><th>Title</th><th>Reason</th></tr></thead>
-      <tbody>
-        <% summary.errors.slice(0, 50).forEach(function(e) { %>
-          <tr>
-            <td data-label="Row"><%= e.row %></td>
-            <td data-label="Title"><%= e.title || '—' %></td>
-            <td data-label="Reason"><%= e.reason %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-    <% if (summary.errors.length > 50) { %><p class="hint">… and <%= summary.errors.length - 50 %> more.</p><% } %>
+    <div class="admin-card">
+      <h3 style="margin:0 0 .85rem;font-family:'Fraunces',serif;font-weight:500;font-size:1rem">Skipped rows <span style="color:var(--muted);font-size:.85rem">(<%= summary.errors.length %>)</span></h3>
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        <thead style="color:var(--muted);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em">
+          <tr><th style="text-align:left;padding:.4rem .5rem">Row</th><th style="text-align:left;padding:.4rem .5rem">Title</th><th style="text-align:left;padding:.4rem .5rem">Reason</th></tr>
+        </thead>
+        <tbody>
+          <% summary.errors.slice(0, 50).forEach(function(e) { %>
+            <tr>
+              <td style="padding:.5rem;border-top:1px solid var(--rule)"><%= e.row %></td>
+              <td style="padding:.5rem;border-top:1px solid var(--rule)"><%= e.title || '—' %></td>
+              <td style="padding:.5rem;border-top:1px solid var(--rule);color:var(--muted)"><%= e.reason %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <% if (summary.errors.length > 50) { %><p class="hint" style="margin-top:.55rem">… and <%= summary.errors.length - 50 %> more.</p><% } %>
+    </div>
   <% } %>
 <% } %>
 

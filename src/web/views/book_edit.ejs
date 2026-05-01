@@ -1,27 +1,53 @@
 <% const pageTitle = 'Edit ' + book.title %>
 <%- include('_header') %>
 
-<p><a href="/books/<%= book.id %>">← back</a></p>
-
-<h1>Edit metadata</h1>
+<%- include('_page_hero', {
+  icon: '✏️',
+  title: 'Edit metadata',
+  modifier: book.title,
+  blurb: "Use this when Google Books / Open Library has wrong info. Marks the book as source: manual so future scans of the same ISBN don't overwrite your edits.",
+  back: { href: '/books/' + book.id, label: '← back to book' }
+}) %>
 
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 <% if (!activeUser) { %><p class="notice">You need to <a href="/auth/login">log in</a> to edit metadata.</p><% } %>
 
-<p class="hint">Use this when Google Books / Open Library has wrong info.
-Marks the book as <code>source: manual</code> so future scans of the same ISBN don't overwrite your edits.</p>
-
-<form method="post" action="/books/<%= book.id %>/edit" class="stacked">
-  <fieldset <%= activeUser ? '' : 'disabled' %>>
-    <label>Title <input name="title" value="<%= book.title %>" required maxlength="500" /></label>
-    <label>Authors (comma-separated) <input name="authors" value="<%= (book.authors || []).join(', ') %>" maxlength="1000" /></label>
-    <label>Publisher <input name="publisher" value="<%= book.publisher || '' %>" maxlength="200" /></label>
-    <label>Published <input name="publishedAt" value="<%= book.publishedAt || '' %>" placeholder="2021-05-04" maxlength="50" /></label>
-    <label>ISBN-13 <input name="isbn13" value="<%= book.isbn13 || '' %>" maxlength="13" inputmode="numeric" /></label>
-    <label>Cover image URL <input name="thumbnailUrl" value="<%= book.thumbnailUrl || '' %>" maxlength="2000" placeholder="https://…" /></label>
-    <label>Series name <input name="seriesName" value="<%= book.seriesName || '' %>" maxlength="200" placeholder="Foundation · Discworld · The Expanse" /></label>
-    <label>Series position <input name="seriesPosition" type="number" step="0.1" value="<%= book.seriesPosition || '' %>" placeholder="3" /></label>
-    <button type="submit">Save</button>
+<form method="post" action="/books/<%= book.id %>/edit" class="form-card">
+  <fieldset <%= activeUser ? '' : 'disabled' %> style="border:0;padding:0;margin:0;min-width:0;">
+    <div class="form-section">
+      <h3 class="form-section-h">Identity</h3>
+      <div class="form-row full">
+        <div><label>Title</label><input type="text" name="title" value="<%= book.title %>" required maxlength="500" /></div>
+      </div>
+      <div class="form-row">
+        <div><label>Authors <span class="hint">(comma-separated)</span></label><input type="text" name="authors" value="<%= (book.authors || []).join(', ') %>" maxlength="1000" /></div>
+        <div><label>ISBN-13</label><input type="text" name="isbn13" value="<%= book.isbn13 || '' %>" maxlength="13" inputmode="numeric" /></div>
+      </div>
+    </div>
+    <div class="form-section">
+      <h3 class="form-section-h">Publishing</h3>
+      <div class="form-row">
+        <div><label>Publisher</label><input type="text" name="publisher" value="<%= book.publisher || '' %>" maxlength="200" /></div>
+        <div><label>Published</label><input type="text" name="publishedAt" value="<%= book.publishedAt || '' %>" placeholder="2021-05-04" maxlength="50" /></div>
+      </div>
+    </div>
+    <div class="form-section">
+      <h3 class="form-section-h">Series</h3>
+      <div class="form-row">
+        <div><label>Series name</label><input type="text" name="seriesName" value="<%= book.seriesName || '' %>" maxlength="200" placeholder="Foundation · Discworld" /></div>
+        <div><label>Series position</label><input type="number" name="seriesPosition" step="0.1" value="<%= book.seriesPosition || '' %>" placeholder="3" /></div>
+      </div>
+    </div>
+    <div class="form-section">
+      <h3 class="form-section-h">Cover</h3>
+      <div class="form-row full">
+        <div><label>Cover image URL</label><input type="text" name="thumbnailUrl" value="<%= book.thumbnailUrl || '' %>" maxlength="2000" placeholder="https://…" /></div>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="primary">💾 Save</button>
+      <a href="/books/<%= book.id %>" class="cancel">cancel</a>
+    </div>
   </fieldset>
 </form>
 

@@ -1,39 +1,61 @@
 <% const pageTitle = 'Trash' %>
 <%- include('_header') %>
 
-<h1>🗑 Trash</h1>
-<p class="hint">Soft-deleted copies. Restore them or permanently remove. Anything left here for 30 days is hard-deleted automatically.</p>
+<%
+  function daysSinceMs(d) { return Math.floor((Date.now() - new Date(d).getTime()) / 86400000); }
+%>
+
+<%- include('_page_hero', {
+  icon: '🗑',
+  title: 'Trash',
+  blurb: 'Soft-deleted copies. Restore them or permanently remove. Anything left here for ' + autoPurgeAfterDays + ' days is hard-deleted automatically.',
+  stats: copies.length > 0 ? [
+    { value: copies.length, label: 'in trash' },
+    purgesThisWeek > 0 ? { value: purgesThisWeek, label: 'auto-purges this week' } : null
+  ] : null,
+  tint: 'red'
+}) %>
 
 <% if (copies.length === 0) { %>
   <p class="hint">Trash is empty.</p>
 <% } else { %>
-  <table class="data">
-    <thead>
-      <tr><th>Title</th><th>Authors</th><th>Deleted</th><th>By</th><th></th></tr>
-    </thead>
-    <tbody>
-      <% copies.forEach(function(c) { %>
-        <tr>
-          <td data-label="Title"><%= c.book.title %></td>
-          <td data-label="Authors"><%= c.book.authors.join(', ') %></td>
-          <td data-label="Deleted"><%= c.deletedAt ? new Date(c.deletedAt).toISOString().slice(0,16).replace('T', ' ') : '' %></td>
-          <td data-label="Originally added by"><%= c.addedBy.displayName %></td>
-          <td>
-            <% if (activeUser) { %>
-              <form method="post" action="/library/copy/<%= c.id %>/restore" style="display:inline">
-                <button type="submit">Restore</button>
-              </form>
-              <form method="post" action="/library/copy/<%= c.id %>/hard-delete" style="display:inline" onsubmit="return confirm('Permanently delete this copy? This cannot be undone.')">
-                <button type="submit" class="danger">Delete forever</button>
-              </form>
-            <% } else { %>
-              <span class="hint">log in to restore</span>
-            <% } %>
-          </td>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
+  <ul class="admin-list">
+    <% copies.forEach(function(c) {
+      const ageDays = c.deletedAt ? daysSinceMs(c.deletedAt) : 0;
+      const remaining = autoPurgeAfterDays - ageDays;
+      const cover = c.coverPath ? '/uploads/' + c.coverPath : c.book.thumbnailUrl;
+    %>
+      <li class="trash-row">
+        <% if (cover) { %>
+          <img class="cover" src="<%= cover %>" alt="" loading="lazy" />
+        <% } else { %>
+          <span class="cover" aria-hidden="true"></span>
+        <% } %>
+        <div class="meta">
+          <em><%= c.book.title %></em>
+          <div class="author"><%= c.book.authors.join(', ') %></div>
+          <div class="deletion">
+            deleted <%= c.deletedAt ? new Date(c.deletedAt).toISOString().slice(0,10) : '' %>
+            · by <%= c.addedBy.displayName %>
+            · <%= remaining > 0 ? 'auto-purges in ' + remaining + 'd' : 'past purge window — pending sweep' %>
+            <% if (remaining > 0 && remaining <= 7) { %><span class="warn"> ⚠</span><% } %>
+          </div>
+        </div>
+        <div class="actions">
+          <% if (activeUser) { %>
+            <form method="post" action="/library/copy/<%= c.id %>/restore">
+              <button type="submit" class="restore">↺ Restore</button>
+            </form>
+            <form method="post" action="/library/copy/<%= c.id %>/hard-delete" onsubmit="return confirm('Permanently delete this copy? This cannot be undone.')">
+              <button type="submit" class="danger">delete forever</button>
+            </form>
+          <% } else { %>
+            <span class="hint">log in to restore</span>
+          <% } %>
+        </div>
+      </li>
+    <% }) %>
+  </ul>
 <% } %>
 
 <%- include('_footer') %>

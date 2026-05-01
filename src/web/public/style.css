@@ -1801,3 +1801,171 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
 .author-list li em { font-family: 'Fraunces', Georgia, serif; font-style: italic; }
 .author-list li a { color: var(--accent); text-decoration: none; }
 .author-list li a:hover { color: var(--accent-soft); text-decoration: underline; }
+
+/* --- v3.5.14 admin pass: extra hero tints + shared admin patterns --- */
+.page-hero.red { background: radial-gradient(circle at 92% 0%, rgba(239,83,80,.16), transparent 55%); }
+.page-hero.steel { background: radial-gradient(circle at 92% 0%, rgba(120,140,180,.14), transparent 55%); }
+.page-hero.red .page-hero-stat strong { color: #f49795; }
+.page-hero.steel .page-hero-stat strong { color: #a8b6d6; }
+
+.admin-card {
+  background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+  padding: 1.25rem 1.4rem;
+}
+.admin-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .55rem; }
+
+/* Form shell: card-wrapped, grouped sections with accent rule */
+.form-card {
+  background: var(--card); border: 1px solid var(--rule); border-radius: 12px;
+  padding: 1.5rem; max-width: 720px;
+}
+.form-section { margin-bottom: 1.5rem; }
+.form-section:last-of-type { margin-bottom: 1rem; }
+.form-section-h {
+  font-family: 'Fraunces', Georgia, serif; font-size: 1rem; font-weight: 500;
+  margin: 0 0 .9rem; color: var(--fg);
+}
+.form-section-h::after {
+  content: ""; display: block; width: 32px; height: 2px;
+  background: var(--accent); margin-top: .4rem; border-radius: 2px; opacity: .6;
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; margin-bottom: .85rem; }
+.form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.form-row.full { grid-template-columns: 1fr; }
+.form-row > div > label,
+.form-card label {
+  display: block; font-size: .78rem; color: var(--muted);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: .04em; text-transform: uppercase; margin-bottom: .3rem;
+}
+.form-card label .hint {
+  text-transform: none; color: var(--muted);
+  font-family: inherit; letter-spacing: 0; font-size: .85em;
+}
+.form-card input[type=text],
+.form-card input[type=number],
+.form-card input[type=file],
+.form-card select,
+.form-card textarea {
+  width: 100%; padding: .55rem .75rem;
+  background: var(--input-bg, var(--bg)); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--fg); font-size: .9rem; font-family: inherit;
+}
+.form-card textarea { min-height: 3em; resize: vertical; }
+.form-actions { display: flex; gap: .55rem; align-items: center; margin-top: .5rem; }
+.form-actions button.primary {
+  background: var(--accent); border: 1px solid var(--accent); color: #fff;
+  font-weight: 600; padding: .6rem 1.1rem; border-radius: 8px; cursor: pointer;
+  font-family: inherit; font-size: .9rem; box-shadow: 0 4px 14px var(--accent-glow);
+}
+.form-actions button.primary:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
+.form-actions button.ghost {
+  background: transparent; border: 1px solid var(--border); color: var(--fg);
+  padding: .6rem 1rem; border-radius: 8px; cursor: pointer;
+  font-family: inherit; font-size: .85rem;
+}
+.form-actions a.cancel {
+  color: var(--muted); font-size: .85rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace; text-decoration: none;
+}
+.form-actions a.cancel:hover { color: var(--accent); }
+
+/* /trash card row */
+.trash-row {
+  display: grid; grid-template-columns: 40px 1fr auto; gap: 1rem;
+  align-items: center; padding: .85rem 1rem;
+  background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+}
+.trash-row .cover {
+  width: 40px; aspect-ratio: 2/3; border-radius: 4px;
+  background: linear-gradient(135deg, #3a4a5a, #1a2030);
+  box-shadow: 0 2px 6px rgba(0,0,0,.3); object-fit: cover;
+}
+.trash-row .meta em { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-size: .95rem; }
+.trash-row .meta .author { color: var(--muted); font-size: .78rem; }
+.trash-row .meta .deletion { color: var(--muted); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .74rem; margin-top: .25rem; }
+.trash-row .meta .deletion .warn { color: var(--warn); }
+.trash-row .actions { display: flex; gap: .4rem; }
+.trash-row .actions form { display: inline; margin: 0; }
+.trash-row .actions button {
+  padding: .4rem .7rem; border-radius: 6px; font-size: .78rem; cursor: pointer;
+  font-family: inherit; border: 1px solid var(--border);
+  background: transparent; color: var(--fg);
+}
+.trash-row .actions button.restore:hover { border-color: var(--success); color: var(--success); }
+.trash-row .actions button.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+/* /audit timeline */
+.audit-timeline { display: flex; flex-direction: column; gap: .45rem; }
+.audit-row {
+  display: grid; grid-template-columns: 130px 110px 1fr auto; gap: 1rem;
+  align-items: center; padding: .6rem .9rem;
+  background: var(--card); border: 1px solid var(--rule); border-radius: 8px;
+  font-size: .85rem;
+}
+.audit-when { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .72rem; color: var(--muted); }
+.audit-who { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-size: .95rem; }
+.audit-what { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .78rem; color: var(--muted); }
+.audit-what .verb { color: var(--accent); font-weight: 500; margin-right: .25rem; }
+.audit-what .verb.create { color: var(--success); }
+.audit-what .verb.update { color: var(--warn); }
+.audit-what .verb.delete { color: var(--danger); }
+.audit-what code { background: var(--bg); padding: .05rem .35rem; border-radius: 3px; font-size: .85em; }
+.audit-row .id { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .7rem; color: var(--muted); white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.audit-pager {
+  display: flex; gap: .85rem; align-items: center; justify-content: center;
+  margin-top: 1.25rem;
+}
+.audit-pager a, .audit-pager span {
+  color: var(--accent); font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: .78rem; text-decoration: none;
+}
+.audit-pager span { color: var(--muted); }
+
+/* /import summary tiles */
+.import-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: .85rem; margin: 1.25rem 0;
+}
+.import-stat {
+  padding: .85rem 1rem; background: var(--card); border: 1px solid var(--rule);
+  border-radius: 8px; text-align: center;
+}
+.import-stat .v {
+  font-family: 'Fraunces', Georgia, serif; font-style: italic;
+  font-size: 1.7rem; font-weight: 500; line-height: 1;
+}
+.import-stat .l {
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .7rem;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-top: .3rem;
+}
+.import-stat.ok .v { color: var(--success); }
+.import-stat.warn .v { color: var(--warn); }
+.import-stat.err .v { color: var(--danger); }
+
+/* /users avatar rows */
+.user-row {
+  display: grid; grid-template-columns: 40px 1fr auto; gap: 1rem;
+  align-items: center; padding: .7rem 1rem;
+  background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+}
+.user-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--gold, #d4a843));
+  display: grid; place-items: center;
+  color: #fff; font-family: 'Fraunces', Georgia, serif; font-style: italic;
+  font-size: 1.05rem; font-weight: 600;
+  flex: 0 0 auto;
+}
+.user-name { font-family: 'Fraunces', Georgia, serif; font-size: 1rem; font-weight: 500; }
+.user-name .you { margin-left: .35rem; color: var(--accent); font-style: italic; font-size: .78rem; }
+.user-meta { color: var(--muted); font-size: .78rem; font-family: 'JetBrains Mono', ui-monospace, monospace; margin-top: .15rem; }
+.user-row .right { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .74rem; color: var(--muted); white-space: nowrap; }
+
+@media (max-width: 600px) {
+  .form-row, .form-row.three { grid-template-columns: 1fr; }
+  .audit-row { grid-template-columns: 1fr; gap: .25rem; }
+  .audit-row .id { white-space: normal; max-width: none; }
+  .trash-row, .user-row { grid-template-columns: 40px 1fr; }
+  .trash-row .actions, .user-row .right { grid-column: 1 / -1; justify-content: flex-end; }
+}

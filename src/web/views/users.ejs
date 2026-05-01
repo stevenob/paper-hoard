@@ -1,28 +1,61 @@
 <% const pageTitle = 'Household' %>
 <%- include('_header') %>
 
-<h1>Household members</h1>
+<%
+  // Two cosmetic helpers: an initial letter for the avatar, and a stable
+  // colour pick from a small palette so each user gets a consistent hue.
+  function initialOf(name) { return (name || '?').slice(0, 1).toUpperCase(); }
+  const avatarPalettes = [
+    ['#e07050', '#d4a843'],
+    ['#4ec27d', '#3a8f5a'],
+    ['#5865f2', '#3a4099'],
+    ['#d4a843', '#e07050'],
+    ['#9b6dd4', '#5e3aa0'],
+    ['#52b6c1', '#2e7a85'],
+  ];
+  function paletteFor(id) {
+    let h = 0;
+    const s = String(id || '');
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return avatarPalettes[Math.abs(h) % avatarPalettes.length];
+  }
+  function fmtDate(d) { return new Date(d).toISOString().slice(0, 10); }
+%>
 
-<p class="hint">Members are automatically added the first time they log in with Discord.</p>
+<%- include('_page_hero', {
+  icon: '👥',
+  title: 'Household members',
+  blurb: 'Members are automatically added the first time they log in with Discord. Anyone with access to your Discord channel can add to the library.',
+  stats: memberships.length > 0 ? [
+    { value: memberCount, label: 'member' + (memberCount === 1 ? '' : 's') },
+    libraryCount > 1 ? { value: libraryCount, label: 'libraries' } : null
+  ] : null
+}) %>
 
 <% if (memberships.length === 0) { %>
   <p>No one has logged in yet.</p>
 <% } else { %>
-  <table class="data">
-    <thead>
-      <tr><th>Name</th><th>Discord ID</th><th>Library</th><th>Joined</th></tr>
-    </thead>
-    <tbody>
-      <% memberships.forEach(function(m) { %>
-        <tr>
-          <td><%= m.user.displayName %><% if (activeUser && activeUser.id === m.user.id) { %> <span class="hint">(you)</span><% } %></td>
-          <td><code><%= m.user.discordUserId %></code></td>
-          <td><%= m.library.name %></td>
-          <td><%= m.createdAt.toISOString().slice(0,10) %></td>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
+  <ul class="admin-list">
+    <% memberships.forEach(function(m) {
+      const isYou = activeUser && activeUser.id === m.user.id;
+      const pal = paletteFor(m.user.id);
+      const copies = copiesAddedByUserId[m.user.id] || 0;
+    %>
+      <li class="user-row">
+        <span class="user-avatar" style="background:linear-gradient(135deg, <%= pal[0] %>, <%= pal[1] %>)"><%= initialOf(m.user.displayName) %></span>
+        <div>
+          <div class="user-name"><%= m.user.displayName %><% if (isYou) { %><span class="you">(you)</span><% } %></div>
+          <div class="user-meta">
+            discord <code><%= m.user.discordUserId %></code>
+            · joined <%= fmtDate(m.createdAt) %>
+            <% if (copies > 0) { %> · <%= copies %> cop<%= copies === 1 ? 'y' : 'ies' %> added<% } %>
+            <% if (libraryCount > 1) { %> · <%= m.library.name %><% } %>
+          </div>
+        </div>
+        <span class="right"></span>
+      </li>
+    <% }) %>
+  </ul>
 <% } %>
 
 <%- include('_footer') %>

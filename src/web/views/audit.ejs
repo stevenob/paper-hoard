@@ -1,35 +1,42 @@
 <% const pageTitle = 'Audit log' %>
 <%- include('_header') %>
 
-<h1>Audit log</h1>
-<p class="hint"><%= total %> entries total. Page <%= page %> of <%= totalPages %>.</p>
+<%- include('_page_hero', {
+  icon: '📜',
+  title: 'Audit log',
+  blurb: 'Every change anyone makes is recorded here, append-only. Useful when you want to know who deleted that, or when this trophy went onto the list.',
+  stats: total > 0 ? [
+    { value: total.toLocaleString(), label: 'entries total' },
+    { value: 'page&thinsp;' + page, label: 'of ' + totalPages }
+  ] : null,
+  tint: 'steel'
+}) %>
 
 <% if (rows.length === 0) { %>
   <p>No activity yet.</p>
 <% } else { %>
-  <table class="data">
-    <thead>
-      <tr><th>When</th><th>Who</th><th>Action</th><th>Entity</th><th>ID</th><th>Details</th></tr>
-    </thead>
-    <tbody>
-      <% rows.forEach(function(r) { %>
-        <tr>
-          <td data-label="When"><%= r.createdAt.toISOString().replace('T',' ').slice(0,19) %></td>
-          <td data-label="Who"><%= r.userId ? (usersById.get(r.userId) ? usersById.get(r.userId).displayName : r.userId) : 'system' %></td>
-          <td data-label="Action"><%= r.action %></td>
-          <td data-label="Entity"><%= r.entity %></td>
-          <td data-label="ID"><code><%= r.entityId %></code></td>
-          <td data-label="Details"><% if (r.details) { %><code><%= JSON.stringify(r.details) %></code><% } %></td>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
+  <div class="audit-timeline">
+    <% rows.forEach(function(r) {
+      const verbClass = r.action === 'create' ? 'create' : r.action === 'delete' ? 'delete' : r.action === 'update' ? 'update' : '';
+    %>
+      <div class="audit-row">
+        <div class="audit-when"><%= r.createdAt.toISOString().replace('T',' ').slice(0,19) %></div>
+        <div class="audit-who"><%= r.userId ? (usersById.get(r.userId) ? usersById.get(r.userId).displayName : r.userId) : 'system' %></div>
+        <div class="audit-what">
+          <span class="verb <%= verbClass %>"><%= r.action %></span>
+          <%= r.entity %>
+          <code><%= r.entityId %></code>
+        </div>
+        <div class="id"><% if (r.details) { %><%= JSON.stringify(r.details) %><% } %></div>
+      </div>
+    <% }) %>
+  </div>
 
   <% if (totalPages > 1) { %>
-    <nav class="pager">
-      <% if (page > 1) { %><a href="/audit?page=<%= page - 1 %>">← prev</a><% } %>
-      <span class="hint">page <%= page %> / <%= totalPages %></span>
-      <% if (page < totalPages) { %><a href="/audit?page=<%= page + 1 %>">next →</a><% } %>
+    <nav class="audit-pager">
+      <% if (page > 1) { %><a href="/audit?page=<%= page - 1 %>">← prev</a><% } else { %><span>← prev</span><% } %>
+      <span>page <%= page %> / <%= totalPages %></span>
+      <% if (page < totalPages) { %><a href="/audit?page=<%= page + 1 %>">next →</a><% } else { %><span>next →</span><% } %>
     </nav>
   <% } %>
 <% } %>

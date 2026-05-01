@@ -17,7 +17,16 @@ export async function trashRoutes(app: FastifyInstance) {
       include: { book: true, addedBy: true },
       orderBy: { deletedAt: "desc" },
     });
-    return reply.view("trash.ejs", await withChrome(req, { copies }));
+    // Stats: how many will auto-purge in the next 7 days. The sweeper deletes
+    // anything > 30 days old; ≤7 days remaining means deletedAt > 23 days old.
+    const sevenDayThreshold = new Date(Date.now() - 23 * 24 * 60 * 60 * 1000);
+    const purgesThisWeek = copies.filter(
+      (c) => c.deletedAt && new Date(c.deletedAt).getTime() < sevenDayThreshold.getTime()
+    ).length;
+    return reply.view(
+      "trash.ejs",
+      await withChrome(req, { copies, purgesThisWeek, autoPurgeAfterDays: 30 })
+    );
   });
 
   app.post<{ Params: { id: string } }>(
