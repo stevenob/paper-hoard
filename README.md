@@ -1,77 +1,143 @@
 # Paper Hoard
 
-A self-hosted physical book library + Discord bot for households.
+> Self-hosted physical book library for households — scan a barcode in a bookstore to instantly check whether you already own the book or have it on your wishlist.
 
-> Track the books you own, scan a barcode in a bookstore to instantly check whether you already have it, and never accidentally buy *Project Hail Mary* twice again.
+[![Tag](https://img.shields.io/github/v/tag/stevenob/paper-hoard?label=release)](https://github.com/stevenob/paper-hoard/tags)
+[![License](https://img.shields.io/badge/license-personal-lightgrey)](#license)
 
-## What it does
+Paper Hoard is a single-household app for tracking the physical books on your shelves. It's built around a simple use case:
 
-- **Physical Library** — every book you own physically, scanned by ISBN or photo, organized into shelves.
-- **Trophy List** — books you'd like to own ("wishlist"). Smaug DMs you when someone in the household acquires one.
-- **Field lookup** — open the scanner on your phone in a bookstore aisle, scan the barcode, get an instant **"already owned"** or **"on trophy list"** chip from a local cache. Works offline.
-- **Smaug** — Discord bot: `/scan`, `/library`, `/trophies`, `/found <isbn>` for quick checks from chat.
-- **Web UI** — cover grid, fuzzy search, bulk edit, book merge, catalog stats, JSON+CSV export, automated backups, QR spine labels, multi-photo per copy.
+> You're standing in a bookstore aisle. You see a book you might already own. You'd rather not buy *Project Hail Mary* twice. Open the app on your phone, point the camera at the barcode, and within a second you know.
 
-Discord identity is the source of truth. Scope is one library per Discord guild (one household).
+## ✨ Features
 
-## Features at a glance
+### 📷 Field scanning
+- **Phone-camera barcode reader** with a big landscape reticle, scan-line animation, and an instant "🟢 already owned / 🟡 already on wishlist / ⚪ new" status pill — even offline, served from a local ISBN cache
+- **Bulk mode** for shelf-inventory sweeps: every successful scan auto-adds, with a horizontal cover filmstrip showing what was just captured and an "↶ undo last" button
+- **Photo upload** path for awkward scanning conditions; ZXing decodes from the static image
+- **Manual entry** for ISBN-less editions (vintage, self-published, regional reprints)
+- **iOS Shortcut friendly** — `?isbn=…` URL parameter triggers the same flow
 
-| Area | What you get |
-| --- | --- |
-| **Scanning** | Phone camera (ZXing), two-frame confirmation, speculative server lookup, bulk mode for shelf inventory, photo upload, manual ISBN/title/author entry, iOS Shortcut friendly (`?isbn=` URL param), QR spine-sticker scan |
-| **Field lookup** | Instant "already owned / on trophy list" chip from a local ISBN cache (works offline), confirmation card with cover + rating + edition + dedupe |
-| **Match repair** | Inline edit on confirm card (title/authors/publisher/edition), missing-author rescue prompt, refetch metadata button on book detail, manual book entry for ISBN-less editions |
-| **Metadata** | Google Books primary, Open Library fallback, DB-cached on re-scan, manual override per book, OL ratings cached with stale-after-7-days refresh |
-| **Browse** | Cover grid, list view with checkbox bulk-edit, fuzzy search via Postgres pg_trgm, sort/filter, per-book detail, per-author page (`/authors/<slug>`), per-shelf page, paginated 60/page |
-| **Catalog quality** | `/library/dupes` book merge tool, `/stats` completeness dashboard, one-click cover backfill, bulk shelf/edition/condition assignment |
-| **Provenance** | Per-copy `acquiredFrom`, `acquiredOn`, `priceCents`, multi-photo gallery (dust jacket, signed page, damage), catalog value rollup |
-| **Trophy** | Auto-detected on scan with one-tap acquisition; Smaug DMs the requester when fulfilled. Optional reason capture in field. Goodreads "Want to Read" CSV import |
-| **Backup** | Daily automatic JSON dump per library (30-day retention), CSV + JSON export endpoints, "Run backup now" button on /about |
-| **Operations** | Audit log, /about page with counts, soft-delete + 30-day trash sweeper + undo toast, public share link with regenerable slug, healthz endpoint |
-| **Physical tools** | `/library/labels` generates print-ready QR spine stickers; scanning a sticker deep-links to the copy detail |
-| **Quality of life** | PWA install, dark mode (auto + manual), service worker for offline scanning, accessibility (focus rings, ARIA, Esc closes camera), Tailscale-friendly |
+### 📚 Library management
+- **Cover-grid + list views** with sort, filter, and Postgres `pg_trgm` fuzzy search
+- **Bulk edit** — tick rows to add/remove from shelves, set edition/condition, mark as part of a series with auto-numbering, or trash
+- **Multi-photo per copy** — dust jacket, signed page, damage closeups
+- **Per-copy provenance**: `acquiredFrom`, `acquiredOn`, `priceCents`, condition, edition
+- **Soft delete** with a 30-day trash sweeper, undo toast, and restore action
 
-## Quick start (local dev)
+### 🏆 Trophy list (wishlist)
+- **Smart-search add modal** — type a title or paste an ISBN, pick from live Google Books / Open Library results, set max price + edition notes + reason
+- **Auto-detect on scan** — when you scan a book that's on your wishlist, the confirm sheet shows a 🏆 badge and offers a "Mark FOUND" action
+- **Public share page** at `/share/<slug>/wishlist` (regenerable slug) — perfect for sharing your wishlist with family before holidays
+- **Aged badge** on items >180 days old so they don't quietly rot at the bottom of the list
+- **Goodreads "Want to Read" CSV import**
 
-Requires Node 22+ and Docker.
+### 📐 Catalog quality
+- **Cover backfill** with a cascading lookup: Google Books → Open Library `-L` → Open Library `-M` → LibraryThing sister-edition cover (free dev key) → manual upload prompt
+- **Activity log** during repair runs — shows each book's outcome (kept / repaired / nulled) live, with `📷 add cover` quick-link on failures
+- **Author backfill** — a phase-1 cheap pass copies `authors[0]` into `primaryAuthor`, then a phase-2 ISBN lookup fills empty entries
+- **Duplicate book merge** at `/library/dupes`
+- **Author dupe merge** at `/authors/dupes`
+
+### 📚 Series + shelves
+- **Series detail page** at `/series?name=<name>` — merges your owned books with what Open Library knows about the series, sorted by volume number; missing books get a `MISSING` pill and a one-click `+ trophy` quick-add
+- **Netflix-style shelf rails** — `/shelves` shows one horizontal poster row per shelf, with auto-generated rails for every series you own books from
+- **Ordered shelves** preserve volume position per shelf membership
+- **QR spine stickers** at `/library/labels` — print-ready, scanning a sticker deep-links to the copy detail
+
+### 🤖 Smaug (Discord bot)
+- Slash commands: `/scan <isbn>`, `/library`, `/trophies`, `/found <isbn>`, `/random [shelf]`
+- DMs the requester when their trophy gets fulfilled
+- Notifies the configured channel on new acquisitions
+
+### 📊 Operations
+- `/about` — combined dashboard with KPIs (active copies, completeness %, top authors, oldest/newest, most-expensive, lending tracker), backup/share/Discord widgets, and live cover-repair tools
+- `/audit` — append-only log of every change, color-coded by verb (`create` / `update` / `delete`)
+- **Daily auto-backup** with 30-day retention; manual "Run backup now" button
+- **CSV + JSON export** endpoints
+- **Lending tracker** at `/lending` — record who borrowed what; due-date warnings + overdue badges
+- **Healthz endpoint** for uptime monitoring
+
+### 📱 Mobile
+- **PWA** — "Add to Home Screen" works on iOS and Android
+- **Hamburger drawer** for the nav at narrow widths
+- **Touch-target floor** of 44px on all buttons
+- **Sticky form-action bar** on long forms so submit is always one tap away
+- **Service-worker offline shell** keeps the camera UI usable on dead cellular signal
+
+### 🎨 Visual identity
+- Inky Paper palette: warm-white / terracotta-accent in light mode, deep-charcoal / coral in dark mode
+- Fraunces (display) + Inter (body) + JetBrains Mono (numerics)
+- Auto theme toggle that persists across sessions
+
+## 🚀 Quick start (local dev)
+
+Requires **Node.js 22+** and **Docker**.
 
 ```bash
-cp .env.example .env                # set DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_IDS, COOKIE_SECRET
+git clone https://github.com/stevenob/paper-hoard.git
+cd paper-hoard
+cp .env.example .env             # fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, etc.
 npm install
 npm run build
 
+# spin up Postgres
 docker run -d --name paperhoard-pg \
   -e POSTGRES_USER=paperhoard -e POSTGRES_PASSWORD=paperhoard -e POSTGRES_DB=paperhoard \
   -p 5432:5432 postgres:16-alpine
-npx prisma migrate deploy
 
-npm run dev:web                     # http://localhost:3000
-npm run register-commands           # one-time, when slash command set changes
-npm run dev:bot                     # only if you have a Discord token
+npx prisma migrate deploy
+npm run dev:web                  # http://localhost:3000
+npm run register-commands        # one-time, when slash command set changes
+npm run dev:bot                  # only needed if testing the Discord bot
 ```
 
-## Self-hosting on TrueNAS SCALE
+Required env vars:
 
-See [`truenas/README.md`](truenas/README.md). Recommended path: **GHCR-published image + Caddy or Tailscale-served HTTPS**.
+| Var | What it's for |
+| --- | --- |
+| `DATABASE_URL` | Postgres connection string |
+| `DISCORD_TOKEN` | Smaug bot token from the Developer Portal |
+| `DISCORD_CLIENT_ID` | Smaug application ID |
+| `DISCORD_GUILD_IDS` | Comma-separated guild IDs to register slash commands in |
+| `COOKIE_SECRET` | Random 32+ char string for session cookies |
 
-1. Run the GitHub Actions workflow once (push a `vX.Y.Z` tag).
-2. Make the GHCR package public.
-3. Install **`compose.published-with-caddy.yml`** as a Custom App in TrueNAS.
-4. After that, every new tag → `Restart` in the TrueNAS Apps UI, no SSH.
+Optional but recommended:
 
-The TrueNAS guide also covers:
+| Var | What it's for |
+| --- | --- |
+| `DISCORD_CLIENT_SECRET` | Required for Discord OAuth web login |
+| `GOOGLE_BOOKS_API_KEY` | Higher rate limits than the anonymous tier |
+| `LIBRARYTHING_DEVKEY` | Enables sister-edition cover-repair fallback |
+| `WEB_BASE_URL` | Public URL — used for Discord links, share pages, OAuth redirects |
+| `UPLOADS_DIR` | Where cover photos are stored — bind-mount to a snapshot-able path |
+| `BACKUPS_DIR` | Where daily backups land — bind-mount too |
 
-- Mounting Postgres + uploads + backups + Caddy data on snapshot-able datasets
-- Trusting Caddy's local CA on iPhone for LAN access
-- **Tailscale + `tailscale serve`** for off-LAN access with real Let's Encrypt certs and zero public exposure
+## 🏠 Self-hosting on TrueNAS SCALE
+
+The `truenas/` directory has everything you need:
+
+- **`compose.published.yml`** — pulls the prebuilt image from GHCR (`ghcr.io/stevenob/paper-hoard:latest`)
+- **`compose.published-with-caddy.yml`** — same plus a Caddy reverse proxy with self-signed local CA
+- **`compose.local-image.yml`** — for testing local builds before pushing
+- **`compose.build.yml`** — builds from source inside the container (slowest, useful when iterating without GHCR)
+- **`Caddyfile`** — sample reverse-proxy config for `obrienserver.local` style hostnames
+
+Highlights of what the truenas guide covers:
+
+- Mounting Postgres + uploads + backups + Caddy data on snapshot-able TrueNAS datasets
+- Trusting Caddy's local CA on iOS for LAN access
+- **Tailscale + `tailscale serve`** for off-LAN access with real Let's Encrypt certs and zero public exposure (no port-forwarding required)
 - Discord OAuth setup for web login
-- The TrueNAS Apps UI YAML quirks to watch out for
+- The TrueNAS Apps UI YAML quirks to watch out for (no anchors, quote Discord IDs, etc.)
 
-## Architecture
+After initial setup, every new `vX.Y.Z` git tag triggers GitHub Actions to publish a new GHCR image. Bump the image tag in your TrueNAS app config (or leave it on `latest`) and click **Restart** — no SSH required.
 
-- **Node.js 22 + TypeScript**, single repo, two entrypoints (`bot`, `web`) sharing a `shared/` module
-- **Fastify + EJS** for the web UI (server-rendered HTML, minimal JS, vanilla service worker)
-- **discord.js v14** for Smaug (slash commands + buttons + modals)
+## 🏗 Architecture
+
+- **Node.js 22 + TypeScript** — single repo, two entrypoints (`web`, `bot`) sharing a `shared/` module
+- **Fastify + EJS** for the web UI — server-rendered HTML, vanilla JS islands for interactivity, single hand-written `style.css`
+- **discord.js v14** for Smaug
 - **Prisma + Postgres 16** with `pg_trgm` for fuzzy search
 - **ZXing-js** vendored for in-browser barcode + QR decoding
 - **`qrcode`** for server-rendered SVG spine labels
@@ -80,21 +146,21 @@ The TrueNAS guide also covers:
 
 Single household = single library. Multi-library is in the parking lot but not implemented.
 
-## Project layout
+## 📂 Project layout
 
 ```
-prisma/schema.prisma         Data model
-prisma/migrations/           Hand-written SQL migrations (prisma migrate deploy)
-src/shared/                  DB, env, logger, metadata providers, audit, notifications, search, exports
-src/bot/                     Smaug entrypoint + slash command handlers + notification poller
-src/web/                     Fastify routes + EJS views + public assets (sw.js, ui.js, style.css)
-src/scripts/                 One-off maintenance scripts (e.g. backfill-editions, backfill-ratings)
-tests/                       Vitest smoke tests (boots the app via fastify.inject)
-truenas/                     Compose files + Caddyfile + deployment guide
-.github/workflows/           CI — image publish on tag
+prisma/schema.prisma          Data model
+prisma/migrations/            Hand-written SQL migrations (prisma migrate deploy)
+src/shared/                   DB, env, logger, metadata providers, audit, notifications
+src/bot/                      Smaug entrypoint + slash command handlers
+src/web/                      Fastify routes + EJS views + public assets (sw.js, ui.js, style.css)
+src/scripts/                  One-off maintenance scripts
+tests/                        Vitest smoke tests (boots the app via fastify.inject)
+truenas/                      Compose files + Caddyfile + deployment guide
+.github/workflows/            CI — image publish on tag
 ```
 
-## Useful commands
+## 🧰 Useful commands
 
 | Command | What it does |
 | --- | --- |
@@ -107,6 +173,24 @@ truenas/                     Compose files + Caddyfile + deployment guide
 | `npm test` | Vitest smoke tests (requires running Postgres at `localhost:5432`) |
 | `git tag vX.Y.Z && git push origin vX.Y.Z` | Cut a release; GitHub Actions publishes to GHCR |
 
-## License
+## 🤝 Contributing
 
-This is a personal project — no license declared yet. Don't redistribute without asking.
+This is a personal project I built for my household, but PRs are welcome if you spot a bug or have an enhancement that fits the scope. Open an issue first if it's a big change.
+
+A few opinionated ground rules:
+
+- **No SPA framework.** The whole client is server-rendered EJS + vanilla JS. PRs that pull in React/Vue/Svelte will be politely declined.
+- **Hand-written SQL migrations.** `prisma migrate dev` hangs in containerised environments — write the SQL by hand under `prisma/migrations/<timestamp>_<name>/migration.sql`, then `prisma migrate deploy` applies it.
+- **Smoke tests stay green.** `npm test` boots the whole app via `fastify.inject` and hits every GET route plus the auth-required POSTs. Don't break it.
+- **Inky Paper palette.** New UI uses the existing CSS tokens (`--accent`, `--gold`, `--success`, etc.) — no inline `style="color:#…"` strings.
+
+## 📜 License
+
+This is a personal project — no license declared. Don't redistribute without asking.
+
+## 🙏 Credits
+
+- **Cover art:** Google Books, Open Library
+- **Edition coverage:** [LibraryThing thingISBN](https://www.librarything.com/services/) for sister-edition cover rescue
+- **Barcode decoding:** [@zxing/browser](https://github.com/zxing-js/library)
+- **Fonts:** [Fraunces](https://fonts.google.com/specimen/Fraunces), [Inter](https://fonts.google.com/specimen/Inter), [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono)
