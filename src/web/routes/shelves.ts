@@ -16,12 +16,34 @@ export async function shelvesRoutes(app: FastifyInstance) {
     const shelves = library
       ? await prisma.shelf.findMany({
           where: { libraryId: library.id },
-          include: { _count: { select: { copies: true } } },
+          // v3.5.33: alphabetical shelf order across the page (locked in
+          // with the user). The detail-page "biggest first" sort lives
+          // on the per-shelf endpoint, not here.
           orderBy: [{ name: "asc" }],
+          include: {
+            // For the Netflix-style rails we need each shelf's tiles
+            // inline, sorted by recency so newest additions surface
+            // at the head of each row. Cap at 30 to keep payload tight;
+            // the "view all →" link takes you to /shelves/:slug for
+            // the unbounded list.
+            copies: {
+              include: {
+                copy: {
+                  include: { book: true },
+                },
+              },
+              orderBy: [
+                // Ordered shelves keep their canonical position first;
+                // for everything else, recency rules.
+                { position: { sort: "asc", nulls: "last" } },
+                { copy: { addedAt: "desc" } },
+              ],
+              take: 30,
+            },
+            _count: { select: { copies: true } },
+          },
         })
       : [];
-    // v3.5.13: sort by member count desc so the biggest collections lead.
-    shelves.sort((a, b) => b._count.copies - a._count.copies);
     const totalOrganised = shelves.reduce((acc, s) => acc + s._count.copies, 0);
     const orderedCount = shelves.filter((s) => s.isOrdered).length;
     return reply.view(

@@ -15,11 +15,95 @@
 <% if (shelves.length === 0) { %>
   <p>No shelves yet. They appear here as soon as you add a copy to one.</p>
 <% } else { %>
-  <div class="shelves-cloud">
-    <% shelves.forEach(function(s) { %>
-      <a href="/shelves/<%= s.slug %>" class="shelf-chip<%= s.isOrdered ? ' is-ordered' : '' %>"><%= s.name %><span class="count"><%= s._count.copies %></span></a>
+  <div class="shelf-rails">
+    <% shelves.forEach(function(shelf) {
+      if (!shelf.copies || shelf.copies.length === 0) return;
+    %>
+      <section class="shelf-rail">
+        <header class="shelf-rail-head">
+          <h2>
+            <a href="/shelves/<%= shelf.slug %>"><%= shelf.name %><% if (shelf.isOrdered) { %> <span class="ord">▦</span><% } %></a>
+          </h2>
+          <span class="shelf-rail-count"><%= shelf._count.copies %> book<%= shelf._count.copies === 1 ? '' : 's' %></span>
+          <a class="shelf-rail-all" href="/shelves/<%= shelf.slug %>">view all →</a>
+        </header>
+        <div class="shelf-rail-wrap">
+          <button type="button" class="shelf-rail-arrow left" aria-label="Scroll left" hidden>◀</button>
+          <ul class="shelf-rail-track" role="list">
+            <% shelf.copies.forEach(function(item, idx) {
+              const c = item.copy;
+              const cover = c.coverPath ? '/uploads/' + c.coverPath : c.book.thumbnailUrl;
+              const positionLabel = (shelf.isOrdered && item.position !== null && item.position !== undefined)
+                ? '#' + item.position
+                : null;
+            %>
+              <li class="shelf-rail-tile">
+                <a href="/library/copy/<%= c.id %>" class="shelf-rail-link" aria-label="<%= c.book.title %>">
+                  <div class="shelf-rail-cover<%= cover ? '' : ' no-cover' %>">
+                    <% if (cover) { %>
+                      <img src="<%= cover %>" alt="" loading="<%= idx < 6 ? 'eager' : 'lazy' %>" />
+                    <% } else { %>
+                      <span class="shelf-rail-fallback"><%= c.book.title %></span>
+                    <% } %>
+                    <% if (positionLabel) { %><span class="shelf-rail-pos"><%= positionLabel %></span><% } %>
+                  </div>
+                  <div class="shelf-rail-meta">
+                    <strong class="shelf-rail-title"><%= c.book.title %></strong>
+                    <% if (c.book.primaryAuthor) { %>
+                      <span class="shelf-rail-author"><%= c.book.primaryAuthor %></span>
+                    <% } %>
+                  </div>
+                </a>
+              </li>
+            <% }) %>
+            <% if (shelf._count.copies > shelf.copies.length) { %>
+              <li class="shelf-rail-tile shelf-rail-more">
+                <a href="/shelves/<%= shelf.slug %>" class="shelf-rail-link" aria-label="View all books on <%= shelf.name %>">
+                  <div class="shelf-rail-more-cover">
+                    <span>+ <%= shelf._count.copies - shelf.copies.length %> more</span>
+                  </div>
+                  <div class="shelf-rail-meta">
+                    <strong class="shelf-rail-title">View all</strong>
+                  </div>
+                </a>
+              </li>
+            <% } %>
+          </ul>
+          <button type="button" class="shelf-rail-arrow right" aria-label="Scroll right" hidden>▶</button>
+        </div>
+      </section>
     <% }) %>
   </div>
 <% } %>
+
+<script>
+  // Show/hide rail arrows based on scroll position. Each rail manages
+  // its own arrow visibility — when the track scrolls to the start the
+  // left arrow hides, and when it scrolls to the end the right arrow
+  // hides. Arrow click scrolls the track by ~80% of its visible width.
+  (function() {
+    document.querySelectorAll('.shelf-rail-wrap').forEach(function(wrap) {
+      var track = wrap.querySelector('.shelf-rail-track');
+      var left = wrap.querySelector('.shelf-rail-arrow.left');
+      var right = wrap.querySelector('.shelf-rail-arrow.right');
+      if (!track || !left || !right) return;
+      function update() {
+        var maxScroll = track.scrollWidth - track.clientWidth - 4; // 4px slop
+        left.hidden = track.scrollLeft <= 4;
+        right.hidden = track.scrollLeft >= maxScroll;
+      }
+      function step(dir) {
+        var amount = Math.round(track.clientWidth * 0.8) * dir;
+        track.scrollBy({ left: amount, behavior: 'smooth' });
+      }
+      left.addEventListener('click', function(e) { e.preventDefault(); step(-1); });
+      right.addEventListener('click', function(e) { e.preventDefault(); step(1); });
+      track.addEventListener('scroll', update, { passive: true });
+      // Recompute on resize too — clientWidth changes shift maxScroll.
+      window.addEventListener('resize', update);
+      update();
+    });
+  })();
+</script>
 
 <%- include('_footer') %>

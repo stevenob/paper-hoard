@@ -2290,3 +2290,156 @@ a.widget:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); bord
 }
 .series-add-trophy:hover { color: var(--accent-soft); text-decoration: underline; }
 .series-add-trophy:disabled { color: var(--muted); cursor: wait; }
+
+/* --- v3.5.33 Netflix-style shelf rails ---------------------------- */
+.shelf-rails { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1rem; }
+
+.shelf-rail-head {
+  display: flex; align-items: baseline; gap: 1rem;
+  padding: 0 .25rem;
+  margin-bottom: .55rem;
+}
+.shelf-rail-head h2 {
+  margin: 0;
+  font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 1.15rem;
+  flex: 0 1 auto;
+}
+.shelf-rail-head h2 a { color: var(--fg); text-decoration: none; }
+.shelf-rail-head h2 a:hover { color: var(--accent); }
+.shelf-rail-head h2 .ord { color: var(--accent); font-size: .85em; }
+.shelf-rail-count {
+  color: var(--muted); font-size: .8rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.shelf-rail-all {
+  margin-left: auto;
+  font-size: .8rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--accent);
+}
+
+.shelf-rail-wrap {
+  position: relative;
+  /* Right-edge fade hint that "more this way". Left edge gets the same
+     when scrolled. The track's overflow is handled by .shelf-rail-track,
+     not the wrap, so the fade pseudo-elements sit above it. */
+}
+.shelf-rail-track {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; gap: .65rem;
+  overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* firefox */
+  scroll-padding: .25rem;
+  padding-bottom: .25rem; /* room for tile drop-shadow */
+}
+.shelf-rail-track::-webkit-scrollbar { height: 0; display: none; }
+
+.shelf-rail-tile {
+  flex: 0 0 100px;
+  scroll-snap-align: start;
+}
+.shelf-rail-link {
+  display: block;
+  text-decoration: none; color: inherit;
+  transition: transform .18s ease;
+}
+.shelf-rail-link:hover { transform: translateY(-3px); }
+.shelf-rail-cover {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #3a4a5a, #1a2030);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+  overflow: hidden;
+}
+.shelf-rail-cover img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.shelf-rail-cover.no-cover {
+  background: repeating-linear-gradient(45deg, #3a3530, #3a3530 8px, #2a2520 8px, #2a2520 16px);
+}
+.shelf-rail-fallback {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: rgba(255, 255, 255, .9);
+  font-family: 'Fraunces', Georgia, serif; font-style: italic;
+  text-align: center; padding: .35rem;
+  font-size: .68rem; line-height: 1.15;
+}
+.shelf-rail-pos {
+  position: absolute; top: .3rem; left: .3rem;
+  background: rgba(0, 0, 0, .65);
+  color: #fff; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: .58rem; padding: .1rem .35rem;
+  border-radius: 999px; backdrop-filter: blur(3px);
+}
+.shelf-rail-meta {
+  margin-top: .4rem; padding: 0 .1rem;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.shelf-rail-title {
+  font-family: 'Fraunces', Georgia, serif; font-weight: 500;
+  font-size: .82rem; line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.shelf-rail-author {
+  color: var(--muted); font-size: .7rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* "+ N more" tile at the end of a rail. */
+.shelf-rail-more .shelf-rail-more-cover {
+  aspect-ratio: 2 / 3;
+  border-radius: 5px;
+  background: var(--card);
+  border: 1px dashed var(--border);
+  display: grid; place-items: center;
+  color: var(--accent);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: .78rem;
+  text-align: center; padding: .5rem;
+}
+.shelf-rail-more .shelf-rail-link:hover .shelf-rail-more-cover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* Arrows — invisible until hover (or always on touch) and only when
+   there's actually overflow in that direction. Hidden state controlled
+   by the JS. */
+.shelf-rail-arrow {
+  position: absolute; top: 0; bottom: 0;
+  width: 36px;
+  background: rgba(0, 0, 0, .55);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 1rem;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity .15s ease;
+  display: grid; place-items: center;
+}
+.shelf-rail-arrow.left { left: -8px; }
+.shelf-rail-arrow.right { right: -8px; }
+.shelf-rail-wrap:hover .shelf-rail-arrow:not([hidden]),
+.shelf-rail-arrow:focus-visible { opacity: 1; }
+.shelf-rail-arrow:hover { background: var(--accent); border-color: var(--accent); }
+
+@media (max-width: 600px) {
+  .shelf-rail-tile { flex: 0 0 90px; }
+  .shelf-rail-title { font-size: .76rem; }
+  .shelf-rail-author { font-size: .66rem; }
+  /* Touch devices don't have hover — make arrows always visible (when
+     there's overflow), but smaller so they don't dominate the row. */
+  .shelf-rail-arrow { opacity: 1; width: 28px; font-size: .85rem; }
+  .shelf-rail-arrow.left { left: -4px; }
+  .shelf-rail-arrow.right { right: -4px; }
+}
