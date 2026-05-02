@@ -55,6 +55,49 @@
       </div>
     </div>
     <div class="form-section">
+      <h3 class="form-section-h">Series <span class="hint">(optional)</span></h3>
+      <div class="form-row">
+        <div>
+          <label>Series name</label>
+          <input type="text" name="seriesName" value="<%= prefill.seriesName || '' %>" maxlength="200" placeholder="Mistborn" list="series-names-list" autocomplete="off" />
+          <datalist id="series-names-list">
+            <% (typeof seriesNames !== 'undefined' ? seriesNames : []).forEach(function(s) { %>
+              <option value="<%= s %>"></option>
+            <% }) %>
+          </datalist>
+        </div>
+        <div>
+          <label>Volume number</label>
+          <input type="number" name="seriesPosition" value="<%= prefill.seriesPosition || '' %>" step="0.1" min="0" max="999" placeholder="1" />
+        </div>
+      </div>
+    </div>
+    <div class="form-section">
+      <h3 class="form-section-h">This copy</h3>
+      <div class="form-row">
+        <div>
+          <label>Condition</label>
+          <select name="condition">
+            <option value="">—</option>
+            <option value="new">new</option>
+            <option value="like-new">like-new</option>
+            <option value="good">good</option>
+            <option value="fair">fair</option>
+            <option value="poor">poor</option>
+          </select>
+        </div>
+        <div>
+          <label>Add to shelf <span class="hint">(optional)</span></label>
+          <select name="shelfId">
+            <option value="">— No shelf —</option>
+            <% (typeof shelves !== 'undefined' ? shelves : []).forEach(function(s) { %>
+              <option value="<%= s.id %>" <%= prefill.shelfId === s.id ? 'selected' : '' %>><%= s.name %><% if (s._count && s._count.copies) { %> (<%= s._count.copies %>)<% } %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="form-section">
       <h3 class="form-section-h">Cover</h3>
       <div class="form-row full">
         <div>

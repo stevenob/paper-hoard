@@ -523,6 +523,45 @@ body.camera-open { overflow: hidden; }
 .confirm-secondary button:hover { background: rgba(255,255,255,.04); }
 .confirm-secondary button.is-loading::after { color: currentColor; }
 
+/* v3.5.36 — multi-candidate picker */
+.confirm-candidates { margin: .5rem 0; }
+.confirm-candidates-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.confirm-candidate {
+  flex: 0 0 auto; width: 80px; padding: .25rem; cursor: pointer;
+  background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 4px;
+  display: flex; flex-direction: column; align-items: center; gap: .25rem;
+  font-size: .7rem; color: var(--muted); text-align: center;
+}
+.confirm-candidate:hover { background: rgba(255,255,255,.08); border-color: var(--accent, #5b9bd5); }
+.confirm-candidate img { width: 64px; height: auto; border-radius: 3px; }
+.confirm-candidate-fallback {
+  width: 64px; height: 96px; display: flex; align-items: center; justify-content: center;
+  padding: .25rem; background: rgba(255,255,255,.06); border-radius: 3px;
+  font-size: .65rem; line-height: 1.1; color: var(--muted);
+}
+.confirm-candidate-label { line-height: 1.1; max-height: 2.4em; overflow: hidden; }
+
+/* v3.5.36 — refine search button (under the actions row) */
+#btn-confirm-refine {
+  background: transparent; border: 1px dashed var(--border); color: var(--muted);
+  padding: .35rem .6rem; border-radius: 4px; font-size: .8rem; margin-top: .5rem; cursor: pointer;
+}
+#btn-confirm-refine:hover { color: var(--text); border-color: var(--accent, #5b9bd5); }
+
+/* v3.5.36 — post-add "+ next in series" floating chip */
+.next-in-series-chip {
+  position: fixed; right: 1rem; bottom: 1rem; z-index: 1000;
+  background: var(--accent, #5b9bd5); color: #fff; border: none;
+  padding: .6rem 1rem; border-radius: 999px; font-weight: 600; font-size: .9rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35); cursor: pointer;
+  animation: nextInSeriesFadeIn .2s ease-out;
+}
+.next-in-series-chip:hover { transform: translateY(-2px); }
+@keyframes nextInSeriesFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .scan-result { display: flex; gap: .75rem; align-items: flex-start; background: var(--card); border: 1px solid var(--border); border-left: 4px solid #2a8f3f; border-radius: 6px; padding: .75rem; margin: .5rem 0; }
 .scan-result.error { border-left-color: var(--danger); color: var(--danger); }
 .scan-result img { width: 48px; height: auto; border-radius: 3px; }

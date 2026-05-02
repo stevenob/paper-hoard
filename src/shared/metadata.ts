@@ -11,7 +11,50 @@ export interface BookMetadata {
   publishedAt?: string;
   thumbnailUrl?: string;
   edition?: string; // mapped to our picklist when sources expose physical_format
+  // Series info — populated when Google Books or OL Work record exposes it.
+  // Both fields go onto Book row only when not already set, so user edits
+  // are never clobbered by a later re-scan.
+  seriesName?: string;
+  seriesPosition?: number;
   source: "google_books" | "open_library" | "manual";
+}
+
+/**
+ * Heuristic series-position parser. Accepts the common formats we see in
+ * the wild: "Mistborn, #1", "Stormlight Archive, Book 2", "Vol. 03",
+ * "Book One", or just "1". Returns undefined when no number can be
+ * extracted (which is the right thing — we'd rather store a known series
+ * with unknown position than guess wrong).
+ */
+function parseSeriesPosition(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const cleaned = raw.replace(/[,]/g, " ");
+  const num = cleaned.match(/(?:^|[^\d])(\d{1,3}(?:\.\d+)?)(?:[^\d]|$)/);
+  if (num) {
+    const n = Number.parseFloat(num[1]);
+    if (Number.isFinite(n) && n > 0 && n < 1000) return n;
+  }
+  const words: Record<string, number> = {
+    one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  };
+  for (const [w, n] of Object.entries(words)) {
+    if (new RegExp(`\\b${w}\\b`, "i").test(cleaned)) return n;
+  }
+  return undefined;
+}
+
+/**
+ * Strip the position fragment from a series string to get the bare name.
+ * "Mistborn, #1" -> "Mistborn", "Stormlight Archive, Book 2" -> "Stormlight Archive".
+ */
+function stripSeriesPosition(raw: string): string {
+  return raw
+    .replace(/,?\s*(book|vol\.?|volume|#)\s*\d+(\.\d+)?\s*$/i, "")
+    .replace(/,?\s*#?\d+(\.\d+)?\s*$/, "")
+    .replace(/,?\s*(book|vol\.?|volume)\s*(one|two|three|four|five|six|seven|eight|nine|ten)\s*$/i, "")
+    .trim()
+    .replace(/[,\s]+$/, "");
 }
 
 function normalizeIsbn(raw: string): string {
@@ -51,7 +94,7 @@ interface GoogleVolume {
     imageLinks?: { thumbnail?: string };
     seriesInfo?: {
       bookDisplayNumber?: string;
-      volumeSeries?: { seriesId?: string }[];
+      volumeSeries?: { seriesId?: string; seriesBookType?: string }[];
     };
   };
 }
@@ -60,6 +103,23 @@ function volumeToMetadata(v: GoogleVolume): BookMetadata {
   const ids = v.volumeInfo.industryIdentifiers ?? [];
   const isbn13 = ids.find((i) => i.type === "ISBN_13")?.identifier;
   const isbn10 = ids.find((i) => i.type === "ISBN_10")?.identifier;
+  // Google Books exposes seriesInfo.bookDisplayNumber but rarely the
+  // series *name* — that comes from a separate /series/<id> call.
+  // Fall back to extracting the name from the subtitle, which Google
+  // commonly formats as "Stormlight Archive, Book 1" or similar.
+  let seriesName: string | undefined;
+  let seriesPosition: number | undefined;
+  const subtitle = v.volumeInfo.subtitle?.trim();
+  if (subtitle && /book|vol\.?|volume|#|\d/.test(subtitle)) {
+    const stripped = stripSeriesPosition(subtitle);
+    if (stripped && stripped.length > 1 && stripped.length < 80) {
+      seriesName = stripped;
+      seriesPosition = parseSeriesPosition(subtitle);
+    }
+  }
+  if (!seriesPosition) {
+    seriesPosition = parseSeriesPosition(v.volumeInfo.seriesInfo?.bookDisplayNumber);
+  }
   return {
     isbn13: isbn13 ? normalizeIsbn(isbn13) : undefined,
     isbn10: isbn10 ? normalizeIsbn(isbn10) : undefined,
@@ -68,6 +128,8 @@ function volumeToMetadata(v: GoogleVolume): BookMetadata {
     publisher: v.volumeInfo.publisher,
     publishedAt: v.volumeInfo.publishedDate,
     thumbnailUrl: upgradeGoogleBooksImageUrl(v.volumeInfo.imageLinks?.thumbnail),
+    seriesName,
+    seriesPosition,
     source: "google_books",
   };
 }
@@ -109,6 +171,27 @@ async function fetchOpenLibraryEdition(isbn: string): Promise<OpenLibraryEdition
   return null;
 }
 
+/**
+ * Fetch the OL Work record referenced by an Edition. Used to read the
+ * `series` array, which lives on the Work, not the Edition.
+ *
+ * Wrapped in a 5s timeout — series capture is best-effort, never block
+ * the scan response on a slow OL fetch.
+ */
+async function fetchOpenLibraryWork(workKey: string): Promise<OpenLibraryWork | null> {
+  if (!workKey.startsWith("/works/")) return null;
+  try {
+    const { statusCode, body } = await request(
+      `https://openlibrary.org${workKey}.json`,
+      { headersTimeout: 5000, bodyTimeout: 5000 }
+    );
+    if (statusCode >= 400) return null;
+    return (await body.json()) as OpenLibraryWork;
+  } catch {
+    return null;
+  }
+}
+
 async function lookupOpenLibraryByIsbn(isbn: string): Promise<BookMetadata | null> {
   // Use the richer /isbn/<isbn>.json endpoint so we can read physical_format
   // (binding) and the work key for series + ratings later. Falls back to the
@@ -127,6 +210,26 @@ async function lookupOpenLibraryByIsbn(isbn: string): Promise<BookMetadata | nul
   }
   if (!entry && !detail) return null;
 
+  // Best-effort series lookup from the Work record. The Edition record's
+  // `works[]` array references the parent Work; the `series` field lives
+  // there. We accept either a string array or a single string.
+  let seriesName: string | undefined;
+  let seriesPosition: number | undefined;
+  const workKey = detail?.works?.[0]?.key;
+  if (workKey) {
+    const work = await fetchOpenLibraryWork(workKey);
+    const seriesRaw = Array.isArray(work?.series)
+      ? work?.series?.[0]
+      : (work?.series as string | undefined);
+    if (seriesRaw) {
+      seriesPosition = parseSeriesPosition(seriesRaw);
+      const stripped = stripSeriesPosition(seriesRaw);
+      if (stripped && stripped.length > 1 && stripped.length < 80) {
+        seriesName = stripped;
+      }
+    }
+  }
+
   return {
     isbn13: isbn.length === 13 ? isbn : undefined,
     isbn10: isbn.length === 10 ? isbn : undefined,
@@ -136,6 +239,8 @@ async function lookupOpenLibraryByIsbn(isbn: string): Promise<BookMetadata | nul
     publishedAt: entry?.publish_date ?? detail?.publish_date,
     thumbnailUrl: entry?.cover?.large ?? entry?.cover?.medium ?? entry?.cover?.small,
     edition: mapPhysicalFormat(detail?.physical_format),
+    seriesName,
+    seriesPosition,
     source: "open_library",
   };
 }
@@ -153,6 +258,12 @@ interface OpenLibraryEdition {
   publishers?: string[];
   publish_date?: string;
   physical_format?: string;
+  works?: { key?: string }[];
+}
+
+interface OpenLibraryWork {
+  title?: string;
+  series?: string[] | string;
 }
 
 function mapPhysicalFormat(raw?: string | null): string | undefined {
@@ -187,7 +298,7 @@ async function searchOpenLibraryByTitle(query: string): Promise<BookMetadata[]> 
   const url = new URL("https://openlibrary.org/search.json");
   url.searchParams.set("q", query);
   url.searchParams.set("limit", "5");
-  url.searchParams.set("fields", "title,author_name,isbn,cover_i,publisher,first_publish_year");
+  url.searchParams.set("fields", "title,author_name,isbn,cover_i,publisher,first_publish_year,series");
   const { statusCode, body } = await request(url.toString());
   if (statusCode >= 400) {
     logger.warn({ statusCode }, "Open Library search failed");
@@ -204,12 +315,16 @@ interface OpenLibrarySearchDoc {
   cover_i?: number;
   publisher?: string[];
   first_publish_year?: number;
+  series?: string[];
 }
 
 function searchDocToMetadata(d: OpenLibrarySearchDoc): BookMetadata {
   const isbns = d.isbn ?? [];
   const isbn13 = isbns.find((s) => s.length === 13);
   const isbn10 = isbns.find((s) => s.length === 10);
+  const seriesRaw = d.series?.[0];
+  const seriesName = seriesRaw ? stripSeriesPosition(seriesRaw) || undefined : undefined;
+  const seriesPosition = parseSeriesPosition(seriesRaw);
   return {
     isbn13,
     isbn10,
@@ -218,6 +333,8 @@ function searchDocToMetadata(d: OpenLibrarySearchDoc): BookMetadata {
     publisher: d.publisher?.[0],
     publishedAt: d.first_publish_year ? String(d.first_publish_year) : undefined,
     thumbnailUrl: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : undefined,
+    seriesName,
+    seriesPosition,
     source: "open_library",
   };
 }

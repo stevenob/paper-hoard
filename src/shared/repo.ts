@@ -38,21 +38,36 @@ export async function upsertBookFromMetadata(meta: BookMetadata) {
     thumbnailUrl: meta.thumbnailUrl,
   };
   if (meta.isbn13) {
+    // Only set series fields on update if the existing row has no value —
+    // user-curated edits must survive a re-scan from upstream.
+    const existing = await prisma.book.findUnique({
+      where: { isbn13: meta.isbn13 },
+      select: { seriesName: true, seriesPosition: true },
+    });
+    const seriesUpdate: { seriesName?: string; seriesPosition?: number } = {};
+    if (meta.seriesName && !existing?.seriesName) seriesUpdate.seriesName = meta.seriesName;
+    if (meta.seriesPosition !== undefined && existing?.seriesPosition == null) {
+      seriesUpdate.seriesPosition = meta.seriesPosition;
+    }
     return prisma.book.upsert({
       where: { isbn13: meta.isbn13 },
       create: {
         isbn13: meta.isbn13,
         isbn10: meta.isbn10,
         source: meta.source,
+        seriesName: meta.seriesName ?? null,
+        seriesPosition: meta.seriesPosition ?? null,
         ...sharedFields,
       },
-      update: sharedFields,
+      update: { ...sharedFields, ...seriesUpdate },
     });
   }
   return prisma.book.create({
     data: {
       isbn10: meta.isbn10,
       source: meta.source,
+      seriesName: meta.seriesName ?? null,
+      seriesPosition: meta.seriesPosition ?? null,
       ...sharedFields,
     },
   });

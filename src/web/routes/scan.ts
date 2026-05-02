@@ -20,7 +20,13 @@ async function resolveMeta(
   if (isbn) {
     const cleaned = isbn.replace(/[^0-9Xx]/g, "");
     if (cleaned) {
-      const cached = await prisma.book.findUnique({ where: { isbn13: cleaned } });
+      // ISBN-10/13 dedupe: if the user scans the back-cover ISBN-10 of a
+      // book we already cached under ISBN-13 (or vice versa), match either
+      // way. Avoids creating a duplicate Book row that would then need a
+      // manual merge.
+      const cached = await prisma.book.findFirst({
+        where: { OR: [{ isbn13: cleaned }, { isbn10: cleaned }] },
+      });
       if (cached && cached.title && cached.authors.length > 0) {
         // Map the persisted source back to the BookMetadata source enum.
         // Anything unknown (older rows, or 'cache' marker) falls through
@@ -38,6 +44,8 @@ async function resolveMeta(
           publisher: cached.publisher ?? undefined,
           publishedAt: cached.publishedAt ?? undefined,
           thumbnailUrl: cached.thumbnailUrl ?? undefined,
+          seriesName: cached.seriesName ?? undefined,
+          seriesPosition: cached.seriesPosition ?? undefined,
           source: src,
         };
       }
@@ -75,6 +83,22 @@ const scanSchema = z.object({
   // Optional edition specifics ("must be 1st UK printing", "any
   // hardcover is fine"). Free-form, shown verbatim on the scan match.
   editionNotes: z.string().trim().max(500).optional(),
+  // ===== v3.5.36 confirm-sheet additions =====
+  // Optional shelf to drop the new copy onto immediately.
+  shelfId: z.string().trim().max(50).optional(),
+  // Optional series overrides — shown editable on the confirm sheet,
+  // prefilled from upstream lookup. Applied to the Book row only when
+  // the field is currently null (so user edits stay sticky on re-scan).
+  seriesName: z.string().trim().max(200).optional(),
+  seriesPosition: z.string().trim().max(20).optional(),
+  // Optional condition — exposed as a small select on the confirm sheet
+  // so users don't have to edit the copy after creation just to set it.
+  condition: z.string().trim().max(50).optional(),
+  // Acknowledge an existing-copy duplicate. When the lookup detected
+  // existing copies in this library, the client must echo this flag back
+  // to prove the user explicitly chose "+ another copy" rather than
+  // silently double-adding.
+  ackDuplicate: z.union([z.boolean(), z.literal("true"), z.literal("false")]).optional(),
 });
 
 function shouldShare(input: unknown): boolean {
@@ -89,13 +113,40 @@ function parseAuthorList(s: string | undefined): string[] | null {
 
 export async function scanRoutes(app: FastifyInstance) {
   app.get("/scan", async (req, reply) => {
+    const library = await getCurrentLibrary(req);
     const recent = await prisma.physicalCopy.findMany({
       where: { deletedAt: null },
       include: { book: true, addedBy: true },
       orderBy: { addedAt: "desc" },
       take: 5,
     });
-    return reply.view("scan.ejs", await withChrome(req, { recent }));
+    // Library-scoped shelves and existing series names — used by the
+    // confirm-sheet shelf picker and series-name autocomplete datalist.
+    const [shelves, seriesNamesRaw] = library
+      ? await Promise.all([
+          prisma.shelf.findMany({
+            where: { libraryId: library.id },
+            select: { id: true, name: true, _count: { select: { copies: true } } },
+            orderBy: { name: "asc" },
+          }),
+          prisma.book.findMany({
+            where: {
+              seriesName: { not: null },
+              physicalCopies: { some: { libraryId: library.id, deletedAt: null } },
+            },
+            select: { seriesName: true },
+            distinct: ["seriesName"],
+            orderBy: { seriesName: "asc" },
+          }),
+        ])
+      : [[], []];
+    const seriesNames = seriesNamesRaw
+      .map((b) => b.seriesName)
+      .filter((s): s is string => Boolean(s));
+    return reply.view(
+      "scan.ejs",
+      await withChrome(req, { recent, shelves, seriesNames })
+    );
   });
 
   // JSON endpoint hit by the in-page camera scanner.
@@ -123,6 +174,40 @@ export async function scanRoutes(app: FastifyInstance) {
       // Title-only path falls through to recordScan's own lookup below.
       return reply.status(404).send({ ok: false, error: "No matching book found." });
     }
+
+    // Duplicate guard — if this library already owns a copy and the
+    // client didn't explicitly ack the duplicate, refuse and ask the
+    // confirm sheet to surface the "+ another copy / cancel" choice.
+    const ackDup = parsed.data.ackDuplicate === true || parsed.data.ackDuplicate === "true";
+    if (preMeta?.isbn13 && !ackDup) {
+      const existingBook = await prisma.book.findUnique({
+        where: { isbn13: preMeta.isbn13 },
+        select: { id: true },
+      });
+      if (existingBook) {
+        const dupCount = await prisma.physicalCopy.count({
+          where: {
+            libraryId: library.id,
+            bookId: existingBook.id,
+            deletedAt: null,
+          },
+        });
+        if (dupCount > 0) {
+          return reply.status(409).send({
+            ok: false,
+            error: "duplicate",
+            existingCount: dupCount,
+            book: {
+              title: preMeta.title,
+              authors: preMeta.authors,
+              isbn13: preMeta.isbn13,
+              thumbnailUrl: preMeta.thumbnailUrl,
+            },
+          });
+        }
+      }
+    }
+
     const result = await recordScan({
       libraryId: library.id,
       userId: user.id,
@@ -147,6 +232,24 @@ export async function scanRoutes(app: FastifyInstance) {
     if (parsed.data.overridePublisher) {
       bookUpdate.publisher = parsed.data.overridePublisher;
     }
+    // Series overrides — only set when the user actually typed something
+    // and the source row is currently empty. Lets the confirm-sheet input
+    // both prefill from the lookup AND seed previously unknown series.
+    const seriesNameInput = parsed.data.seriesName?.trim();
+    const seriesPosInput = parsed.data.seriesPosition?.trim();
+    if (seriesNameInput || seriesPosInput) {
+      const fresh = await prisma.book.findUnique({
+        where: { id: result.book.id },
+        select: { seriesName: true, seriesPosition: true },
+      });
+      if (seriesNameInput && !fresh?.seriesName) {
+        bookUpdate.seriesName = seriesNameInput;
+      }
+      if (seriesPosInput && fresh?.seriesPosition == null) {
+        const n = Number.parseFloat(seriesPosInput);
+        if (Number.isFinite(n) && n > 0 && n < 1000) bookUpdate.seriesPosition = n;
+      }
+    }
     if (Object.keys(bookUpdate).length > 0) {
       // Mark as manual so future automatic refetches don't clobber the
       // user's edits.
@@ -159,6 +262,37 @@ export async function scanRoutes(app: FastifyInstance) {
         await prisma.physicalCopy.update({
           where: { id: result.copy.id },
           data: { edition: trimmed || null },
+        });
+      }
+    }
+    if (parsed.data.condition?.trim()) {
+      await prisma.physicalCopy.update({
+        where: { id: result.copy.id },
+        data: { condition: parsed.data.condition.trim() },
+      });
+    }
+
+    // Optional shelf assignment. ShelfCopy has a composite primary key
+    // (shelfId, copyId) — a duplicate would throw P2002, but a freshly-
+    // created copy can't already be on the shelf so we don't bother
+    // catching it here. Library scope is enforced before the insert to
+    // prevent cross-library data leaks.
+    if (parsed.data.shelfId) {
+      const shelf = await prisma.shelf.findFirst({
+        where: { id: parsed.data.shelfId, libraryId: library.id },
+        select: { id: true, name: true },
+      });
+      if (shelf) {
+        await prisma.shelfCopy.create({
+          data: { shelfId: shelf.id, copyId: result.copy.id },
+        });
+        const { audit } = await import("../../shared/audit.js");
+        void audit({
+          userId: user.id,
+          action: "update",
+          entity: "physicalCopy",
+          entityId: result.copy.id,
+          details: { source: "scan-shelf-assign", shelf: shelf.name },
         });
       }
     }
@@ -220,7 +354,23 @@ export async function scanRoutes(app: FastifyInstance) {
     if (!parsed.data.isbn && !parsed.data.title)
       return reply.status(400).send({ ok: false, error: "Provide an ISBN or title." });
 
-    const meta = await resolveMeta(parsed.data.isbn, parsed.data.title, parsed.data.author);
+    // Title-only lookups get the multi-candidate treatment so the
+    // confirm sheet can offer a 2-3 cover thumb picker. ISBN lookups
+    // resolve to one specific edition by definition, so we skip the
+    // extra search round-trip.
+    let meta: BookMetadata | null;
+    let candidates: BookMetadata[] = [];
+    if (parsed.data.isbn) {
+      meta = await resolveMeta(parsed.data.isbn, parsed.data.title, parsed.data.author);
+    } else if (parsed.data.title) {
+      const md = await import("../../shared/metadata.js");
+      candidates = await md.searchByTitle(
+        [parsed.data.title, parsed.data.author].filter(Boolean).join(" ")
+      );
+      meta = candidates[0] ?? null;
+    } else {
+      meta = null;
+    }
     if (!meta) return reply.status(404).send({ ok: false, error: "No matching book found." });
 
     // Trophy preview without committing.
@@ -255,6 +405,12 @@ export async function scanRoutes(app: FastifyInstance) {
       }
     }
 
+    // Series + position prefer the locally-cached Book row when present
+    // (so user-edited series stick); otherwise use whatever the upstream
+    // lookup returned.
+    const seriesName = matchingBook?.seriesName ?? meta.seriesName ?? null;
+    const seriesPosition = matchingBook?.seriesPosition ?? meta.seriesPosition ?? null;
+
     return reply.send({
       ok: true,
       shareEnabled: Boolean(library.notifyChannelId),
@@ -265,7 +421,22 @@ export async function scanRoutes(app: FastifyInstance) {
         thumbnailUrl: meta.thumbnailUrl,
         source: meta.source,
         edition: meta.edition ?? null,
+        seriesName,
+        seriesPosition,
       },
+      // Up to 3 alternative matches when the user only had a title to go
+      // on. Skipped on ISBN lookups (one ISBN = one edition).
+      candidates:
+        candidates.length > 1
+          ? candidates.slice(0, 3).map((c) => ({
+              title: c.title,
+              authors: c.authors,
+              isbn13: c.isbn13 ?? null,
+              thumbnailUrl: c.thumbnailUrl ?? null,
+              publisher: c.publisher ?? null,
+              publishedAt: c.publishedAt ?? null,
+            }))
+          : [],
       rating,
       trophy: trophyMatch
         ? {

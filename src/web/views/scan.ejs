@@ -102,7 +102,56 @@
           <option value="other">other</option>
         </select>
       </label>
+      <label>Condition
+        <select id="edit-condition">
+          <option value="">—</option>
+          <option value="new">new</option>
+          <option value="like-new">like-new</option>
+          <option value="good">good</option>
+          <option value="fair">fair</option>
+          <option value="poor">poor</option>
+        </select>
+      </label>
+      <!-- Series — prefilled from upstream lookup when known. Read/write so
+           the user can correct misparsed series strings (Goodreads-style
+           ", #1" suffixes) or seed series for books the lookup didn't tag. -->
+      <label>Series <span class="hint">(optional)</span>
+        <input id="edit-series-name" list="series-names-list" maxlength="200" placeholder="Mistborn" autocomplete="off" />
+      </label>
+      <label>Volume number <span class="hint">(optional)</span>
+        <input id="edit-series-position" type="number" step="0.1" min="0" max="999" placeholder="1" />
+      </label>
+      <label>Add to shelf <span class="hint">(optional)</span>
+        <select id="edit-shelf">
+          <option value="">— No shelf —</option>
+          <% (typeof shelves !== 'undefined' ? shelves : []).forEach(function(s) { %>
+            <option value="<%= s.id %>"><%= s.name %><% if (s._count && s._count.copies) { %> (<%= s._count.copies %>)<% } %></option>
+          <% }) %>
+        </select>
+      </label>
     </details>
+
+    <!-- Multi-candidate picker: shown only when the title-only lookup
+         returned ≥2 plausible matches. Tapping a thumb swaps the rest of
+         the confirm sheet to that candidate. Hidden on ISBN lookups. -->
+    <div id="confirm-candidates" class="confirm-candidates" hidden>
+      <p class="hint">Multiple matches — tap the right cover:</p>
+      <div id="confirm-candidates-row" class="confirm-candidates-row"></div>
+    </div>
+
+    <!-- Refine search — re-opens the manual form prefilled with the
+         current title/author so the user can tweak the query without
+         dismissing the sheet. -->
+    <button type="button" id="btn-confirm-refine" class="link-skip" hidden>🔎 Refine search</button>
+
+    <!-- Series autocomplete datalist — populated server-side from series
+         already present in this library. Lets users keep series names
+         consistent without typing the same string three different ways. -->
+    <datalist id="series-names-list">
+      <% (typeof seriesNames !== 'undefined' ? seriesNames : []).forEach(function(s) { %>
+        <option value="<%= s %>"></option>
+      <% }) %>
+    </datalist>
 
     <div class="confirm-actions">
       <button type="button" id="btn-confirm-add" class="primary big">📚 Add to library</button>
@@ -139,15 +188,18 @@
 <div class="scan-grid">
   <section class="scan-card">
     <h2>Or look up manually</h2>
+    <p class="hint">Enter an ISBN, a title (with optional author), or paste a Goodreads/Amazon URL. We'll show the cover for you to confirm.</p>
     <div id="saved-scans" hidden></div>
     <form id="manual-form" class="stacked">
       <label>ISBN <input id="manual-isbn" name="isbn" placeholder="9780593135204" autocomplete="off" inputmode="numeric" /></label>
       <p class="hint">— or —</p>
       <label>Title <input id="manual-title" name="title" placeholder="Project Hail Mary" autocomplete="off" /></label>
       <label>Author <input id="manual-author" name="author" placeholder="Andy Weir (optional, narrows the search)" autocomplete="off" /></label>
-      <button type="submit">Look up</button>
+      <p class="hint">— or paste a link —</p>
+      <label>URL <input id="manual-url" name="url" placeholder="https://amazon.com/.../dp/0593135202" autocomplete="off" inputmode="url" /></label>
+      <button type="submit">🔍 Look up</button>
+      <p id="manual-form-status" class="hint" hidden></p>
     </form>
-    <div id="results"></div>
   </section>
 
   <aside class="scan-card scan-recent">
@@ -195,10 +247,28 @@
     const editAuthorsEl = document.getElementById('edit-authors');
     const editPublisherEl = document.getElementById('edit-publisher');
     const editEditionEl = document.getElementById('edit-edition');
+    const editConditionEl = document.getElementById('edit-condition');
+    const editSeriesNameEl = document.getElementById('edit-series-name');
+    const editSeriesPositionEl = document.getElementById('edit-series-position');
+    const editShelfEl = document.getElementById('edit-shelf');
     const editAuthorWarning = document.getElementById('confirm-edit-author-warning');
+    const confirmCandidates = document.getElementById('confirm-candidates');
+    const confirmCandidatesRow = document.getElementById('confirm-candidates-row');
+    const btnConfirmRefine = document.getElementById('btn-confirm-refine');
     const httpsWarning = document.getElementById('https-warning');
     const results = document.getElementById('results');
     const manualForm = document.getElementById('manual-form');
+
+    // Last-used shelf memory. Pre-selecting the most recent shelf turns
+    // a binge-cataloging session ("here's the whole Stormlight Archive")
+    // into a one-tap-per-book flow.
+    const LAST_SHELF_KEY = 'paperHoard.lastShelfId';
+    function getLastShelfId() {
+      try { return localStorage.getItem(LAST_SHELF_KEY) || ''; } catch (e) { return ''; }
+    }
+    function setLastShelfId(id) {
+      try { if (id) localStorage.setItem(LAST_SHELF_KEY, id); } catch (e) { /* ignore */ }
+    }
 
     const hasZxing = typeof ZXingBrowser !== 'undefined';
     if (!hasZxing) {
@@ -428,6 +498,7 @@
       }
 
       pendingConfirm = { payload: payload, request: originalRequest };
+      hideNextInSeriesChip();
       const b = payload.book;
       // Drive the pill: trophy > dup > ok
       const dupCount = (payload.existingCopies || []).length;
@@ -490,6 +561,75 @@
       editAuthorsEl.value = (b.authors || []).join(', ');
       editPublisherEl.value = b.publisher || '';
       editEditionEl.value = b.edition || '';
+      if (editConditionEl) editConditionEl.value = '';
+      // Series prefill — both fields editable. Lookup-discovered series
+      // names get cleaned up by the server's stripSeriesPosition; if the
+      // user overrides, the override wins on add.
+      if (editSeriesNameEl) editSeriesNameEl.value = b.seriesName || '';
+      if (editSeriesPositionEl) {
+        editSeriesPositionEl.value =
+          b.seriesPosition != null ? String(b.seriesPosition) : '';
+      }
+      // Shelf — pre-select the user's most recent shelf so binge-catalog
+      // flows are one tap per book. Only applies when the option exists
+      // in this library's shelf list (cross-library carryover wouldn't).
+      if (editShelfEl) {
+        const last = getLastShelfId();
+        const hasOption = last && Array.prototype.some.call(
+          editShelfEl.options,
+          function(opt) { return opt.value === last; }
+        );
+        editShelfEl.value = hasOption ? last : '';
+      }
+
+      // Multi-candidate picker: show 2-3 thumbs when title search returned
+      // alternatives. Tapping a thumb re-runs the lookup on that ISBN so
+      // the rest of the sheet (rating, dup, trophy) updates correctly.
+      const candidates = payload.candidates || [];
+      if (confirmCandidates) {
+        if (candidates.length > 1) {
+          confirmCandidatesRow.innerHTML = '';
+          candidates.forEach(function(c) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'confirm-candidate';
+            btn.title = (c.title || '') + ' — ' + ((c.authors || []).join(', '));
+            btn.innerHTML =
+              (c.thumbnailUrl
+                ? '<img src="' + escapeHtml(c.thumbnailUrl) + '" alt="">'
+                : '<div class="confirm-candidate-fallback">' + escapeHtml((c.title || '?').slice(0, 28)) + '</div>') +
+              '<div class="confirm-candidate-label">' + escapeHtml((c.title || '').slice(0, 32)) + '</div>';
+            btn.addEventListener('click', function() {
+              if (c.isbn13) {
+                hideConfirm();
+                previewLookup({ isbn: c.isbn13 });
+              } else {
+                hideConfirm();
+                previewLookup({ title: c.title, author: (c.authors || [])[0] });
+              }
+            });
+            confirmCandidatesRow.appendChild(btn);
+          });
+          confirmCandidates.hidden = false;
+        } else {
+          confirmCandidates.hidden = true;
+        }
+      }
+
+      // Refine search — re-opens the manual form with the current title/
+      // author so the user can tweak the query without dismissing first.
+      if (btnConfirmRefine) {
+        btnConfirmRefine.hidden = false;
+        btnConfirmRefine.onclick = function() {
+          hideConfirm();
+          const mt = document.getElementById('manual-title');
+          const ma = document.getElementById('manual-author');
+          if (mt) mt.value = b.title || '';
+          if (ma) ma.value = (b.authors || [])[0] || '';
+          if (mt) mt.focus();
+        };
+      }
+
       const authorMissing = !b.authors || b.authors.length === 0;
       confirmEdit.open = authorMissing;
       editAuthorWarning.hidden = !authorMissing;
@@ -570,6 +710,10 @@
       const newAuthorsRaw = editAuthorsEl.value.trim();
       const newPublisher = editPublisherEl.value.trim();
       const newEdition = editEditionEl.value.trim();
+      const newCondition = editConditionEl ? editConditionEl.value.trim() : '';
+      const newSeriesName = editSeriesNameEl ? editSeriesNameEl.value.trim() : '';
+      const newSeriesPos = editSeriesPositionEl ? editSeriesPositionEl.value.trim() : '';
+      const newShelfId = editShelfEl ? editShelfEl.value : '';
       if (newTitle && newTitle !== (original.title || '')) {
         req.overrideTitle = newTitle;
       }
@@ -583,6 +727,16 @@
       if (newEdition !== (original.edition || '')) {
         req.overrideEdition = newEdition;
       }
+      if (newCondition) req.condition = newCondition;
+      if (newSeriesName) req.seriesName = newSeriesName;
+      if (newSeriesPos) req.seriesPosition = newSeriesPos;
+      if (newShelfId) req.shelfId = newShelfId;
+
+      // If existing copies were detected during lookup, the user clicking
+      // Add here is an explicit "+ another copy anyway" intent. Echo the
+      // ack so the server doesn't refuse with a 409.
+      const existing = pendingConfirm.payload.existingCopies || [];
+      if (existing.length > 0) req.ackDuplicate = true;
 
       // Refuse to commit while the author field is still empty — protects
       // against the easy mistake of confirming a metadata-incomplete book.
@@ -597,9 +751,23 @@
         return;
       }
 
+      // Persist the chosen shelf for the next add.
+      if (newShelfId) setLastShelfId(newShelfId);
+
+      // Stash series context for the post-add "+ next in series" chip,
+      // since hideConfirm clears pendingConfirm.
+      const seriesCtx = {
+        name: newSeriesName || original.seriesName || '',
+        pos: newSeriesPos
+          ? Number.parseFloat(newSeriesPos)
+          : (original.seriesPosition != null ? Number(original.seriesPosition) : null),
+        author: (original.authors || [])[0] || '',
+      };
+
       if (pendingConfirm.payload.shareEnabled) req.share = true;
       hideConfirm();
-      await submitLookup(req);
+      const ok = await submitLookup(req);
+      if (ok && seriesCtx.name) showNextInSeriesChip(seriesCtx);
     });
     btnConfirmSkip.addEventListener('click', function() {
       // Reset debouncer so the same barcode can be re-scanned intentionally.
@@ -718,6 +886,7 @@
           rating: (serverData && serverData.rating) || (clientData && clientData.rating) || null,
           trophy: serverData ? serverData.trophy : null,
           existingCopies: serverData ? serverData.existingCopies : [],
+          candidates: serverData ? (serverData.candidates || []) : [],
         };
         if (!merged.book || !merged.book.title) return;
         if (!painted) {
@@ -844,6 +1013,11 @@
     }
 
     function renderResult(payload, ok) {
+      // #results was removed in v3.5.36 — manual form now goes through the
+      // confirm-sheet pipeline. This function is still called by the
+      // submitLookup commit path; degrade gracefully when the legacy
+      // results panel isn't in the DOM.
+      if (!results) return;
       const div = document.createElement('div');
       div.className = ok ? 'scan-result' : 'scan-result error';
       if (ok) {
@@ -928,7 +1102,7 @@
       // bypassBusy:true so the actual /scan POST runs instead of silently
       // no-opping. The single-shot guard remains via pendingConfirm /
       // onDecoded, so this stays safe from duplicate decodes.
-      if (busy && !opts.bypassBusy) return;
+      if (busy && !opts.bypassBusy) return false;
       busy = true;
       const desc = payload.isbn || payload.title || '';
       setStatus('Looking up ' + desc + '…');
@@ -940,6 +1114,19 @@
           body: JSON.stringify(payload),
         });
         const json = await res.json().catch(function() { return { ok: false, error: 'Bad response' }; });
+        // Server-side duplicate guard (409). Re-open the confirm sheet
+        // with the dup banner emphasised so the user can explicitly
+        // pick "+ another copy" or cancel.
+        if (res.status === 409 && json && json.error === 'duplicate') {
+          showToast('⚠️ Already own this book — choose "+ another copy" to add a duplicate.', false);
+          setPill('dup', '⚠ already owned (×' + (json.existingCount || 1) + ')');
+          // Re-open confirm sheet with ackDuplicate primed by re-running
+          // previewLookup, which surfaces the dup banner.
+          if (payload.isbn || payload.title) {
+            previewLookup(payload);
+          }
+          return false;
+        }
         renderResult(json, res.ok && json.ok);
         if (res.ok && json.ok) {
           setStatus('Added: ' + json.book.title);
@@ -959,18 +1146,65 @@
             lookupCache.owned.push(newIsbn);
             persistLookupCache();
           }
+          return true;
         } else {
           setStatus(json.error || 'Failed');
           showToast(json.error || 'Failed', false);
           setPill('err', json.error || 'lookup failed');
+          return false;
         }
       } catch (err) {
         renderResult({ error: String(err) }, false);
         setStatus('Network error');
         showToast('Network error', false);
+        return false;
       } finally {
         busy = false;
       }
+    }
+
+    /**
+     * Post-add affordance: when the user just added a book whose series is
+     * known, show a one-tap chip to add the next volume. Vanishes after
+     * 30 seconds or on the next confirm-sheet open.
+     */
+    let nextInSeriesChip = null;
+    let nextInSeriesTimer = null;
+    function showNextInSeriesChip(ctx) {
+      if (!ctx || !ctx.name) return;
+      const nextPos = (ctx.pos != null && Number.isFinite(ctx.pos)) ? (ctx.pos + 1) : null;
+      // Don't render the chip when we don't know what number to show —
+      // a generic "+ next in series" without a number isn't actionable.
+      if (nextPos == null) return;
+      hideNextInSeriesChip();
+      nextInSeriesChip = document.createElement('button');
+      nextInSeriesChip.type = 'button';
+      nextInSeriesChip.className = 'next-in-series-chip';
+      nextInSeriesChip.textContent = '+ ' + ctx.name + ' #' + nextPos;
+      nextInSeriesChip.title = 'Look up the next book in this series';
+      nextInSeriesChip.addEventListener('click', function() {
+        hideNextInSeriesChip();
+        const mt = document.getElementById('manual-title');
+        const ma = document.getElementById('manual-author');
+        if (mt) mt.value = ctx.name + ' ' + nextPos;
+        if (ma) ma.value = ctx.author || '';
+        // Run a title search so the user can pick the right volume from
+        // the multi-candidate picker — series titles often have many
+        // editions / spellings (Mistborn vs The Mistborn Trilogy).
+        previewLookup({
+          title: ctx.name + ' ' + nextPos,
+          author: ctx.author || undefined,
+        });
+      });
+      document.body.appendChild(nextInSeriesChip);
+      nextInSeriesTimer = setTimeout(hideNextInSeriesChip, 30000);
+    }
+    function hideNextInSeriesChip() {
+      if (nextInSeriesTimer) { clearTimeout(nextInSeriesTimer); nextInSeriesTimer = null; }
+      if (nextInSeriesChip && nextInSeriesChip.parentNode) {
+        nextInSeriesChip.parentNode.removeChild(nextInSeriesChip);
+      }
+      nextInSeriesChip = null;
     }
 
     async function submitIsbn(isbn) {
@@ -1384,21 +1618,62 @@
       }
     });
 
+    /**
+     * Pull an ISBN-13/10 out of common book-store URLs. We don't try to
+     * be clever — Amazon's `/dp/<asin>/` is an ISBN-10 for physical books
+     * (the ASIN === ISBN-10 for Books category), and Goodreads embeds the
+     * ISBN-13 in the path. Returns null if no usable ISBN found.
+     */
+    function extractIsbnFromUrl(url) {
+      if (!url) return null;
+      const m = String(url).match(/(97[89][\dXx]{10}|\d{9}[\dXx])/);
+      if (m) return m[1].replace(/[^\dXx]/g, '');
+      // Amazon /dp/<10-char ASIN> — for physical books the ASIN equals the
+      // ISBN-10 (Amazon stores them interchangeably). Best-effort only.
+      const dp = String(url).match(/\/(?:dp|gp\/product|product)\/([\dA-Z]{10})/i);
+      if (dp && /^\d{9}[\dXx]$/.test(dp[1])) return dp[1].toUpperCase();
+      return null;
+    }
+
     manualForm.addEventListener('submit', function(e) {
       e.preventDefault();
-      const isbn = document.getElementById('manual-isbn').value.trim();
+      const isbnRaw = document.getElementById('manual-isbn').value.trim();
       const title = document.getElementById('manual-title').value.trim();
       const author = document.getElementById('manual-author').value.trim();
+      const url = document.getElementById('manual-url').value.trim();
+      const status = document.getElementById('manual-form-status');
+      status.hidden = true;
+      status.textContent = '';
+
+      // URL takes precedence — if the user pasted one, extract the ISBN.
+      let isbn = isbnRaw;
+      if (!isbn && url) {
+        const extracted = extractIsbnFromUrl(url);
+        if (extracted) {
+          isbn = extracted;
+        } else {
+          status.textContent = "Couldn't read an ISBN from that URL. Try the title field instead.";
+          status.hidden = false;
+          return;
+        }
+      }
+
       if (!isbn && !title) {
-        setStatus('Enter an ISBN or a title.');
+        status.textContent = 'Enter an ISBN, title, or paste a book URL.';
+        status.hidden = false;
         return;
       }
       const payload = isbn ? { isbn: isbn } : { title: title, author: author || undefined };
-      submitLookup(payload);
+      // Route through the confirm-sheet pipeline — same UX as a camera
+      // scan or a paste-from-Shortcuts flow. Falls back to the in-overlay
+      // fallback card on a 404.
+      previewLookup(payload);
+      // Clear the form so a follow-up lookup starts clean. The confirm
+      // sheet covers the page anyway, so visual reset is fine.
       document.getElementById('manual-isbn').value = '';
       document.getElementById('manual-title').value = '';
       document.getElementById('manual-author').value = '';
-      document.getElementById('manual-isbn').focus();
+      document.getElementById('manual-url').value = '';
     });
 
     // Auto-trigger lookup when invoked with ?isbn=XXX in the URL — used by

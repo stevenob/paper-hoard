@@ -21,6 +21,8 @@ const editSchema = z.object({
 
 const newSchema = editSchema.extend({
   edition: z.string().max(50).optional().default(""),
+  condition: z.string().max(50).optional().default(""),
+  shelfId: z.string().max(50).optional().default(""),
 });
 
 function blankToNull(v: string | undefined): string | null {
@@ -29,18 +31,48 @@ function blankToNull(v: string | undefined): string | null {
 
 export async function bookRoutes(app: FastifyInstance) {
   app.get<{ Querystring: Record<string, string> }>("/books/new", async (req, reply) => {
+    const library = await getCurrentLibrary(req);
     const prefill = {
       title: typeof req.query.title === "string" ? req.query.title.slice(0, 500) : "",
       authors: typeof req.query.authors === "string" ? req.query.authors.slice(0, 1000) : "",
       publisher: typeof req.query.publisher === "string" ? req.query.publisher.slice(0, 200) : "",
       publishedAt: typeof req.query.publishedAt === "string" ? req.query.publishedAt.slice(0, 50) : "",
       isbn13: typeof req.query.isbn === "string" ? req.query.isbn.replace(/[^0-9Xx]/g, "").slice(0, 13) : "",
+      seriesName:
+        typeof req.query.seriesName === "string" ? req.query.seriesName.slice(0, 200) : "",
+      seriesPosition:
+        typeof req.query.seriesPosition === "string" ? req.query.seriesPosition.slice(0, 20) : "",
+      shelfId:
+        typeof req.query.shelfId === "string" ? req.query.shelfId.slice(0, 50) : "",
     };
+    const [shelves, seriesNamesRaw] = library
+      ? await Promise.all([
+          prisma.shelf.findMany({
+            where: { libraryId: library.id },
+            select: { id: true, name: true, _count: { select: { copies: true } } },
+            orderBy: { name: "asc" },
+          }),
+          prisma.book.findMany({
+            where: {
+              seriesName: { not: null },
+              physicalCopies: { some: { libraryId: library.id, deletedAt: null } },
+            },
+            select: { seriesName: true },
+            distinct: ["seriesName"],
+            orderBy: { seriesName: "asc" },
+          }),
+        ])
+      : [[], []];
+    const seriesNames = seriesNamesRaw
+      .map((b) => b.seriesName)
+      .filter((s): s is string => Boolean(s));
     return reply.view(
       "book_new.ejs",
       await withChrome(req, {
         prefill,
         editions: EDITIONS,
+        shelves,
+        seriesNames,
         error: null as string | null,
       })
     );
@@ -57,17 +89,45 @@ export async function bookRoutes(app: FastifyInstance) {
 
     const parsed = newSchema.safeParse(req.body);
     if (!parsed.success) {
+      const [shelves, seriesNamesRaw] = await Promise.all([
+        prisma.shelf.findMany({
+          where: { libraryId: library.id },
+          select: { id: true, name: true, _count: { select: { copies: true } } },
+          orderBy: { name: "asc" },
+        }),
+        prisma.book.findMany({
+          where: {
+            seriesName: { not: null },
+            physicalCopies: { some: { libraryId: library.id, deletedAt: null } },
+          },
+          select: { seriesName: true },
+          distinct: ["seriesName"],
+          orderBy: { seriesName: "asc" },
+        }),
+      ]);
       return reply.view(
         "book_new.ejs",
         await withChrome(req, {
           prefill: req.body ?? {},
           editions: EDITIONS,
+          shelves,
+          seriesNames: seriesNamesRaw
+            .map((b) => b.seriesName)
+            .filter((s): s is string => Boolean(s)),
           error: parsed.error.issues.map((i) => i.message).join(", "),
         })
       );
     }
     const d = parsed.data;
     const isbn13 = d.isbn13.replace(/[^0-9Xx]/g, "").trim() || null;
+
+    // Parse series position once — float, bounded, blank → null.
+    const seriesPositionParsed = (() => {
+      const raw = d.seriesPosition.trim();
+      if (!raw) return null;
+      const n = Number.parseFloat(raw);
+      return Number.isFinite(n) && n > 0 && n < 1000 ? n : null;
+    })();
 
     // If the ISBN already exists, reuse the book row rather than fail on
     // the unique constraint — this keeps the manual-entry flow forgiving.
@@ -89,12 +149,20 @@ export async function bookRoutes(app: FastifyInstance) {
       thumbnailUrl: d.thumbnailUrl.trim() || null,
       isbn13,
       source: "manual",
+      seriesName: d.seriesName.trim() || null,
+      seriesPosition: seriesPositionParsed,
     };
     if (existing) {
-      book = await prisma.book.update({
-        where: { id: existing.id },
-        data: sharedFields,
-      });
+      // Don't clobber a series the existing row already has — same rule as
+      // upsertBookFromMetadata, but applied here since manual is mutating.
+      const update: Prisma.BookUpdateInput = { ...sharedFields };
+      if (existing.seriesName && !d.seriesName.trim()) {
+        delete (update as { seriesName?: unknown }).seriesName;
+      }
+      if (existing.seriesPosition != null && seriesPositionParsed === null) {
+        delete (update as { seriesPosition?: unknown }).seriesPosition;
+      }
+      book = await prisma.book.update({ where: { id: existing.id }, data: update });
     } else {
       book = await prisma.book.create({ data: sharedFields });
     }
@@ -113,6 +181,7 @@ export async function bookRoutes(app: FastifyInstance) {
         libraryId: library.id,
         addedByUserId: user.id,
         edition: d.edition.trim() || null,
+        condition: d.condition.trim() || null,
       },
     });
     void audit({
@@ -122,6 +191,27 @@ export async function bookRoutes(app: FastifyInstance) {
       entityId: copy.id,
       details: { bookId: book.id, source: "manual-form" },
     });
+
+    // Optional shelf assignment. Validates library scope and silently
+    // ignores cross-library / unknown shelfId values.
+    if (d.shelfId.trim()) {
+      const shelf = await prisma.shelf.findFirst({
+        where: { id: d.shelfId.trim(), libraryId: library.id },
+        select: { id: true, name: true },
+      });
+      if (shelf) {
+        await prisma.shelfCopy.create({
+          data: { shelfId: shelf.id, copyId: copy.id },
+        });
+        void audit({
+          userId: user.id,
+          action: "update",
+          entity: "physicalCopy",
+          entityId: copy.id,
+          details: { source: "manual-form-shelf-assign", shelf: shelf.name },
+        });
+      }
+    }
 
     return reply.redirect(`/library/copy/${copy.id}`);
   });
