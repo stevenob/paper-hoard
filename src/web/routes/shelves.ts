@@ -13,19 +13,11 @@ const editSchema = z.object({
 export async function shelvesRoutes(app: FastifyInstance) {
   app.get("/shelves", async (req, reply) => {
     const library = await getCurrentLibrary(req);
-    const shelves = library
+    const realShelves = library
       ? await prisma.shelf.findMany({
           where: { libraryId: library.id },
-          // v3.5.33: alphabetical shelf order across the page (locked in
-          // with the user). The detail-page "biggest first" sort lives
-          // on the per-shelf endpoint, not here.
           orderBy: [{ name: "asc" }],
           include: {
-            // For the Netflix-style rails we need each shelf's tiles
-            // inline, sorted by recency so newest additions surface
-            // at the head of each row. Cap at 30 to keep payload tight;
-            // the "view all →" link takes you to /shelves/:slug for
-            // the unbounded list.
             copies: {
               include: {
                 copy: {
@@ -33,8 +25,6 @@ export async function shelvesRoutes(app: FastifyInstance) {
                 },
               },
               orderBy: [
-                // Ordered shelves keep their canonical position first;
-                // for everything else, recency rules.
                 { position: { sort: "asc", nulls: "last" } },
                 { copy: { addedAt: "desc" } },
               ],
@@ -44,14 +34,112 @@ export async function shelvesRoutes(app: FastifyInstance) {
           },
         })
       : [];
-    const totalOrganised = shelves.reduce((acc, s) => acc + s._count.copies, 0);
-    const orderedCount = shelves.filter((s) => s.isOrdered).length;
+
+    // ===== Series auto-rails (v3.5.34) =====
+    // Every series the user owns at least one book in becomes a virtual
+    // rail on this page. Same shape as a real shelf so the EJS view can
+    // render them uniformly, but with `kind: "series"` so links can
+    // route to /series?name=... instead of /shelves/:slug.
+    const seriesCopies = library
+      ? await prisma.physicalCopy.findMany({
+          where: {
+            libraryId: library.id,
+            deletedAt: null,
+            book: { seriesName: { not: null } },
+          },
+          include: { book: true },
+          orderBy: { addedAt: "asc" },
+        })
+      : [];
+    type SeriesGroup = {
+      name: string;
+      copies: typeof seriesCopies;
+    };
+    const seriesByName = new Map<string, SeriesGroup>();
+    for (const c of seriesCopies) {
+      const name = (c.book.seriesName ?? "").trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      let g = seriesByName.get(key);
+      if (!g) {
+        g = { name, copies: [] };
+        seriesByName.set(key, g);
+      }
+      g.copies.push(c);
+    }
+    // Sort each group by seriesPosition asc; ties broken by addedAt asc.
+    for (const g of seriesByName.values()) {
+      g.copies.sort((a, b) => {
+        const ap = a.book.seriesPosition ?? Number.POSITIVE_INFINITY;
+        const bp = b.book.seriesPosition ?? Number.POSITIVE_INFINITY;
+        if (ap !== bp) return ap - bp;
+        return a.addedAt.getTime() - b.addedAt.getTime();
+      });
+    }
+
+    // Reshape virtual series into the same union shape the view expects.
+    type Rail = {
+      kind: "shelf" | "series";
+      name: string;
+      slug: string; // for "view all" links
+      isOrdered: boolean;
+      tiles: Array<{
+        copyId: string;
+        coverPath: string | null;
+        thumbnailUrl: string | null;
+        title: string;
+        primaryAuthor: string | null;
+        position: number | null; // for the #N badge
+      }>;
+      total: number;
+    };
+    const shelfRails: Rail[] = realShelves.map((s) => ({
+      kind: "shelf",
+      name: s.name,
+      slug: s.slug,
+      isOrdered: s.isOrdered,
+      tiles: s.copies.map((it) => ({
+        copyId: it.copy.id,
+        coverPath: it.copy.coverPath,
+        thumbnailUrl: it.copy.book.thumbnailUrl,
+        title: it.copy.book.title,
+        primaryAuthor: it.copy.book.primaryAuthor,
+        position: s.isOrdered ? it.position : null,
+      })),
+      total: s._count.copies,
+    }));
+    const seriesRails: Rail[] = Array.from(seriesByName.values()).map((g) => ({
+      kind: "series",
+      name: g.name,
+      slug: g.name, // not a real slug — the view URL-encodes it for ?name=
+      isOrdered: true,
+      tiles: g.copies.slice(0, 30).map((c) => ({
+        copyId: c.id,
+        coverPath: c.coverPath,
+        thumbnailUrl: c.book.thumbnailUrl,
+        title: c.book.title,
+        primaryAuthor: c.book.primaryAuthor,
+        position: c.book.seriesPosition,
+      })),
+      total: g.copies.length,
+    }));
+    // Interleave shelves and series, alphabetical by name, case-insensitive.
+    const rails = [...shelfRails, ...seriesRails].sort((a, b) =>
+      a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+    );
+
+    const totalOrganised = realShelves.reduce((acc, s) => acc + s._count.copies, 0);
+    const orderedCount = realShelves.filter((s) => s.isOrdered).length;
+    const seriesCount = seriesRails.length;
+
     return reply.view(
       "shelves.ejs",
       await withChrome(req, {
-        shelves,
+        rails,
         totalOrganised,
         orderedCount,
+        seriesCount,
+        shelfCount: realShelves.length,
       })
     );
   });
