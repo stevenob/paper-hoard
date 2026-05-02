@@ -6,7 +6,7 @@ import { findOrCreateShelf } from "../../shared/shelves.js";
 import { CONDITIONS, EDITIONS } from "../../shared/picklists.js";
 import { getCurrentLibrary, requireUser } from "./_helpers.js";
 
-const ACTIONS = ["add-shelf", "remove-shelf", "set-edition", "set-condition", "trash"] as const;
+const ACTIONS = ["add-shelf", "remove-shelf", "set-edition", "set-condition", "set-series", "trash"] as const;
 
 const bulkSchema = z.object({
   action: z.enum(ACTIONS),
@@ -109,6 +109,55 @@ export async function bulkEditRoutes(app: FastifyInstance) {
         entity: "physicalCopy",
         entityId: ownedIds.join(","),
         details: { bulk: "set-condition", value: trimmed || null, count: ownedIds.length },
+      });
+    } else if (action === "set-series") {
+      // Bulk-tag selected copies with a series name + auto-number their
+      // seriesPosition by the order they appear in copyIds (which is
+      // the DOM checkbox order — i.e. the visual order on /library at
+      // the time of submit). Field lives on Book, so we update each
+      // distinct bookId independently.
+      const name = trimmed || null;
+      const copies = await prisma.physicalCopy.findMany({
+        where: { id: { in: ownedIds } },
+        select: { id: true, bookId: true },
+      });
+      // Preserve the user's selection order. Map id → first index.
+      const orderIndex = new Map<string, number>();
+      copyIds.forEach((id, i) => {
+        if (!orderIndex.has(id)) orderIndex.set(id, i);
+      });
+      // Distinct bookIds in selection order.
+      const seenBookIds = new Set<string>();
+      const orderedBookIds: string[] = [];
+      copies
+        .map((c) => ({ ...c, idx: orderIndex.get(c.id) ?? Infinity }))
+        .sort((a, b) => a.idx - b.idx)
+        .forEach((c) => {
+          if (!seenBookIds.has(c.bookId)) {
+            seenBookIds.add(c.bookId);
+            orderedBookIds.push(c.bookId);
+          }
+        });
+      // Apply: when a name was provided, number them 1..N. When name is
+      // blank, treat as "clear series" — null both fields.
+      for (let i = 0; i < orderedBookIds.length; i++) {
+        await prisma.book.update({
+          where: { id: orderedBookIds[i] },
+          data: name
+            ? { seriesName: name, seriesPosition: i + 1 }
+            : { seriesName: null, seriesPosition: null },
+        });
+      }
+      void audit({
+        userId: user.id,
+        action: "update",
+        entity: "book",
+        entityId: orderedBookIds.join(","),
+        details: {
+          bulk: "set-series",
+          name,
+          count: orderedBookIds.length,
+        },
       });
     } else if (action === "trash") {
       await prisma.physicalCopy.updateMany({

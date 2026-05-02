@@ -111,6 +111,7 @@
         <option value="remove-shelf">Remove from shelf</option>
         <option value="set-edition">Set edition</option>
         <option value="set-condition">Set condition</option>
+        <option value="set-series">Set series (auto-number)</option>
         <option value="trash">Move to trash</option>
       </select>
       <input type="text" name="value" id="bulk-value" list="bulk-value-options" placeholder="value" />
@@ -146,15 +147,27 @@
         let opts = [];
         if (action.value === 'set-edition') opts = editions;
         else if (action.value === 'set-condition') opts = conditions;
-        else opts = []; // shelf names: free text
+        else opts = []; // shelf names + series names: free text
         opts.forEach(function(o) {
           const opt = document.createElement('option');
           opt.value = o;
           dl.appendChild(opt);
         });
+        // Tweak the placeholder per action so the value field is self-explanatory.
+        if (action.value === 'set-series') {
+          value.placeholder = 'series name (e.g. Mistborn) — books numbered by selection order';
+        } else if (action.value === 'add-shelf' || action.value === 'remove-shelf') {
+          value.placeholder = 'shelf name';
+        } else if (action.value === 'set-edition') {
+          value.placeholder = 'edition';
+        } else if (action.value === 'set-condition') {
+          value.placeholder = 'condition';
+        } else {
+          value.placeholder = 'value';
+        }
         // Hide the value input for trash since no value is needed.
         value.style.display = action.value === 'trash' ? 'none' : '';
-        value.required = action.value === 'add-shelf' || action.value === 'remove-shelf';
+        value.required = action.value === 'add-shelf' || action.value === 'remove-shelf' || action.value === 'set-series';
       }
       rows.forEach(function(r) { r.addEventListener('change', refresh); });
       if (all) {
