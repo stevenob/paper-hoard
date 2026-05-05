@@ -2,7 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { getCurrentLibrary, requireUser } from "./_helpers.js";
 import { refetchMissingCovers, refreshLowResCovers } from "./_cover-backfill.js";
 import { fillMissingAuthors } from "./_author-backfill.js";
-import { backfillKindleAsins } from "./_kindle-backfill.js";
+import {
+  backfillKindleAsins,
+  KINDLE_BACKFILL_BATCH_SIZE,
+} from "./_kindle-backfill.js";
 
 /**
  * /stats was merged into /about as of v3.5.5. Keep the GET route alive
@@ -56,12 +59,14 @@ export async function statsRoutes(app: FastifyInstance) {
   // owned books that don't have one yet. Each call processes a small
   // batch; the front-end keeps polling until `remaining === 0`.
   // Mirrors the cover-backfill `?retry=all` flag for orphan retries.
+  // Batch size is intentionally small + per-book delays are enforced
+  // inside the helper to stay under OL's rate limit (v3.6.2 fix).
   app.post("/stats/backfill-kindle-asins", async (req, reply) => {
     const user = await requireUser(req, reply);
     if (!user) return;
     const library = await getCurrentLibrary(req);
     const retryAll = (req.query as { retry?: string } | undefined)?.retry === "all";
-    const result = await backfillKindleAsins(25, {
+    const result = await backfillKindleAsins(KINDLE_BACKFILL_BATCH_SIZE, {
       libraryId: library?.id ?? null,
       ignoreCooldown: retryAll,
     });

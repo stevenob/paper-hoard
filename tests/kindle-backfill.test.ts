@@ -15,15 +15,26 @@ vi.mock("../src/shared/kindle.js", async (orig) => {
   const real = await orig<typeof import("../src/shared/kindle.js")>();
   return {
     ...real,
+    lookupKindleAsinDetailed: vi.fn(),
     lookupKindleAsinFromOpenLibrary: vi.fn(),
   };
 });
-import { lookupKindleAsinFromOpenLibrary } from "../src/shared/kindle.js";
+import { lookupKindleAsinDetailed } from "../src/shared/kindle.js";
 import { backfillKindleAsins } from "../src/web/routes/_kindle-backfill.js";
 
-const mockedLookup = lookupKindleAsinFromOpenLibrary as unknown as ReturnType<
+const mockedLookup = lookupKindleAsinDetailed as unknown as ReturnType<
   typeof vi.fn
 >;
+
+function detailedReturn(value: string | null | undefined) {
+  if (typeof value === "string") {
+    return { kind: "found" as const, asin: value };
+  }
+  if (value === null) {
+    return { kind: "error" as const, cause: "network" as const };
+  }
+  return { kind: "no-match" as const };
+}
 
 let libraryId: string;
 let userId: string;
@@ -111,7 +122,7 @@ beforeEach(() => {
 
 describe("backfillKindleAsins", () => {
   it("processes only books in the caller's library", async () => {
-    mockedLookup.mockResolvedValue("B0BACKFILL1");
+    mockedLookup.mockResolvedValue(detailedReturn("B0BACKFILL1"));
     const inScope = await makeBookWithCopy({});
     // Out-of-scope: a book with no copy in our library.
     const otherLib = await prisma.library.upsert({
@@ -145,7 +156,7 @@ describe("backfillKindleAsins", () => {
   });
 
   it("respects manual ASINs (excluded by candidate query)", async () => {
-    mockedLookup.mockResolvedValue("B0SHOULDNTSEE");
+    mockedLookup.mockResolvedValue(detailedReturn("B0SHOULDNTSEE"));
     const id = await makeBookWithCopy({
       kindleAsin: "B0MANUAL0000",
       kindleAsinSource: "manual",
@@ -156,7 +167,7 @@ describe("backfillKindleAsins", () => {
   });
 
   it("respects the 7-day cooldown by default", async () => {
-    mockedLookup.mockResolvedValue("B0COOLDOWN00");
+    mockedLookup.mockResolvedValue(detailedReturn("B0COOLDOWN00"));
     const recent = await makeBookWithCopy({
       kindleAsinAttemptedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
     });
@@ -165,7 +176,7 @@ describe("backfillKindleAsins", () => {
   });
 
   it("ignoreCooldown=true picks up books in cooldown", async () => {
-    mockedLookup.mockResolvedValue("B0RETRYORPHN");
+    mockedLookup.mockResolvedValue(detailedReturn("B0RETRYORPHN"));
     const recent = await makeBookWithCopy({
       kindleAsinAttemptedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
     });
@@ -179,7 +190,7 @@ describe("backfillKindleAsins", () => {
   });
 
   it("reports a 'failed' row with no Kindle ASIN at OL", async () => {
-    mockedLookup.mockResolvedValue(undefined);
+    mockedLookup.mockResolvedValue(detailedReturn(undefined));
     const id = await makeBookWithCopy({});
     const result = await backfillKindleAsins(50, { libraryId });
     const row = result.results.find((r) => r.bookId === id);
@@ -187,10 +198,40 @@ describe("backfillKindleAsins", () => {
     expect(row?.detail).toBe("no Kindle ASIN at OL");
   });
 
+  it("reports a transient OL error distinctly from a coverage gap", async () => {
+    // Simulate OL rate-limiting / network drop. The backfill activity
+    // log MUST distinguish this from "no ASIN exists" so the user
+    // knows to hit "↻ Retry orphans" rather than chase a phantom
+    // coverage gap. (This was the v3.6.1→v3.6.2 fix: ECONNRESET errors
+    // were being reported as "no Kindle ASIN at OL".)
+    mockedLookup.mockResolvedValue({ kind: "error", cause: "network" });
+    const id = await makeBookWithCopy({});
+    const result = await backfillKindleAsins(50, { libraryId });
+    const row = result.results.find((r) => r.bookId === id);
+    expect(row?.action).toBe("failed");
+    expect(row?.detail).toMatch(/OL request failed/);
+    expect(row?.detail).toMatch(/network|rate-limit/);
+  });
+
+  it("paces requests with a per-book delay", async () => {
+    // Backfill awaits enrichKindleAsin in a tight loop; without a
+    // delay between calls, OL rate-limits paper-hoard's IP and most
+    // requests fail. Verify the helper actually waits between books.
+    mockedLookup.mockResolvedValue(detailedReturn("B0PACEDCALL"));
+    await Promise.all([makeBookWithCopy({}), makeBookWithCopy({})]);
+    const before = Date.now();
+    await backfillKindleAsins(50, { libraryId });
+    const elapsed = Date.now() - before;
+    // Two books → at least one inter-book sleep (skipped after last).
+    // 350ms delay constant; allow some slack for test machine variance.
+    // We just want to assert "noticeably > 0", not the exact ms.
+    expect(elapsed).toBeGreaterThanOrEqual(300);
+  });
+
   it("returns processed/updated/remaining counts", async () => {
-    mockedLookup.mockResolvedValueOnce("B0PROC000001");
-    mockedLookup.mockResolvedValueOnce("B0PROC000002");
-    mockedLookup.mockResolvedValueOnce(undefined); // miss
+    mockedLookup.mockResolvedValueOnce(detailedReturn("B0PROC000001"));
+    mockedLookup.mockResolvedValueOnce(detailedReturn("B0PROC000002"));
+    mockedLookup.mockResolvedValueOnce(detailedReturn(undefined)); // miss
     await Promise.all([
       makeBookWithCopy({}),
       makeBookWithCopy({}),

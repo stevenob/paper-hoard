@@ -8,6 +8,24 @@ import type {
 } from "./_cover-backfill.js";
 
 const COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+// Open Library's `/search.json` endpoint enforces a per-IP rate
+// limit. Hitting it 25 times in a tight loop reliably trips it; we
+// learned this the hard way in v3.6.1 where 524 of 525 books came
+// back as ECONNRESET errors that got reported (misleadingly) as
+// "no Kindle ASIN at OL". 350 ms between calls keeps us well under
+// OL's documented "100 requests / 5 minutes" budget while still
+// finishing a 500-book library in a few minutes.
+const PER_BOOK_DELAY_MS = 350;
+// Smaller batches mean the front-end paints progress more often
+// AND the per-batch wall-time is short enough that OL's connection
+// pool won't see a sustained-rate burst.
+const BATCH_SIZE = 10;
+
+export const KINDLE_BACKFILL_BATCH_SIZE = BATCH_SIZE;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * Backfill `Book.kindleAsin` for books in the caller's library that
@@ -87,7 +105,8 @@ export async function backfillKindleAsins(
   let updated = 0;
   const results: RepairResultRow[] = [];
 
-  for (const c of candidates) {
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
     const baseRow = {
       bookId: c.id,
       copyId: c.physicalCopies[0]?.id ?? null,
@@ -117,6 +136,20 @@ export async function backfillKindleAsins(
             ...baseRow,
             action: "kept",
             detail: `OL re-confirmed ${r.asin}`,
+          });
+          break;
+        case "ol-error":
+          // Transient: OL rate limited us, dropped the connection,
+          // or returned a 5xx. NOT a coverage gap; the user can hit
+          // "↻ Retry orphans" later to re-attempt without the 7-day
+          // cooldown. Distinct message so they know to retry.
+          results.push({
+            ...baseRow,
+            action: "failed",
+            detail:
+              r.cause === "network"
+                ? "OL request failed (network/rate-limit)"
+                : "OL request failed (HTTP error)",
           });
           break;
         case "no-asin-found":
@@ -157,6 +190,12 @@ export async function backfillKindleAsins(
         detail: "lookup error",
       });
     }
+    // Throttle: be polite to Open Library. The single OL request
+    // per book is cheap, but 25-in-a-row reliably trips OL's
+    // per-IP rate limit. Skip the sleep after the last book in
+    // the batch since the front-end's 250ms inter-batch delay
+    // already provides a gap before the next call.
+    if (i < candidates.length - 1) await sleep(PER_BOOK_DELAY_MS);
   }
 
   // Recompute the candidate count — it's the "remaining" the front
