@@ -9,7 +9,7 @@
 <% } else { %>
   <table class="data">
     <thead>
-      <tr><th>Title</th><th>By</th><th>Type</th><th>Source</th><th>Completed</th><th>Rating</th></tr>
+      <tr><th>Title</th><th>By</th><th>Type</th><th>Source</th><th>Completed</th><th>Rating</th><th></th></tr>
     </thead>
     <tbody>
       <% completions.forEach(function(c) { %>
@@ -20,6 +20,13 @@
           <td><%= c.source || '—' %></td>
           <td><%= c.completedOn ? c.completedOn.toISOString().slice(0,10) : '—' %></td>
           <td><%= c.rating ?? '—' %></td>
+          <td>
+            <% if (c.book.kindleAsin) { %>
+              <a class="pill pill-tag" title="Read on Kindle"
+                 href="https://read.amazon.com/kp/kshare?asin=<%= encodeURIComponent(c.book.kindleAsin) %>"
+                 target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">📖</a>
+            <% } %>
+          </td>
         </tr>
       <% }) %>
     </tbody>

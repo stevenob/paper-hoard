@@ -67,6 +67,21 @@ model Book {
   coverAttemptedAt DateTime?
   seriesName     String?
   seriesPosition Float?
+  // Amazon ASIN of the Kindle ebook edition (always 10 chars,
+  // typically B0…). Distinct from the print-edition ISBN-10/ISBN-13.
+  // Powers the "📖 Read on Kindle" link-out button. Auto-populated
+  // from Open Library's search endpoint via async-after-response
+  // enrichment on durable Book writes; can be set or cleared
+  // manually via the Book edit form.
+  kindleAsin             String?
+  // Provenance for kindleAsin: "manual" (user-curated, never
+  // overwritten by auto-enrichment) or "open_library" (auto-fetched,
+  // replaceable on a later enrichment run).
+  kindleAsinSource       String?
+  // Cooldown timestamp for the OL enrichment helper. Always stamped
+  // after a claim regardless of outcome to prevent retry storms on
+  // books OL doesn't know. Mirrors the coverAttemptedAt pattern.
+  kindleAsinAttemptedAt  DateTime?
   createdAt      DateTime       @default(now())
 
   physicalCopies PhysicalCopy[]

@@ -69,9 +69,21 @@ export const foundCommand: BotCommand = {
       return;
     }
 
+    // Library-scoped owned-or-completed gating: show the Read on
+    // Kindle link only when the family library has a non-deleted
+    // PhysicalCopy of this book. Trophy-only books get nothing.
+    // Completion check is implicit here — /found is a "do we own
+    // this print?" lookup, so showing a Kindle link on a known-
+    // owned book is exactly the right behaviour.
+    const ownedOrRead = book.physicalCopies.length > 0;
+    const description =
+      `by ${book.authors.join(", ") || "Unknown"}` +
+      (ownedOrRead && book.kindleAsin
+        ? `\n📖 [Read on Kindle](https://read.amazon.com/kp/kshare?asin=${encodeURIComponent(book.kindleAsin)})`
+        : "");
     const embed = new EmbedBuilder()
       .setTitle(book.title)
-      .setDescription(`by ${book.authors.join(", ") || "Unknown"}`);
+      .setDescription(description);
     if (book.thumbnailUrl) embed.setThumbnail(book.thumbnailUrl);
 
     if (book.physicalCopies.length > 0) {

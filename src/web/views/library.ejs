@@ -93,7 +93,7 @@
           <% if (activeUser) { %>
             <td><input type="checkbox" name="copyIds" value="<%= c.id %>" class="bulk-row-checkbox" aria-label="Select copy"></td>
           <% } %>
-          <td data-label="Title"><a href="/library/copy/<%= c.id %>"><%= c.book.title %></a></td>
+          <td data-label="Title"><a href="/library/copy/<%= c.id %>"><%= c.book.title %></a><% if (c.book.kindleAsin) { %> <span class="pill pill-tag" title="Kindle ASIN on file" style="font-size:.75em">📖</span><% } %></td>
           <td data-label="Authors"><% if (c.book.authors && c.book.authors.length > 0) { %><% c.book.authors.forEach(function(a, i) { %><% if (i > 0) { %>, <% } %><% const aslug = authorSlug(a); %><% if (aslug) { %><a href="/authors/<%= aslug %>"><%= a %></a><% } else { %><%= a %><% } %><% }) %><% } %></td>
           <td data-label="Condition"><%= c.condition || '—' %></td>
           <td data-label="Edition"><%= c.edition || '—' %></td>

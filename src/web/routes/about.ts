@@ -62,6 +62,7 @@ export async function aboutRoutes(app: FastifyInstance) {
       datedCopies: { id: string; book: { id: string; title: string; primaryAuthor: string | null; publishedAt: string | null; thumbnailUrl: string | null; coverPath?: string | null } & Record<string, unknown> }[];
       mostExpensiveCopies: Awaited<ReturnType<typeof prisma.physicalCopy.findMany>>;
       activeLending: number;
+      booksWithKindleAsin: number;
     };
 
     let catalog: CatalogShape | null = null;
@@ -95,6 +96,7 @@ export async function aboutRoutes(app: FastifyInstance) {
         datedCopies,
         mostExpensiveCopies,
         activeLending,
+        booksWithKindleAsin,
       ] = await Promise.all([
         prisma.library.count(),
         prisma.user.count(),
@@ -242,6 +244,18 @@ export async function aboutRoutes(app: FastifyInstance) {
         prisma.physicalCopy.count({
           where: { ...activeCopyFilter, lentTo: { not: null } },
         }),
+        prisma.book.count({
+          where: {
+            kindleAsin: { not: null },
+            // Library-scoped: count books actually owned in this
+            // library (or any library when no current library is
+            // selected). The KPI is "how many of MY books have a
+            // Kindle ASIN," not "how many Book rows exist."
+            physicalCopies: library
+              ? { some: { libraryId: library.id, deletedAt: null } }
+              : { some: { deletedAt: null } },
+          },
+        }),
       ]);
       counts = { libraries, users, auditLog };
       catalog = {
@@ -269,6 +283,7 @@ export async function aboutRoutes(app: FastifyInstance) {
         datedCopies,
         mostExpensiveCopies,
         activeLending,
+        booksWithKindleAsin,
       };
     } catch {
       dbOk = false;
@@ -357,6 +372,7 @@ export async function aboutRoutes(app: FastifyInstance) {
               recordedCount: catalog.valueAggregate._count.priceCents ?? 0,
             }
           : { totalCents: 0, recordedCount: 0 },
+        booksWithKindleAsin: catalog?.booksWithKindleAsin ?? 0,
       })
     );
   });

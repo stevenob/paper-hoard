@@ -5,12 +5,18 @@ import { prisma } from "../../shared/db.js";
 import { isStale, refreshOpenLibraryRatings } from "../../shared/openlibrary-ratings.js";
 import { enqueueNotification, type BookAddedPayload } from "../../shared/notifications.js";
 import type { BookMetadata } from "../../shared/metadata.js";
+import { scheduleKindleAsinEnrichment } from "../../shared/kindle-enrichment.js";
 import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
 
 /**
  * Resolve metadata for a scan request, preferring a local Book row when
  * one exists with usable data. Skips the upstream Google Books / Open
  * Library round-trip on re-scans, saving 500–2000 ms of perceived latency.
+ *
+ * Lookup-only — pure helper with no side effects. Does NOT trigger
+ * Kindle ASIN enrichment; that runs only on durable writes (POST /scan
+ * → recordScan), scheduled in the route handler via
+ * `scheduleKindleAsinEnrichment` after the response finishes.
  */
 async function resolveMeta(
   isbn: string | undefined,
@@ -320,6 +326,12 @@ export async function scanRoutes(app: FastifyInstance) {
       void enqueueNotification("book-added", payload as unknown as Record<string, unknown>);
     }
 
+    // Schedule a post-response Kindle ASIN enrichment for the book.
+    // No-ops if the book already has a manual ASIN, was attempted in
+    // the last 7 days, or has no ISBN-13. Runs strictly after the
+    // response stream's "finish" event so it never delays the user.
+    scheduleKindleAsinEnrichment(reply, result.book.id);
+
     return reply.send({
       ok: true,
       trophyAcquired: result.trophyAcquired,
@@ -546,6 +558,13 @@ export async function scanRoutes(app: FastifyInstance) {
     const { audit } = await import("../../shared/audit.js");
     await ensureMembership(user.id, library.id);
     const book = await upsertBookFromMetadata(meta);
+    // Enrich the Kindle ASIN now even though the link isn't shown on
+    // Trophy items — the book will eventually be acquired (that's the
+    // whole point of a Trophy) and the link will be useful then. The
+    // enrichment is gated by 7-day cooldown + manual-source guard, so
+    // an immediate scan-trophy followed by scan-acquire won't duplicate
+    // work.
+    scheduleKindleAsinEnrichment(reply, book.id);
 
     // Idempotent: if the trophy already exists, just return ok with the
     // existing record so the UI can show the "already on trophy list" chip.

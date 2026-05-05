@@ -3,6 +3,7 @@ import { prisma } from "../../shared/db.js";
 import { audit } from "../../shared/audit.js";
 import { lookupByIsbn, searchByTitle } from "../../shared/metadata.js";
 import { upsertBookFromMetadata } from "../../shared/repo.js";
+import { scheduleKindleAsinEnrichment } from "../../shared/kindle-enrichment.js";
 import { parseCsv, type CsvFormat, type ImportType } from "../../shared/csv-import.js";
 import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
 
@@ -87,6 +88,14 @@ export async function importRoutes(app: FastifyInstance) {
           summary.skipped++;
         } else {
           const book = await upsertBookFromMetadata(meta);
+          // Schedule Kindle ASIN enrichment for the just-identified
+          // book. The reply argument is the import-route reply, so
+          // the OL fetch fires after the import response finishes,
+          // which means it runs at the end of the loop AFTER all
+          // rows have been processed. The atomic claim + cooldown
+          // serialise multiple bookIds and short-circuit recently-
+          // attempted ones.
+          scheduleKindleAsinEnrichment(reply, book.id);
           if (type === "physical") {
             const copy = await prisma.physicalCopy.create({
               data: {

@@ -38,10 +38,18 @@ function bookEmbed(opts: {
   ratingCount?: number | null;
   source: string;
   libraryName: string;
+  kindleAsin?: string | null;
 }): EmbedBuilder {
+  // Stitch the Kindle link into the description (alongside authors) so
+  // it shows up in the most-visible part of the embed without needing
+  // a dedicated field. Markdown link form keeps the embed compact.
+  const authorLine = opts.authors.join(", ") || "Unknown author";
+  const description = opts.kindleAsin
+    ? `${authorLine}\n📖 [Read on Kindle](https://read.amazon.com/kp/kshare?asin=${encodeURIComponent(opts.kindleAsin)})`
+    : authorLine;
   const e = new EmbedBuilder()
     .setTitle(opts.title)
-    .setDescription(opts.authors.join(", ") || "Unknown author")
+    .setDescription(description)
     .setFooter({ text: `${opts.libraryName} • source: ${opts.source}` });
   if (opts.thumbnailUrl) e.setThumbnail(opts.thumbnailUrl);
   if (opts.isbn13) e.addFields({ name: "ISBN", value: opts.isbn13, inline: true });
@@ -180,6 +188,7 @@ export const scanCommand: BotCommand = {
       ratingCount: book.olRatingCount,
       source: meta.source,
       libraryName: library.name,
+      kindleAsin: book.kindleAsin,
     });
 
     if (existing.length > 0) {
