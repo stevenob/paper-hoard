@@ -4,6 +4,7 @@ import {
   looksLikeKindleAsin,
   readOnKindleUrl,
   lookupKindleAsinFromOpenLibrary,
+  lookupKindleAsinDetailed,
 } from "../src/shared/kindle.js";
 
 // undici.request is hoisted so the kindle module sees the mock.
@@ -205,5 +206,76 @@ describe("lookupKindleAsinFromOpenLibrary", () => {
     );
     const result = await lookupKindleAsinFromOpenLibrary("9780593135204");
     expect(result).toBeUndefined();
+  });
+});
+
+describe("lookupKindleAsinDetailed", () => {
+  beforeEach(() => {
+    mockedRequest.mockReset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns kind=found with the ASIN on success", async () => {
+    mockedRequest.mockResolvedValue(
+      jsonResponse({
+        docs: [
+          {
+            isbn: ["9780593135204"],
+            id_amazon: ["B08GB58KD5"],
+          },
+        ],
+      })
+    );
+    const r = await lookupKindleAsinDetailed("9780593135204");
+    expect(r).toEqual({ kind: "found", asin: "B08GB58KD5" });
+  });
+
+  it("returns kind=no-match when OL responds OK but has no B0 ASIN", async () => {
+    mockedRequest.mockResolvedValue(
+      jsonResponse({
+        docs: [{ isbn: ["9780593135204"], id_amazon: ["0593135202"] }],
+      })
+    );
+    const r = await lookupKindleAsinDetailed("9780593135204");
+    expect(r).toEqual({ kind: "no-match" });
+  });
+
+  it("returns kind=no-match when OL has no docs at all", async () => {
+    mockedRequest.mockResolvedValue(jsonResponse({ docs: [] }));
+    const r = await lookupKindleAsinDetailed("9780593135204");
+    expect(r).toEqual({ kind: "no-match" });
+  });
+
+  it("returns kind=error/network on connection failure (NOT no-match)", async () => {
+    // This is the v3.6.1 → v3.6.2 fix: ECONNRESET errors during
+    // bulk-backfill rate-limiting must NOT be reported as "no
+    // ASIN exists" because they're recoverable, not coverage gaps.
+    mockedRequest.mockRejectedValue(new Error("ECONNRESET"));
+    const r = await lookupKindleAsinDetailed("9780593135204");
+    expect(r).toEqual({ kind: "error", cause: "network" });
+  });
+
+  it("returns kind=error/http on 4xx/5xx responses", async () => {
+    mockedRequest.mockResolvedValue(jsonResponse({}, 503));
+    const r = await lookupKindleAsinDetailed("9780593135204");
+    expect(r).toEqual({ kind: "error", cause: "http" });
+  });
+
+  it("does NOT confuse a doc whose isbn array doesn't match with a no-match for the right doc", async () => {
+    // A real-world OL response can have multiple docs; only the
+    // ISBN-matching one is authoritative. If none match, that's
+    // a no-match, not an error.
+    mockedRequest.mockResolvedValue(
+      jsonResponse({
+        docs: [
+          { isbn: ["9999999999999"], id_amazon: ["B0WRONG999"] },
+          { isbn: ["8888888888888"], id_amazon: ["B0WRONG888"] },
+        ],
+      })
+    );
+    const r = await lookupKindleAsinDetailed("9780593135204");
+    expect(r).toEqual({ kind: "no-match" });
   });
 });

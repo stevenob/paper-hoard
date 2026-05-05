@@ -38,7 +38,7 @@ import type { FastifyReply } from "fastify";
 import { prisma } from "./db.js";
 import { logger } from "./logger.js";
 import { audit } from "./audit.js";
-import { lookupKindleAsinFromOpenLibrary } from "./kindle.js";
+import { lookupKindleAsinDetailed } from "./kindle.js";
 
 const COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const QUEUE_DELAY_MS = 250; // be polite to Open Library between jobs
@@ -186,27 +186,36 @@ export async function enrichKindleAsin(
     return opts?.reportResult ? { status: "no-isbn" } : undefined;
   }
 
-  const result = await lookupKindleAsinFromOpenLibrary(book.isbn13);
-  if (!result) {
+  const result = await lookupKindleAsinDetailed(book.isbn13);
+  if (result.kind === "error") {
+    // OL request failed (rate limit, network, 5xx). Distinct from
+    // "OL has no ASIN for this book" — the backfill activity log
+    // surfaces the difference so the user knows to retry rather
+    // than chase a phantom coverage gap.
+    return opts?.reportResult
+      ? { status: "ol-error", cause: result.cause }
+      : undefined;
+  }
+  if (result.kind === "no-match") {
     return opts?.reportResult ? { status: "no-asin-found" } : undefined;
   }
-  if (result === book.kindleAsin) {
+  if (result.asin === book.kindleAsin) {
     // Same value as before — no functional change, no audit noise.
     // The cooldown stamp from the claim is sufficient bookkeeping.
-    return opts?.reportResult ? { status: "unchanged", asin: result } : undefined;
+    return opts?.reportResult ? { status: "unchanged", asin: result.asin } : undefined;
   }
 
   await prisma.book.update({
     where: { id: bookId },
-    data: { kindleAsin: result, kindleAsinSource: "open_library" },
+    data: { kindleAsin: result.asin, kindleAsinSource: "open_library" },
   });
   await audit({
     action: "update",
     entity: "book",
     entityId: bookId,
-    details: { kindleAsin: result, kindleAsinSource: "open_library" },
+    details: { kindleAsin: result.asin, kindleAsinSource: "open_library" },
   });
-  return opts?.reportResult ? { status: "updated", asin: result } : undefined;
+  return opts?.reportResult ? { status: "updated", asin: result.asin } : undefined;
 }
 
 export interface KindleEnrichmentResult {
@@ -215,7 +224,10 @@ export interface KindleEnrichmentResult {
     | "manual-locked"
     | "in-cooldown"
     | "no-asin-found"
+    | "ol-error"
     | "unchanged"
     | "updated";
   asin?: string;
+  /** Populated only when status === "ol-error". */
+  cause?: "network" | "http";
 }

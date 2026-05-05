@@ -19,13 +19,34 @@ vi.mock("../src/shared/kindle.js", async (orig) => {
   const real = await orig<typeof import("../src/shared/kindle.js")>();
   return {
     ...real,
+    lookupKindleAsinDetailed: vi.fn(),
     lookupKindleAsinFromOpenLibrary: vi.fn(),
   };
 });
-import { lookupKindleAsinFromOpenLibrary } from "../src/shared/kindle.js";
+import {
+  lookupKindleAsinDetailed,
+  lookupKindleAsinFromOpenLibrary,
+} from "../src/shared/kindle.js";
 import { enrichKindleAsin } from "../src/shared/kindle-enrichment.js";
 
-const mockedLookup = lookupKindleAsinFromOpenLibrary as unknown as ReturnType<typeof vi.fn>;
+const mockedLookup = lookupKindleAsinDetailed as unknown as ReturnType<typeof vi.fn>;
+// Some tests in this file are written against the older "returns a string"
+// signature; we keep the legacy mock around but every test below was
+// updated to drive the detailed mock instead.
+void lookupKindleAsinFromOpenLibrary;
+
+/** Test helper: write the legacy "string-or-undefined" semantics in
+ *  terms of the new detailed shape so the existing tests stay
+ *  compact. `null` denotes a network/HTTP error. */
+function detailedReturn(value: string | null | undefined) {
+  if (typeof value === "string") {
+    mockedLookup.mockResolvedValue({ kind: "found", asin: value });
+  } else if (value === null) {
+    mockedLookup.mockResolvedValue({ kind: "error", cause: "network" });
+  } else {
+    mockedLookup.mockResolvedValue({ kind: "no-match" });
+  }
+}
 
 let libraryId: string;
 
@@ -74,7 +95,7 @@ beforeEach(() => {
 
 describe("enrichKindleAsin", () => {
   it("populates kindleAsin from OL on a fresh book", async () => {
-    mockedLookup.mockResolvedValue("B07ZPC9QD4");
+    detailedReturn("B07ZPC9QD4");
     const id = await makeBook({});
     await enrichKindleAsin(id);
     const after = await prisma.book.findUnique({ where: { id } });
@@ -85,7 +106,7 @@ describe("enrichKindleAsin", () => {
   });
 
   it("never overwrites a manual ASIN — claim short-circuits before HTTP", async () => {
-    mockedLookup.mockResolvedValue("B0NEW000000");
+    detailedReturn("B0NEW000000");
     const id = await makeBook({
       kindleAsin: "B0OLD000000",
       kindleAsinSource: "manual",
@@ -98,7 +119,7 @@ describe("enrichKindleAsin", () => {
   });
 
   it("replaces an OL-sourced ASIN with a newer OL value", async () => {
-    mockedLookup.mockResolvedValue("B0NEWVALUE0");
+    detailedReturn("B0NEWVALUE0");
     const id = await makeBook({
       kindleAsin: "B0OLDVALUE0",
       kindleAsinSource: "open_library",
@@ -111,7 +132,7 @@ describe("enrichKindleAsin", () => {
   });
 
   it("does not call OL when within the 7-day cooldown", async () => {
-    mockedLookup.mockResolvedValue("B07ZPC9QD4");
+    detailedReturn("B07ZPC9QD4");
     const id = await makeBook({
       kindleAsinAttemptedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
     });
@@ -120,7 +141,7 @@ describe("enrichKindleAsin", () => {
   });
 
   it("calls OL when the cooldown has expired", async () => {
-    mockedLookup.mockResolvedValue("B07ZPC9QD4");
+    detailedReturn("B07ZPC9QD4");
     const id = await makeBook({
       kindleAsinAttemptedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
     });
@@ -131,14 +152,14 @@ describe("enrichKindleAsin", () => {
   });
 
   it("does not call OL when the book has no ISBN-13", async () => {
-    mockedLookup.mockResolvedValue("B07ZPC9QD4");
+    detailedReturn("B07ZPC9QD4");
     const id = await makeBook({ isbn13: null });
     await enrichKindleAsin(id);
     expect(mockedLookup).not.toHaveBeenCalled();
   });
 
   it("writes no audit row on a same-value refresh", async () => {
-    mockedLookup.mockResolvedValue("B0SAMEVALUE");
+    detailedReturn("B0SAMEVALUE");
     const id = await makeBook({
       kindleAsin: "B0SAMEVALUE",
       kindleAsinSource: "open_library",
@@ -160,7 +181,7 @@ describe("enrichKindleAsin", () => {
   });
 
   it("writes one audit row when an OL value actually changes", async () => {
-    mockedLookup.mockResolvedValue("B0NEWAUDIT0");
+    detailedReturn("B0NEWAUDIT0");
     const id = await makeBook({
       kindleAsin: "B0OLDAUDIT0",
       kindleAsinSource: "open_library",
@@ -177,10 +198,10 @@ describe("enrichKindleAsin", () => {
   });
 
   it("concurrent calls for the same book → only one HTTP request", async () => {
-    let resolveLookup: ((v: string) => void) | null = null;
+    let resolveLookup: ((v: { kind: "found"; asin: string }) => void) | null = null;
     mockedLookup.mockImplementation(
       () =>
-        new Promise<string>((resolve) => {
+        new Promise<{ kind: "found"; asin: string }>((resolve) => {
           resolveLookup = resolve;
         })
     );
@@ -197,7 +218,7 @@ describe("enrichKindleAsin", () => {
     // mocked lookup. Wait for it explicitly.
     await p2;
     // Now release the in-flight HTTP call and let the first finish.
-    resolveLookup?.("B0CONCURRENT");
+    resolveLookup?.({ kind: "found", asin: "B0CONCURRENT" });
     await p1;
     expect(mockedLookup).toHaveBeenCalledTimes(1);
     const after = await prisma.book.findUnique({ where: { id } });
@@ -205,7 +226,7 @@ describe("enrichKindleAsin", () => {
   });
 
   it("returns gracefully when OL says nothing — only cooldown is stamped", async () => {
-    mockedLookup.mockResolvedValue(undefined);
+    detailedReturn(undefined);
     const id = await makeBook({});
     await enrichKindleAsin(id);
     const after = await prisma.book.findUnique({ where: { id } });

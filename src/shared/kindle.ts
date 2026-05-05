@@ -77,6 +77,23 @@ interface OpenLibrarySearchResponse {
 }
 
 /**
+ * Result of an OL Kindle-ASIN lookup. The three terminal states are
+ * meaningfully different and the backfill activity log surfaces each
+ * to the user with its own message:
+ *
+ *  - `found` — OL had a Kindle-shape ASIN for this ISBN; we use it.
+ *  - `no-match` — OL responded successfully but had no B0 ASIN for
+ *    this ISBN. Real coverage gap; no point retrying soon.
+ *  - `error` — OL request failed (network, timeout, 4xx/5xx). NOT a
+ *    coverage gap; worth retrying. The most common cause is rate
+ *    limiting after a burst of requests.
+ */
+export type KindleAsinLookupResult =
+  | { kind: "found"; asin: string }
+  | { kind: "no-match" }
+  | { kind: "error"; cause: "network" | "http" };
+
+/**
  * Look up the Kindle ASIN for a known ISBN-13 via Open Library's
  * search endpoint. Verified at plan time that ASINs live on the
  * search response's `id_amazon` field, NOT on the per-edition
@@ -95,14 +112,15 @@ interface OpenLibrarySearchResponse {
  *    `["855651121X", "B08GB58KD5", "B08FHBV4ZX"]`. We filter to
  *    `/^B0[A-Z0-9]{8}$/` and take the first.
  *
- * Returns undefined on timeout, network error, no ISBN-verified
- * doc, or no B0-prefixed value. Never throws — failures are
- * logged at warn level and otherwise swallowed because callers
- * are best-effort enrichment sites.
+ * Returns a discriminated union so callers can distinguish a real
+ * coverage gap (`no-match`) from a transient OL failure (`error`).
+ * The bulk-backfill activity log uses this to show the right
+ * message to the user. Never throws — failures are logged at warn
+ * level and folded into `kind: "error"`.
  */
-export async function lookupKindleAsinFromOpenLibrary(
+export async function lookupKindleAsinDetailed(
   isbn13: string
-): Promise<string | undefined> {
+): Promise<KindleAsinLookupResult> {
   const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(
     isbn13
   )}&fields=key,isbn,id_amazon&limit=5`;
@@ -112,11 +130,19 @@ export async function lookupKindleAsinFromOpenLibrary(
       headersTimeout: 5000,
       bodyTimeout: 5000,
     });
-    if (statusCode >= 400) return undefined;
+    if (statusCode >= 400) {
+      logger.warn({ isbn13, statusCode }, "Open Library ASIN lookup HTTP error");
+      return { kind: "error", cause: "http" };
+    }
     json = (await body.json()) as OpenLibrarySearchResponse;
   } catch (err) {
+    // Network errors, ECONNRESET, and timeouts all funnel here.
+    // The most common cause in paper-hoard's bulk-backfill flow is
+    // OL rate-limiting after a burst of requests; the activity log
+    // distinguishes this from genuine coverage gaps so the user
+    // knows to retry rather than chase a phantom OL gap.
     logger.warn({ err, isbn13 }, "Open Library ASIN lookup failed");
-    return undefined;
+    return { kind: "error", cause: "network" };
   }
   const docs = json.docs ?? [];
   for (const doc of docs) {
@@ -124,13 +150,26 @@ export async function lookupKindleAsinFromOpenLibrary(
     const candidates = doc.id_amazon ?? [];
     for (const candidate of candidates) {
       const upper = candidate.toUpperCase();
-      if (KINDLE_ASIN_RE.test(upper)) return upper;
+      if (KINDLE_ASIN_RE.test(upper)) return { kind: "found", asin: upper };
     }
     // First ISBN-verified doc wins, even if it has no B0 ASIN. The
     // alternative (continuing to scan more docs) risks picking up
     // an ASIN from a *different* edition record. Better to return
     // nothing than to attach the wrong ASIN.
-    return undefined;
+    return { kind: "no-match" };
   }
-  return undefined;
+  return { kind: "no-match" };
+}
+
+/**
+ * Backwards-compatible wrapper for callers that only care about
+ * "did we get an ASIN or not." Collapses both `no-match` and
+ * `error` into `undefined` for ergonomic use in fire-and-forget
+ * code paths that don't want to discriminate.
+ */
+export async function lookupKindleAsinFromOpenLibrary(
+  isbn13: string
+): Promise<string | undefined> {
+  const result = await lookupKindleAsinDetailed(isbn13);
+  return result.kind === "found" ? result.asin : undefined;
 }
