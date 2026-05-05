@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { getCurrentLibrary, requireUser } from "./_helpers.js";
 import { refetchMissingCovers, refreshLowResCovers } from "./_cover-backfill.js";
 import { fillMissingAuthors } from "./_author-backfill.js";
+import { backfillKindleAsins } from "./_kindle-backfill.js";
 
 /**
  * /stats was merged into /about as of v3.5.5. Keep the GET route alive
@@ -48,6 +49,22 @@ export async function statsRoutes(app: FastifyInstance) {
     if (!user) return;
     const library = await getCurrentLibrary(req);
     const result = await fillMissingAuthors(25, { libraryId: library?.id ?? null });
+    return reply.send({ ok: true, ...result });
+  });
+
+  // v3.6.1: bulk-backfill `Book.kindleAsin` from Open Library for
+  // owned books that don't have one yet. Each call processes a small
+  // batch; the front-end keeps polling until `remaining === 0`.
+  // Mirrors the cover-backfill `?retry=all` flag for orphan retries.
+  app.post("/stats/backfill-kindle-asins", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const library = await getCurrentLibrary(req);
+    const retryAll = (req.query as { retry?: string } | undefined)?.retry === "all";
+    const result = await backfillKindleAsins(25, {
+      libraryId: library?.id ?? null,
+      ignoreCooldown: retryAll,
+    });
     return reply.send({ ok: true, ...result });
   });
 }

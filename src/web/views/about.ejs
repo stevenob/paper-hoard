@@ -137,7 +137,7 @@
       </div>
     <% } %>
 
-    <% if (activeUser && (backfillCandidates > 0 || booksCoverInCooldown > 0 || lowResCovers > 0 || missingAuthors > 0 || totals.trash > 0)) { %>
+    <% if (activeUser && (backfillCandidates > 0 || booksCoverInCooldown > 0 || lowResCovers > 0 || missingAuthors > 0 || kindleBackfillCandidates > 0 || kindleBackfillInCooldown > 0 || totals.trash > 0)) { %>
       <div class="widget w-tools">
         <h2>Catalog tools</h2>
         <ul class="tools-list">
@@ -177,6 +177,24 @@
               <button type="button" id="btn-fill-authors">🧑 Run</button>
             </li>
           <% } %>
+          <% if (kindleBackfillCandidates > 0 || kindleBackfillInCooldown > 0) { %>
+            <li>
+              <div>
+                <% if (kindleBackfillCandidates > 0) { %>
+                  <strong><%= kindleBackfillCandidates %></strong> book<%= kindleBackfillCandidates === 1 ? '' : 's' %> missing Kindle links
+                  <div class="sub">Looks up the Kindle ASIN on Open Library and stamps it on the Book row</div>
+                <% } else { %>
+                  <strong><%= kindleBackfillInCooldown %></strong> Kindle orphan<%= kindleBackfillInCooldown === 1 ? '' : 's' %>
+                  <div class="sub">Tried in last 7d with no result. Click ↻ retry to bypass the cooldown.</div>
+                <% } %>
+              </div>
+              <% if (kindleBackfillCandidates > 0) { %>
+                <button type="button" id="btn-kindle-backfill">📖 Run</button>
+              <% } else { %>
+                <button type="button" id="btn-kindle-backfill" data-retry-all="1" title="Bypass the 7-day cooldown and retry all books with no Kindle ASIN">↻ Retry orphans</button>
+              <% } %>
+            </li>
+          <% } %>
           <% if (totals.trash > 0) { %>
             <li>
               <div>
@@ -190,6 +208,7 @@
         <% if (backfillCandidates > 0 || booksCoverInCooldown > 0) { %><div class="repair-panel" id="panel-backfill" hidden></div><% } %>
         <% if (lowResCovers > 0) { %><div class="repair-panel" id="panel-refresh" hidden></div><% } %>
         <% if (missingAuthors > 0) { %><div class="repair-panel" id="panel-authors" hidden></div><% } %>
+        <% if (kindleBackfillCandidates > 0 || kindleBackfillInCooldown > 0) { %><div class="repair-panel" id="panel-kindle-backfill" hidden></div><% } %>
       </div>
     <% } %>
 
@@ -508,6 +527,7 @@
     makeRepairRunner({ btnId: 'btn-backfill', panelId: 'panel-backfill', url: '/stats/backfill-covers', verb: 'repaired', title: '🔄 Backfilling missing covers' });
     makeRepairRunner({ btnId: 'btn-refresh-covers', panelId: 'panel-refresh', url: '/stats/refresh-low-res-covers', verb: 'repaired', title: '📐 Verifying covers' });
     makeRepairRunner({ btnId: 'btn-fill-authors', panelId: 'panel-authors', url: '/stats/fill-missing-authors', verb: 'filled', title: '🧑 Filling missing authors' });
+    makeRepairRunner({ btnId: 'btn-kindle-backfill', panelId: 'panel-kindle-backfill', url: '/stats/backfill-kindle-asins', verb: 'enriched', title: '📖 Backfilling Kindle ASINs' });
 
     const list = document.getElementById('backup-list');
     const status = document.getElementById('backup-status');
