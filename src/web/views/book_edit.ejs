@@ -44,11 +44,38 @@
         <div><label>Cover image URL</label><input type="text" name="thumbnailUrl" value="<%= book.thumbnailUrl || '' %>" maxlength="2000" placeholder="https://…" /></div>
       </div>
     </div>
+    <div class="form-section">
+      <h3 class="form-section-h">Kindle</h3>
+      <div class="form-row full">
+        <div>
+          <label>Kindle ASIN <span class="hint">(10 chars, usually starts with B0…)</span></label>
+          <input type="text" name="kindleAsin" value="<%= book.kindleAsin || '' %>" maxlength="20" placeholder="B07ZPC9QD4" autocomplete="off" />
+          <%
+            // Surface a soft hint when the saved value doesn't look
+            // like a Kindle ebook ASIN. Doesn't block submission —
+            // some print editions legitimately use ISBN-10 as ASIN.
+            const ka = book.kindleAsin || '';
+            const looksWrong = ka && !/^B0[A-Z0-9]{8}$/.test(ka);
+          %>
+          <% if (looksWrong) { %>
+            <p class="hint">⚠️ Looks like an ISBN-10. Kindle ebook ASINs start with <code>B0…</code>.</p>
+          <% } %>
+          <p class="hint">Empty to clear. Cleared values stay clear until you ask Open Library to retry — clearing alone doesn't trigger an immediate re-fetch.</p>
+        </div>
+      </div>
+    </div>
     <div class="form-actions">
       <button type="submit" class="primary">💾 Save</button>
       <a href="/books/<%= book.id %>" class="cancel">cancel</a>
     </div>
   </fieldset>
 </form>
+
+<% if (activeUser && book.isbn13) { %>
+  <form method="post" action="/books/<%= book.id %>/retry-kindle-lookup" style="margin-top:1.25rem;">
+    <button type="submit">🔁 Try Open Library lookup for Kindle ASIN again</button>
+    <p class="hint" style="margin-top:.35rem;">Clears the 7-day cooldown and asks the next durable book write to re-attempt OL. Safe to click anytime.</p>
+  </form>
+<% } %>
 
 <%- include('_footer') %>

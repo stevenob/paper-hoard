@@ -38,6 +38,7 @@ Paper Hoard is a single-household app for tracking the physical books on your sh
 - **Author backfill** — a phase-1 cheap pass copies `authors[0]` into `primaryAuthor`, then a phase-2 ISBN lookup fills empty entries
 - **Duplicate book merge** at `/library/dupes`
 - **Author dupe merge** at `/authors/dupes`
+- **📖 Read on Kindle deep-links** — books with a Kindle ASIN show a "Read on Kindle" button that opens Amazon's Cloud Reader. ASINs are auto-fetched from Open Library after each scan/import (with a 7-day cooldown and a manual-edit guard) and can be set or cleared on the book edit page. The link is owned-only; trophy items stay link-free.
 
 ### 📚 Series + shelves
 - **Series detail page** at `/series?name=<name>` — merges your owned books with what Open Library knows about the series, sorted by volume number; missing books get a `MISSING` pill and a one-click `+ trophy` quick-add

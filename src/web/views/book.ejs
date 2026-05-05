@@ -42,6 +42,20 @@
         <% } %>
       <% } %>
     </p>
+    <%
+      // "Read on Kindle" button — only shown when the book is library-
+      // owned (any non-deleted PhysicalCopy) or has any Completion.
+      // Trophy-only books deliberately get no button: the wishlist
+      // context doesn't benefit from a Cloud Reader link.
+      const ownedOrRead = (copies && copies.length > 0) || (completions && completions.length > 0);
+    %>
+    <% if (book.kindleAsin && ownedOrRead) { %>
+      <p class="external-links">
+        <a class="pill pill-tag" style="font-weight:600"
+           href="https://read.amazon.com/kp/kshare?asin=<%= encodeURIComponent(book.kindleAsin) %>"
+           target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">📖 Read on Kindle ↗</a>
+      </p>
+    <% } %>
     <% if (shelves && shelves.length > 0) { %>
       <p class="tag-chips">
         On shelves:

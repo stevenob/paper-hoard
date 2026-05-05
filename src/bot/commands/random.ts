@@ -65,9 +65,18 @@ export const randomCommand: BotCommand = {
       return;
     }
 
+    // /random is by definition operating on a PhysicalCopy — every
+    // result is library-owned, so no separate ownership gate is
+    // needed. Just append the Kindle link when the underlying Book
+    // has an ASIN.
+    const description =
+      `by ${copy.book.authors.join(", ") || "Unknown"}` +
+      (copy.book.kindleAsin
+        ? `\n📖 [Read on Kindle](https://read.amazon.com/kp/kshare?asin=${encodeURIComponent(copy.book.kindleAsin)})`
+        : "");
     const embed = new EmbedBuilder()
       .setTitle(copy.book.title)
-      .setDescription(`by ${copy.book.authors.join(", ") || "Unknown"}`);
+      .setDescription(description);
     if (copy.book.thumbnailUrl) embed.setThumbnail(copy.book.thumbnailUrl);
     if (copy.book.seriesName) {
       embed.addFields({

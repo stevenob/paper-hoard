@@ -6,6 +6,8 @@ import { audit } from "../../shared/audit.js";
 import { isStale, refreshOpenLibraryRatings } from "../../shared/openlibrary-ratings.js";
 import { ensureMembership } from "../../shared/repo.js";
 import { EDITIONS } from "../../shared/picklists.js";
+import { normalizeAsin } from "../../shared/kindle.js";
+import { scheduleKindleAsinEnrichment } from "../../shared/kindle-enrichment.js";
 import { getCurrentLibrary, requireUser, withChrome } from "./_helpers.js";
 
 const editSchema = z.object({
@@ -17,6 +19,13 @@ const editSchema = z.object({
   thumbnailUrl: z.string().max(2000).optional().default(""),
   seriesName: z.string().max(200).optional().default(""),
   seriesPosition: z.string().max(20).optional().default(""),
+  // Optional Kindle ASIN. Empty string clears, valid value sets,
+  // malformed value is rejected with a 400 (single chokepoint via
+  // normalizeAsin). The clear path leaves kindleAsinAttemptedAt
+  // untouched so the next durable write doesn't immediately
+  // re-fetch the same wrong ASIN from Open Library — the user has
+  // a separate explicit "Try OL lookup again" action below.
+  kindleAsin: z.string().max(20).optional().default(""),
 });
 
 const newSchema = editSchema.extend({
@@ -192,6 +201,10 @@ export async function bookRoutes(app: FastifyInstance) {
       details: { bookId: book.id, source: "manual-form" },
     });
 
+    // Schedule a post-response Kindle ASIN enrichment now that the
+    // physical copy is committed.
+    scheduleKindleAsinEnrichment(reply, book.id);
+
     // Optional shelf assignment. Validates library scope and silently
     // ignores cross-library / unknown shelfId values.
     if (d.shelfId.trim()) {
@@ -289,6 +302,31 @@ export async function bookRoutes(app: FastifyInstance) {
       );
     }
     const d = parsed.data;
+
+    // Build the Kindle ASIN patch separately so we can validate
+    // before the main update. Empty input clears the value (and
+    // its provenance flag); a non-empty input must normalize.
+    let kindleAsinPatch:
+      | { kindleAsin: string | null; kindleAsinSource: string | null }
+      | null = null;
+    const rawAsin = d.kindleAsin?.trim() ?? "";
+    if (rawAsin === "") {
+      kindleAsinPatch = { kindleAsin: null, kindleAsinSource: null };
+    } else {
+      const normalized = normalizeAsin(rawAsin);
+      if (!normalized) {
+        const book = await prisma.book.findUnique({ where: { id: req.params.id } });
+        return reply.view(
+          "book_edit.ejs",
+          await withChrome(req, {
+            book,
+            error: "Kindle ASIN must be 10 alphanumeric characters (e.g. B07ZPC9QD4).",
+          })
+        );
+      }
+      kindleAsinPatch = { kindleAsin: normalized, kindleAsinSource: "manual" };
+    }
+
     const updated = await prisma.book.update({
       where: { id: req.params.id },
       data: {
@@ -309,6 +347,7 @@ export async function bookRoutes(app: FastifyInstance) {
           ? Number.parseFloat(d.seriesPosition.trim()) || null
           : null,
         source: "manual",
+        ...kindleAsinPatch,
       },
     });
     void audit({
@@ -316,10 +355,42 @@ export async function bookRoutes(app: FastifyInstance) {
       action: "update",
       entity: "book",
       entityId: updated.id,
-      details: { fields: Object.keys(d) },
+      details: { fields: Object.keys(d), kindleAsin: kindleAsinPatch?.kindleAsin ?? null },
     });
     return reply.redirect(`/books/${updated.id}`);
   });
+
+  // Explicit user action to clear the cooldown stamp and let the
+  // next durable write re-fetch from Open Library. Used when a user
+  // has cleared a wrong ASIN and now wants OL to try again — without
+  // this, the cooldown would block the next attempt for up to 7
+  // days.
+  app.post<{ Params: { id: string } }>(
+    "/books/:id/retry-kindle-lookup",
+    async (req, reply) => {
+      const user = await requireUser(req, reply);
+      if (!user) return;
+      const book = await prisma.book.findUnique({
+        where: { id: req.params.id },
+        select: { id: true },
+      });
+      if (!book) return reply.status(404).send("Not found");
+      await prisma.book.update({
+        where: { id: book.id },
+        data: { kindleAsinAttemptedAt: null },
+      });
+      void audit({
+        userId: user.id,
+        action: "update",
+        entity: "book",
+        entityId: book.id,
+        details: { kindleAsinRetry: true },
+      });
+      // Schedule a fresh enrichment now that the cooldown is cleared.
+      scheduleKindleAsinEnrichment(reply, book.id);
+      return reply.redirect(`/books/${book.id}/edit`);
+    }
+  );
 
   // Re-fetch metadata from Google Books / Open Library and fill in any
   // fields that are currently null. Skipped for source: 'manual' books
@@ -377,6 +448,11 @@ export async function bookRoutes(app: FastifyInstance) {
           },
         });
       }
+      // Refetch is a durable Book write — schedule ASIN enrichment.
+      // Manual ASINs are protected by the atomic claim's source guard,
+      // and the cooldown column prevents repeat OL hits if the user
+      // re-clicks refetch within a week.
+      scheduleKindleAsinEnrichment(reply, book.id);
       return reply.redirect(
         `/books/${book.id}?refetched=${Object.keys(data).length > 0 ? "ok" : "nochange"}`
       );

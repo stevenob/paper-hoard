@@ -41,6 +41,7 @@ Smaug, the Discord bot, provides quick Discord-based access for adding physical 
 - Audible account sync.
 - Audiobook playback.
 - Ebook reading.
+- Ebook hosting (Amazon-purchased Kindle files are DRM-locked, and paper-hoard is a physical-first catalog rather than a Calibre-Web/Kavita replacement).
 - DRM handling.
 - Public social network features.
 - Marketplace scraping or automatic value tracking.
@@ -170,3 +171,35 @@ Future possible additions:
 - ISBNdb
 - LibraryThing
 - Manual metadata enrichment
+
+## Kindle link-out
+
+Each `Book` row carries an optional `kindleAsin` field. When set on a
+book that the family library owns (any non-deleted PhysicalCopy) or
+that any user has logged a Completion for, the web UI shows a
+"📖 Read on Kindle" button that opens Amazon's Cloud Reader. The
+button is suppressed on Trophy items (the wishlist context doesn't
+benefit from a reader link).
+
+ASIN sources, in priority order:
+
+1. **Open Library auto-enrichment** — runs after each durable Book
+   write (scan-confirm, completion-create, manual-add, edit-refetch,
+   CSV-import row). Hits OL's `search.json?q=<isbn>&fields=id_amazon`
+   endpoint, verifies the queried ISBN appears in the returned doc,
+   filters to `B0…`-prefixed values, and stamps
+   `kindleAsinSource = "open_library"` on the Book.
+2. **Manual entry** on the Book edit form (`/books/:id/edit`) and on
+   the New Completion form (`/completions/new`). Manual entries are
+   stamped `kindleAsinSource = "manual"` and are never overwritten by
+   the auto-enrichment.
+
+A 7-day cooldown column (`kindleAsinAttemptedAt`) prevents repeat OL
+fetches for books the search couldn't enrich. The Book edit page has
+a "🔁 Try Open Library lookup again" action that explicitly clears
+the cooldown for users who want an immediate re-attempt.
+
+This is link-out only. Paper Hoard does not host ebook files —
+Amazon-purchased Kindle files are DRM-locked and paper-hoard's
+identity is *physical-first catalog*, not a Calibre-Web/Kavita
+replacement.

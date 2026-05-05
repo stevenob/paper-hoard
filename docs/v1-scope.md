@@ -76,6 +76,7 @@ For v1, the web UI may use a simple local user selector instead of full authenti
 - Kindle account sync.
 - Audible account sync.
 - Ebook reading.
+- Ebook hosting / Calibre-Web-style file storage.
 - Audiobook playback.
 - DRM handling.
 - Public social network features.
@@ -83,6 +84,15 @@ For v1, the web UI may use a simple local user selector instead of full authenti
 - Automatic book value tracking.
 - Complex roles and permissions.
 - Multi-tenant SaaS hosting.
+
+## In Scope additions (post-v1)
+
+- **Kindle link-out**: a `kindleAsin` column on `Book` powers a
+  "📖 Read on Kindle" Cloud Reader button on owned and completed
+  books. ASINs are auto-enriched from Open Library after each
+  durable Book write (with 7-day cooldown + manual-edit guard) and
+  can be set/cleared manually. No file hosting, no DRM handling, no
+  Kindle account sync — those remain non-goals.
 
 ## V1 Acceptance Checklist
 

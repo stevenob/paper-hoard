@@ -43,6 +43,11 @@
       <h2>Shelves</h2>
       <div class="value"><%= totals.shelves %></div>
     </a>
+    <a class="widget w-kpi" href="/library">
+      <h2>📖 Books with Kindle link</h2>
+      <div class="value"><%= booksWithKindleAsin %></div>
+      <div class="hint" style="margin-top:.25rem;">Kindle ASIN on file — owned books get a "Read on Kindle" button.</div>
+    </a>
 
     <% if (completeness) { %>
       <div class="widget w-completeness">
