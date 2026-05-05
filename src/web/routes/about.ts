@@ -63,6 +63,15 @@ export async function aboutRoutes(app: FastifyInstance) {
       mostExpensiveCopies: Awaited<ReturnType<typeof prisma.physicalCopy.findMany>>;
       activeLending: number;
       booksWithKindleAsin: number;
+      // Books eligible for the /about Kindle ASIN bulk-backfill button:
+      // owned in this library, has an ISBN-13, no kindleAsin yet, and
+      // outside the 7-day cooldown window. Drives the
+      // "<n> books missing Kindle links" entry in the catalog tools list.
+      kindleBackfillCandidates: number;
+      // Books that have been attempted within the cooldown but didn't
+      // produce an ASIN — surfaced behind a "↻ Retry orphans" entry that
+      // bypasses the cooldown, mirroring the cover-backfill pattern.
+      kindleBackfillInCooldown: number;
     };
 
     let catalog: CatalogShape | null = null;
@@ -97,6 +106,8 @@ export async function aboutRoutes(app: FastifyInstance) {
         mostExpensiveCopies,
         activeLending,
         booksWithKindleAsin,
+        kindleBackfillCandidates,
+        kindleBackfillInCooldown,
       ] = await Promise.all([
         prisma.library.count(),
         prisma.user.count(),
@@ -256,6 +267,42 @@ export async function aboutRoutes(app: FastifyInstance) {
               : { some: { deletedAt: null } },
           },
         }),
+        // Candidates for the bulk Kindle-ASIN backfill button on
+        // /about. Same selectivity as the helper's WHERE clause so
+        // the displayed count matches how many books the button will
+        // actually attempt.
+        prisma.book.count({
+          where: {
+            isbn13: { not: null },
+            kindleAsin: null,
+            OR: [
+              { kindleAsinAttemptedAt: null },
+              {
+                kindleAsinAttemptedAt: {
+                  lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+                },
+              },
+            ],
+            physicalCopies: library
+              ? { some: { libraryId: library.id, deletedAt: null } }
+              : { some: { deletedAt: null } },
+          },
+        }),
+        // Books that previously failed an OL lookup and are still in
+        // their 7-day cooldown. Surfaced behind a "↻ Retry orphans"
+        // entry that bypasses the cooldown.
+        prisma.book.count({
+          where: {
+            isbn13: { not: null },
+            kindleAsin: null,
+            kindleAsinAttemptedAt: {
+              gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            },
+            physicalCopies: library
+              ? { some: { libraryId: library.id, deletedAt: null } }
+              : { some: { deletedAt: null } },
+          },
+        }),
       ]);
       counts = { libraries, users, auditLog };
       catalog = {
@@ -284,6 +331,8 @@ export async function aboutRoutes(app: FastifyInstance) {
         mostExpensiveCopies,
         activeLending,
         booksWithKindleAsin,
+        kindleBackfillCandidates,
+        kindleBackfillInCooldown,
       };
     } catch {
       dbOk = false;
@@ -373,6 +422,8 @@ export async function aboutRoutes(app: FastifyInstance) {
             }
           : { totalCents: 0, recordedCount: 0 },
         booksWithKindleAsin: catalog?.booksWithKindleAsin ?? 0,
+        kindleBackfillCandidates: catalog?.kindleBackfillCandidates ?? 0,
+        kindleBackfillInCooldown: catalog?.kindleBackfillInCooldown ?? 0,
       })
     );
   });

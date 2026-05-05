@@ -108,4 +108,12 @@ describe("POST guards", () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  it("/stats/backfill-kindle-asins requires auth", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/stats/backfill-kindle-asins",
+    });
+    expect(res.statusCode).toBe(401);
+  });
 });

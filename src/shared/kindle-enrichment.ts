@@ -111,14 +111,36 @@ export function scheduleKindleAsinEnrichment(
  * Exported for tests; production code should always go through
  * `scheduleKindleAsinEnrichment`.
  */
-export async function enrichKindleAsin(bookId: string): Promise<void> {
+export async function enrichKindleAsin(bookId: string): Promise<void>;
+export async function enrichKindleAsin(
+  bookId: string,
+  opts: { ignoreCooldown?: boolean; reportResult: true }
+): Promise<KindleEnrichmentResult>;
+export async function enrichKindleAsin(
+  bookId: string,
+  opts: { ignoreCooldown?: boolean; reportResult?: false } | undefined
+): Promise<void>;
+export async function enrichKindleAsin(
+  bookId: string,
+  opts?: { ignoreCooldown?: boolean; reportResult?: boolean }
+): Promise<void | KindleEnrichmentResult> {
   const cooldownCutoff = new Date(Date.now() - COOLDOWN_MS);
 
   // Atomic claim: only one caller per cooldown window can pass.
   // Excludes:
   //  - books without an ISBN-13 (can't query OL)
   //  - books whose ASIN was manually set (kindleAsinSource = "manual")
-  //  - books in the cooldown window (recent attempt)
+  //  - books in the cooldown window (recent attempt) — unless the
+  //    caller explicitly opted out (e.g. /about "Retry orphans"
+  //    button; same semantics as cover-backfill's ?retry=all)
+  const cooldownGuard = opts?.ignoreCooldown
+    ? {}
+    : {
+        OR: [
+          { kindleAsinAttemptedAt: null },
+          { kindleAsinAttemptedAt: { lt: cooldownCutoff } },
+        ],
+      };
   const claim = await prisma.book.updateMany({
     where: {
       id: bookId,
@@ -130,31 +152,48 @@ export async function enrichKindleAsin(bookId: string): Promise<void> {
             { kindleAsinSource: null },
           ],
         },
-        {
-          OR: [
-            { kindleAsinAttemptedAt: null },
-            { kindleAsinAttemptedAt: { lt: cooldownCutoff } },
-          ],
-        },
+        cooldownGuard,
       ],
     },
     data: { kindleAsinAttemptedAt: new Date() },
   });
-  if (claim.count === 0) return;
+  if (claim.count === 0) {
+    // Couldn't claim — figure out why so callers (specifically the
+    // backfill helper) can render a useful per-row reason. We re-read
+    // the row to discriminate between manual-locked, in-cooldown, and
+    // no-isbn. This extra read only fires when the claim failed, so
+    // it doesn't add cost to the happy path.
+    if (!opts?.reportResult) return;
+    const probe = await prisma.book.findUnique({
+      where: { id: bookId },
+      select: {
+        isbn13: true,
+        kindleAsinSource: true,
+        kindleAsinAttemptedAt: true,
+      },
+    });
+    if (!probe?.isbn13) return { status: "no-isbn" };
+    if (probe.kindleAsinSource === "manual") return { status: "manual-locked" };
+    return { status: "in-cooldown" };
+  }
 
   // Re-read after the claim so we work with the current row.
   const book = await prisma.book.findUnique({
     where: { id: bookId },
     select: { id: true, isbn13: true, kindleAsin: true },
   });
-  if (!book?.isbn13) return;
+  if (!book?.isbn13) {
+    return opts?.reportResult ? { status: "no-isbn" } : undefined;
+  }
 
   const result = await lookupKindleAsinFromOpenLibrary(book.isbn13);
-  if (!result) return;
+  if (!result) {
+    return opts?.reportResult ? { status: "no-asin-found" } : undefined;
+  }
   if (result === book.kindleAsin) {
     // Same value as before — no functional change, no audit noise.
     // The cooldown stamp from the claim is sufficient bookkeeping.
-    return;
+    return opts?.reportResult ? { status: "unchanged", asin: result } : undefined;
   }
 
   await prisma.book.update({
@@ -167,4 +206,16 @@ export async function enrichKindleAsin(bookId: string): Promise<void> {
     entityId: bookId,
     details: { kindleAsin: result, kindleAsinSource: "open_library" },
   });
+  return opts?.reportResult ? { status: "updated", asin: result } : undefined;
+}
+
+export interface KindleEnrichmentResult {
+  status:
+    | "no-isbn"
+    | "manual-locked"
+    | "in-cooldown"
+    | "no-asin-found"
+    | "unchanged"
+    | "updated";
+  asin?: string;
 }
